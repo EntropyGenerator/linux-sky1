@@ -1,7 +1,7 @@
 From e424a0c3817a3a3540e2a2b07de53807ab6cbdf7 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sat, 6 Dec 2025 15:03:52 +0800
-Subject: [PATCH 31/56] dma: arm-dma350: Fix audio pops by disabling register
+Subject: [PATCH 31/57] dma: arm-dma350: Fix audio pops by disabling register
  INTREN for cyclic DMA
 
 For cyclic DMA transfers, disable the register-based interrupt enable

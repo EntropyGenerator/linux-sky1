@@ -1,0 +1,95 @@
+From 63306e886fcb9f4d503a59f356674de458d8d81a Mon Sep 17 00:00:00 2001
+From: Entrpi <entrpi@proton.me>
+Date: Tue, 16 Dec 2025 09:31:43 +1100
+Subject: [PATCH 57/57] iommu/arm-smmu-v3: Add DT support for boot-active
+ stream IDs
+
+Some devices (e.g., display controllers) may be left running by the
+bootloader and issue DMA transactions before the kernel driver attaches
+them to the IOMMU. This causes C_BAD_STREAMID errors during the window
+between SMMU initialization and device driver probe.
+
+Add support for an "arm,boot-active-sids" device tree property that
+specifies stream IDs which should have bypass STEs pre-installed before
+the SMMU starts enforcing. This is the device tree equivalent of the
+ACPI IORT RMR (Reserved Memory Region) mechanism.
+
+For Sky1/Orion O6, the display controller (linlondp at 0x14080000) uses
+SIDs 0x06, 0x07, 0x09, 0x0a and is typically left running by the
+bootloader for splash screen display.
+---
+ arch/arm64/boot/dts/cix/sky1-orion-o6.dts   |  2 ++
+ drivers/iommu/arm/arm-smmu-v3/arm-smmu-v3.c | 40 +++++++++++++++++++++
+ 2 files changed, 42 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/cix/sky1-orion-o6.dts b/arch/arm64/boot/dts/cix/sky1-orion-o6.dts
+index 38c7b61976e2..51236cf7ff94 100644
+--- a/arch/arm64/boot/dts/cix/sky1-orion-o6.dts
++++ b/arch/arm64/boot/dts/cix/sky1-orion-o6.dts
+@@ -2072,6 +2072,8 @@ &smmu_pciehub {
+ 
+ &smmu_mmhub {
+ 	status = "okay";
++	/* Display controller SIDs active at boot (bootloader splash screen) */
++	arm,boot-active-sids = <0x06 0x07 0x09 0x0a>;
+ };
+ 
+ /* PCIe X16 Slot */
+diff --git a/drivers/iommu/arm/arm-smmu-v3/arm-smmu-v3.c b/drivers/iommu/arm/arm-smmu-v3/arm-smmu-v3.c
+index 2a8b46b948f0..35dbcac8aacf 100644
+--- a/drivers/iommu/arm/arm-smmu-v3/arm-smmu-v3.c
++++ b/drivers/iommu/arm/arm-smmu-v3/arm-smmu-v3.c
+@@ -4652,6 +4652,43 @@ static void __iomem *arm_smmu_ioremap(struct device *dev, resource_size_t start,
+ 	return devm_ioremap_resource(dev, &res);
+ }
+ 
++/*
++ * Install bypass STEs for stream IDs specified in device tree.
++ * This handles devices that are already active at boot (e.g., display
++ * controllers left running by bootloader) before the kernel driver
++ * has attached them to the IOMMU.
++ */
++static void arm_smmu_dt_install_bypass_ste(struct arm_smmu_device *smmu)
++{
++	struct device_node *np = smmu->dev->of_node;
++	int count, i;
++	u32 sid;
++
++	if (!np)
++		return;
++
++	count = of_property_count_u32_elems(np, "arm,boot-active-sids");
++	if (count <= 0)
++		return;
++
++	for (i = 0; i < count; i++) {
++		if (of_property_read_u32_index(np, "arm,boot-active-sids",
++					       i, &sid))
++			continue;
++
++		if (arm_smmu_init_sid_strtab(smmu, sid)) {
++			dev_err(smmu->dev,
++				"boot-active SID(0x%x) bypass failed\n", sid);
++			continue;
++		}
++
++		arm_smmu_make_bypass_ste(smmu,
++			arm_smmu_get_step_for_sid(smmu, sid));
++		dev_dbg(smmu->dev,
++			"installed bypass STE for boot-active SID 0x%x\n", sid);
++	}
++}
++
+ static void arm_smmu_rmr_install_bypass_ste(struct arm_smmu_device *smmu)
+ {
+ 	struct list_head rmr_list;
+@@ -4818,6 +4855,9 @@ static int arm_smmu_device_probe(struct platform_device *pdev)
+ 	/* Check for RMRs and install bypass STEs if any */
+ 	arm_smmu_rmr_install_bypass_ste(smmu);
+ 
++	/* Install bypass STEs for boot-active devices from DT */
++	arm_smmu_dt_install_bypass_ste(smmu);
++
+ 	/* Reset the device */
+ 	ret = arm_smmu_device_reset(smmu);
+ 	if (ret)

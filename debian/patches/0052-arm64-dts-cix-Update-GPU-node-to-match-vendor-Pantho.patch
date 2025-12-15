@@ -1,7 +1,7 @@
 From 85337697b7b47d23107f6f7a02c7f1fdba815910 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Thu, 11 Dec 2025 23:00:09 +0800
-Subject: [PATCH 52/56] arm64: dts: cix: Update GPU node to match vendor
+Subject: [PATCH 52/57] arm64: dts: cix: Update GPU node to match vendor
  Panthor config
 
 Update the Sky1 GPU device tree node to match the vendor kernel

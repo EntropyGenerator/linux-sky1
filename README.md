@@ -5,7 +5,7 @@ Linux kernel packages for CIX Sky1 SoC (Radxa Orion O6 and compatible boards).
 ## Overview
 
 This repository contains:
-- 56 patches on top of Linux 6.18.1 LTS for CIX Sky1 SoC support
+- 57 patches on top of Linux 6.18.1 LTS for CIX Sky1 SoC support
 - Debian packaging to build kernel .deb packages
 - Kernel configuration for arm64
 
@@ -46,7 +46,7 @@ dpkg-buildpackage -us -uc -b
 
 ```bash
 # Clone with patches applied
-git clone --depth=1 https://github.com/sky1-linux/linux-sky1.git
+git clone --depth=1 https://github.com/Sky1-Linux/linux-sky1.git
 cd linux-sky1
 
 # Extract and patch

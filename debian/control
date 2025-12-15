@@ -12,9 +12,9 @@ Build-Depends: debhelper-compat (= 13),
                libssl-dev,
                rsync
 Standards-Version: 4.6.2
-Homepage: https://github.com/sky1-linux/linux-sky1
-Vcs-Git: https://github.com/sky1-linux/linux-sky1.git
-Vcs-Browser: https://github.com/sky1-linux/linux-sky1
+Homepage: https://github.com/Sky1-Linux/linux-sky1
+Vcs-Git: https://github.com/Sky1-Linux/linux-sky1.git
+Vcs-Browser: https://github.com/Sky1-Linux/linux-sky1
 
 Package: linux-image-6.18-sky1
 Architecture: arm64

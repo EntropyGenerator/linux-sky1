@@ -54,3 +54,4 @@
 0054-PCI-cadence-sky1-Disable-portdrv-AER-PME-to-prevent-.patch
 0055-wifi-rtw89-Add-scan-offload-robustness-for-hotplug-s.patch
 0056-cpufreq-Update-capacity_freq_ref-when-boost-state-ch.patch
+0057-iommu-arm-smmu-v3-Add-DT-support-for-boot-active-str.patch

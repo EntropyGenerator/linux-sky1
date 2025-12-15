@@ -1,3 +1,11 @@
+linux-sky1 (6.18.1-sky1.3) unstable; urgency=medium
+
+  * iommu/arm-smmu-v3: Add DT support for boot-active stream IDs
+    - Pre-install bypass STEs for devices active at boot
+    - Eliminates C_BAD_STREAMID errors from display controller
+
+ -- Entrpi <entrpi@proton.me>  Mon, 16 Dec 2025 10:00:00 +0800
+
 linux-sky1 (6.18.1-sky1.2) unstable; urgency=medium
 
   * cpufreq: Fix schedutil not using boost frequencies

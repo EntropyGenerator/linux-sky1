@@ -1,7 +1,7 @@
 From bd33660dd8f288a99f74b0ff31e81e3ba9aeddc7 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Mon, 1 Dec 2025 06:54:59 +0800
-Subject: [PATCH 19/56] arm64: dts: cix: Update GPU node for Panthor driver
+Subject: [PATCH 19/57] arm64: dts: cix: Update GPU node for Panthor driver
 
 Change GPU compatible from arm,mali-valhall-csf to cix,sky1-mali
 to enable Sky1-specific initialization code in Panthor driver.

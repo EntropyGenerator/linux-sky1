@@ -1,7 +1,7 @@
 From c38371286d7b6d0379f9b62fd1d9d682774c275f Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Mon, 8 Dec 2025 20:26:13 +0800
-Subject: [PATCH 43/56] drm/panthor: Remove Sky1 legacy shader power paths
+Subject: [PATCH 43/57] drm/panthor: Remove Sky1 legacy shader power paths
 
 Remove all legacy SHADER_PWRON workarounds to use pure vanilla
 mainline HOST_POWER interface for G720 shader power management.

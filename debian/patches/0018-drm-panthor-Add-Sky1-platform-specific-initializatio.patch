@@ -1,7 +1,7 @@
 From b11b53094fb9e89eaff115526cdef9fd4a0f5ebc Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Mon, 1 Dec 2025 06:54:38 +0800
-Subject: [PATCH 18/56] drm/panthor: Add Sky1 platform-specific initialization
+Subject: [PATCH 18/57] drm/panthor: Add Sky1 platform-specific initialization
 
 Add CIX Sky1 (Mali-G720) specific initialization code ported from
 vendor kernel 6.6:

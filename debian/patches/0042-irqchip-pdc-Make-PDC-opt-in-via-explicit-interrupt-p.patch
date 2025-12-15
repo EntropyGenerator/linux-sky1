@@ -1,7 +1,7 @@
 From f97c8ef30a827dd2b7dda579fd027c03618408d9 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Mon, 8 Dec 2025 20:25:45 +0800
-Subject: [PATCH 42/56] irqchip/pdc: Make PDC opt-in via explicit
+Subject: [PATCH 42/57] irqchip/pdc: Make PDC opt-in via explicit
  interrupt-parent
 
 - Change global interrupt-parent from &pdc to &gic
