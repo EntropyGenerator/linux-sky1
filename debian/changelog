@@ -1,7 +1,14 @@
+linux-sky1 (6.18.1-sky1.2) unstable; urgency=medium
+
+  * cpufreq: Fix schedutil not using boost frequencies
+    - Update capacity_freq_ref when boost state changes
+    - Fixes ~30% performance loss with schedutil governor
+
+ -- Entrpi <entrpi@proton.me>  Sun, 15 Dec 2025 18:00:00 +0800
+
 linux-sky1 (6.18.1-sky1.1) unstable; urgency=medium
 
-  * Rebase to Linux 6.18.1 stable with 56 Sky1 patches
-  * cpufreq: Fix schedutil not using boost frequencies
+  * Rebase to Linux 6.18.1 stable with 55 Sky1 patches
   * PCIe: Fix portdrv AER/PME IRQ conflicts during hotplug
   * WiFi: Add rtw89 scan offload robustness for hotplug
 
