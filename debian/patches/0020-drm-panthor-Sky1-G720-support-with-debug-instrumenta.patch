@@ -1,7 +1,7 @@
-From ff876d0d1f7c4815b702d4c5f9fd581df92b3001 Mon Sep 17 00:00:00 2001
+From 680572c842798e654eae6ae94249acbe7f33452b Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Mon, 1 Dec 2025 16:14:37 +0800
-Subject: [PATCH 20/53] drm/panthor: Sky1 G720 support with debug
+Subject: [PATCH 20/55] drm/panthor: Sky1 G720 support with debug
  instrumentation
 
 Work-in-progress Sky1/G720 support including:
@@ -16,16 +16,28 @@ Work-in-progress Sky1/G720 support including:
 
 Contains debug instrumentation to be cleaned up.
 ---
- arch/arm64/boot/dts/cix/sky1-orion-o6.dts |   4 +-
- drivers/gpu/drm/panthor/panthor_device.c  |  52 ++++-
- drivers/gpu/drm/panthor/panthor_fw.c      | 122 ++++++++++-
- drivers/gpu/drm/panthor/panthor_fw.h      |  13 +-
- drivers/gpu/drm/panthor/panthor_gpu.c     | 238 +++++++++++++++++++++-
- drivers/gpu/drm/panthor/panthor_gpu.h     |   1 +
- drivers/gpu/drm/panthor/panthor_mmu.c     |  34 +++-
- drivers/gpu/drm/panthor/panthor_regs.h    |  34 ++++
- drivers/gpu/drm/panthor/panthor_sched.c   |  89 +++++++-
- 9 files changed, 560 insertions(+), 27 deletions(-)
+ arch/arm64/boot/dts/cix/sky1-orion-o6.dts     |    4 +-
+ docs/csf-interface-comparison.md              | 1185 +++++++++++++++++
+ docs/gpu-panthor-sky1-vendor-analysis.md      |  678 ++++++++++
+ docs/panthor-power-management-analysis.md     |  588 ++++++++
+ docs/sky1-gpu-power-state-model.md            |  299 +++++
+ docs/sky1-panthor-porting-plan.md             |  333 +++++
+ docs/vendor-mali-power-management-analysis.md |  511 +++++++
+ drivers/gpu/drm/panthor/panthor_device.c      |   52 +-
+ drivers/gpu/drm/panthor/panthor_fw.c          |  122 +-
+ drivers/gpu/drm/panthor/panthor_fw.h          |   13 +-
+ drivers/gpu/drm/panthor/panthor_gpu.c         |  238 +++-
+ drivers/gpu/drm/panthor/panthor_gpu.h         |    1 +
+ drivers/gpu/drm/panthor/panthor_mmu.c         |   34 +-
+ drivers/gpu/drm/panthor/panthor_regs.h        |   34 +
+ drivers/gpu/drm/panthor/panthor_sched.c       |   89 +-
+ 15 files changed, 4154 insertions(+), 27 deletions(-)
+ create mode 100644 docs/csf-interface-comparison.md
+ create mode 100644 docs/gpu-panthor-sky1-vendor-analysis.md
+ create mode 100644 docs/panthor-power-management-analysis.md
+ create mode 100644 docs/sky1-gpu-power-state-model.md
+ create mode 100644 docs/sky1-panthor-porting-plan.md
+ create mode 100644 docs/vendor-mali-power-management-analysis.md
 
 diff --git a/arch/arm64/boot/dts/cix/sky1-orion-o6.dts b/arch/arm64/boot/dts/cix/sky1-orion-o6.dts
 index c8e9505dff39..fe40ac3d5731 100644
@@ -49,6 +61,3636 @@ index c8e9505dff39..fe40ac3d5731 100644
  
  		usbc_con2 {
  			data-role = "host";
+diff --git a/docs/csf-interface-comparison.md b/docs/csf-interface-comparison.md
+new file mode 100644
+index 000000000000..fc21c5a104be
+--- /dev/null
++++ b/docs/csf-interface-comparison.md
+@@ -0,0 +1,1185 @@
++# CSF Interface Comparison: Kbase vs Panthor
++
++**Date**: 2025-12-01
++**Purpose**: Deep analysis of Command Stream Frontend (CSF) interface differences between ARM's kbase driver and mainline Panthor driver for G720 GPU debugging.
++
++---
++
++## Executive Summary
++
++This document details a comprehensive code-level investigation comparing how ARM's proprietary kbase driver and the mainline Panthor driver handle CSF (Command Stream Frontend) communication with GPU firmware. The goal is to identify why Panthor fails to receive firmware acknowledgments for CSG (Command Stream Group) operations on the CIX Sky1 SoC (Immortalis G720).
++
++**Critical Finding**: Panthor is missing a memory barrier (`dmb(osh)`) between clearing the JOB_INT interrupt and reading firmware interface memory. This can cause the CPU to read stale CSG_ACK values, resulting in false timeout detection.
++
++---
++
++## 1. CSG State Machine Comparison
++
++### 1.1 State Values (Identical)
++
++Both drivers use the same CSG state values defined by the CSF firmware interface:
++
++| State | Value | Description |
++|-------|-------|-------------|
++| `CSG_STATE_TERMINATE` | 0 | Stop group, release resources |
++| `CSG_STATE_START` | 1 | Initial group startup |
++| `CSG_STATE_SUSPEND` | 2 | Suspend execution (state preserved) |
++| `CSG_STATE_RESUME` | 3 | Resume from suspension |
++
++### 1.2 Handshake Protocol (Identical Principle)
++
++Both drivers use toggle-bit handshake:
++- Driver writes to `CSG_REQ` (toggles state bits)
++- Firmware mirrors those bits in `CSG_ACK` when complete
++- Handshake complete when: `(CSG_REQ XOR CSG_ACK) & mask == 0`
++
++### 1.3 Slot State Tracking (Different)
++
++**Kbase** has intermediate slot states:
++```
++CSG_SLOT_READY → CSG_SLOT_READY2RUN → CSG_SLOT_RUNNING
++                                    ↓ (timeout)
++                         CSG_SLOT_READY2RUN_TIMEDOUT
++```
++
++**Panthor** tracks group state directly:
++```
++PANTHOR_CS_GROUP_SUSPENDED → PANTHOR_CS_GROUP_ACTIVE
++                          ↓ (error)
++                   PANTHOR_CS_GROUP_UNKNOWN_STATE
++```
++
++---
++
++## 2. Critical Difference: Memory Barrier
++
++### 2.1 Kbase Implementation
++
++**File**: `mali_kbase_csf.c:3439-3461`
++
++```c
++static void order_job_irq_clear_with_iface_mem_read(void)
++{
++    /*
++     * The FW interface memory accessed during IRQ handling could
++     * be read before the write to IRQ_CLEAR register is complete
++     * if no memory barrier is placed after write to IRQ_CLEAR.
++     *
++     * MCU and CPU in same Outer Shareable domain.
++     */
++    dmb(osh);  /* Data Memory Barrier - Outer Shareable */
++}
++```
++
++Called in IRQ handler after clearing JOB_INT_CLEAR:
++```c
++kbase_reg_write32(kbdev, JOB_CONTROL_ENUM(JOB_IRQ_CLEAR), val);
++order_job_irq_clear_with_iface_mem_read();  /* BARRIER HERE */
++/* Now safe to read interface memory */
++```
++
++### 2.2 Panthor Implementation
++
++**File**: `panthor_fw.c:1011-1026`
++
++```c
++static void panthor_job_irq_handler(struct panthor_device *ptdev, u32 status)
++{
++    gpu_write(ptdev, JOB_INT_CLEAR, status);
++    /* NO MEMORY BARRIER HERE */
++
++    if (!ptdev->fw->booted && (status & JOB_INT_GLOBAL_IF))
++        ptdev->fw->booted = true;
++
++    wake_up_all(&ptdev->fw->req_waitqueue);
++    /* ... */
++}
++```
++
++### 2.3 Impact Analysis
++
++Without `dmb(osh)`:
++1. CPU writes to `JOB_INT_CLEAR` register
++2. Write may be buffered in write-combine buffer
++3. CPU proceeds to read `CSG_ACK` from firmware interface
++4. Read may return stale value (before firmware's update)
++5. Handshake check fails: `(CSG_REQ XOR CSG_ACK) != 0`
++6. Driver reports timeout despite firmware having responded
++
++**Why ARM architectures need this**:
++- GPU MCU and CPU share "Outer Shareable" coherency domain
++- Write-combine buffering can reorder operations
++- `dmb(osh)` ensures all prior writes complete before subsequent reads
++
++---
++
++## 3. IRQ Handler Event Processing
++
++### 3.1 Processing Order Difference
++
++**Kbase**: Synchronous processing in IRQ context
++```
++IRQ fires
++  → Clear JOB_INT_CLEAR
++  → dmb(osh) barrier
++  → Read ALL interface memory
++  → Process CSG events
++  → Process global events
++  → Loop if GLB_IDLE detected
++  → wake_up_all() AFTER processing
++```
++
++**Panthor**: Deferred processing
++```
++IRQ fires
++  → Clear JOB_INT_CLEAR
++  → wake_up_all() IMMEDIATELY
++  → Queue work for event processing
++  → [IRQ returns]
++  → [Work runs later]
++```
++
++### 3.2 Implications
++
++Panthor's approach can cause race:
++1. Firmware updates CSG_ACK
++2. Firmware fires interrupt
++3. Panthor clears interrupt, wakes waiters
++4. Waiter checks CSG_ACK but read is stale (no barrier)
++5. Waiter goes back to sleep
++6. Eventually times out
++
++---
++
++## 4. CSG Endpoint Configuration
++
++### 4.1 Kbase G720 Configuration
++
++**File**: `mali_kbase_csf_scheduler.c:3137-3146`
++
++For arch >= 14.8.4 (G720):
++```c
++if (kbdev->gpu_props.gpu_id.arch_id >= GPU_ID_ARCH_MAKE(14, 8, 4)) {
++    ep_cfg = CSG_EP_REQ_NEURAL_EP_SET(ep_cfg, neural_max);
++    ep_cfg = CSG_EP_REQ_COMP_PRI_THRESHOLD_SET(ep_cfg, comp_pri_threshold);
++    ep_cfg = CSG_EP_REQ_COMP_PRI_RATIO_SET(ep_cfg, comp_pri_ratio);
++    kbase_csf_fw_io_group_write64(fw_io, slot, CSG_EP_REQ_LO_64B_ALIGNED, ep_cfg);
++}
++```
++
++Additional configuration:
++- Neural endpoint allocation
++- Compute priority threshold and ratio
++- 64-bit aligned register writes
++
++### 4.2 Panthor Configuration
++
++**File**: `panthor_sched.c:1294`
++
++Simpler endpoint setup:
++```c
++csg_iface->input->endpoint_req =
++    CSG_EP_REQ_COMPUTE(group->max_compute_cores) |
++    CSG_EP_REQ_FRAGMENT(group->max_fragment_cores) |
++    CSG_EP_REQ_TILER(group->max_tiler_cores) |
++    CSG_EP_REQ_PRIORITY(priority);
++```
++
++Missing for G720:
++- Neural endpoint configuration
++- Compute priority threshold/ratio
++- 64-bit aligned writes (uses 32-bit)
++
++### 4.3 Assessment
++
++The missing G720 endpoint config is likely NOT the root cause of CSG timeout, as:
++- Basic compute/fragment/tiler allocation should work
++- Neural endpoint is for ML workloads (not used in test)
++- Priority settings affect scheduling, not basic functionality
++
++However, if memory barrier doesn't fix the issue, this should be investigated.
++
++---
++
++## 5. Doorbell Mechanism
++
++### 5.1 Register Locations
++
++Both drivers use same registers:
++- Global doorbell: `CSF_DOORBELL(0)` at offset 0x80000
++- CSG doorbells: `CSF_DOORBELL(n)` at offset 0x80000 + (n * 0x10000)
++
++### 5.2 Doorbell Ringing
++
++**Kbase**: Through firmware I/O abstraction
++```c
++kbase_csf_ring_csg_slots_doorbell(kbdev, slot_bitmap)
++  → dmb(osh)  /* Barrier before doorbell */
++  → Read GLB_DB_ACK
++  → Toggle GLB_DB_REQ bits
++  → Ring doorbell register
++```
++
++**Panthor**: Direct register writes
++```c
++panthor_fw_ring_csg_doorbells(ptdev, csg_mask)
++  → panthor_fw_toggle_reqs() with spinlock
++  → gpu_write(CSF_DOORBELL(CSF_GLB_DOORBELL_ID), 1)
++```
++
++**Note**: Kbase has barrier BEFORE doorbell; Panthor relies on spinlock for ordering.
++
++---
++
++## 6. Timeout Configuration
++
++| Operation | Kbase | Panthor |
++|-----------|-------|---------|
++| CSG wait ack | CSF_FIRMWARE_TIMEOUT (~4000ms) | 4000ms (we increased from 100ms) |
++| Job timeout | Configurable | 5000ms (JOB_TIMEOUT_MS) |
++| Busy-wait | Not visible | ~10us (read_poll_timeout_atomic) |
++| Progress timeout | 2.5B cycles | 2.5B cycles |
++
++Timeout values are now aligned after our 100ms → 4000ms change.
++
++---
++
++## 7. Wait Mechanism
++
++### 7.1 Kbase Wait
++
++```c
++kbase_csf_fw_io_wait_event_timeout(&kbdev->csf.fw_io,
++                                   kbdev->csf.event_wait,
++                                   condition, timeout)
++```
++- Custom macro with GPU suspend check
++- Waits on `kbdev->csf.event_wait`
++- Woken by IRQ handler AFTER event processing
++
++### 7.2 Panthor Wait
++
++```c
++panthor_fw_csg_wait_acks(ptdev, csg_id, req_mask, &acked, timeout)
++  → Busy-wait ~10us
++  → If not ready: wait_event_timeout(&ptdev->fw->req_waitqueue, ...)
++```
++- Two-phase: busy-wait then sleep
++- Woken by IRQ handler BEFORE event processing
++- Standard kernel wait_event_timeout
++
++---
++
++## 8. G720 Hardware Issues
++
++Kbase defines these hardware issues for G720 (tODx):
++
++| Issue | Description |
++|-------|-------------|
++| `KBASE_HW_ISSUE_TSIX_2033` | Shared across GPUs |
++| `KBASE_HW_ISSUE_TTRX_1337` | Shared across GPUs |
++| `KBASE_HW_ISSUE_GPU2019_3212` | G720-specific |
++| `KBASE_HW_ISSUE_GPU2019_3878` | G720-specific |
++| `KBASE_HW_ISSUE_GPU2019_3901` | G720-specific |
++| `KBASE_HW_ISSUE_TITANHW_2710` | Titan core |
++| `KBASE_HW_ISSUE_GPU2022PRO_148` | G720-specific |
++| `KBASE_HW_ISSUE_TITANHW_2938` | Titan core |
++| `KBASE_HW_ISSUE_KRAKEHW_2321` | Kraken (G720) specific |
++| `KBASE_HW_ISSUE_KRAKEHW_2151` | Kraken specific |
++
++Panthor has no explicit hardware issue tracking. If CSF issues persist, these may need investigation.
++
++---
++
++## 9. Recommended Fixes
++
++### 9.1 Priority 1: Add Memory Barrier
++
++**File**: `drivers/gpu/drm/panthor/panthor_fw.c`
++
++```c
++static void panthor_job_irq_handler(struct panthor_device *ptdev, u32 status)
++{
++    gpu_write(ptdev, JOB_INT_CLEAR, status);
++
++    /*
++     * Ensure IRQ clear write completes before reading FW interface.
++     * MCU and CPU share Outer Shareable domain - without barrier,
++     * subsequent reads may return stale data.
++     */
++    dmb(osh);
++
++    if (!ptdev->fw->booted && (status & JOB_INT_GLOBAL_IF))
++        ptdev->fw->booted = true;
++
++    wake_up_all(&ptdev->fw->req_waitqueue);
++    // ...
++}
++```
++
++### 9.2 Priority 2: Add Debug Traces
++
++**File**: `drivers/gpu/drm/panthor/panthor_sched.c`
++
++In `csgs_upd_ctx_apply_locked()`:
++```c
++ret = panthor_fw_csg_wait_acks(ptdev, csg_id, req_mask, &acked, 4000);
++
++if (ret && acked != req_mask) {
++    u32 req = csg_iface->input->req;
++    u32 ack = csg_iface->output->ack;
++    drm_err(&ptdev->base,
++            "CSG %d timeout: req=0x%x ack=0x%x mask=0x%x acked=0x%x",
++            csg_id, req, ack, req_mask, acked);
++}
++```
++
++### 9.3 Priority 3: IRQ Counter (Verification)
++
++**File**: `drivers/gpu/drm/panthor/panthor_fw.c`
++
++```c
++static atomic_t irq_count = ATOMIC_INIT(0);
++
++static void panthor_job_irq_handler(...)
++{
++    atomic_inc(&irq_count);
++    // ...
++}
++```
++
++Log counter at timeout to verify IRQs are firing.
++
++---
++
++## 10. Conclusion
++
++The most likely root cause of CSG timeout is the **missing memory barrier** in Panthor's IRQ handler. ARM's kbase driver explicitly documents this requirement and implements `dmb(osh)` between IRQ clear and interface memory reads.
++
++Without this barrier, the CPU may read stale firmware interface data due to write-combine buffering, causing false timeout detection even when firmware has correctly acknowledged CSG requests.
++
++**Next Steps**:
++1. Add `dmb(osh)` barrier to `panthor_job_irq_handler()`
++2. Add debug traces to capture CSG_REQ/CSG_ACK values at timeout
++3. Rebuild and test
++4. If still failing, investigate G720 endpoint configuration
++
++---
++
++## 11. Update: Post-Testing Analysis (2025-12-01)
++
++### 11.1 What Was Implemented and Tested
++
++| Fix | Status | Result |
++|-----|--------|--------|
++| Memory barrier (`dmb(osh)`) | ✅ Implemented | **Did NOT fix** - firmware genuinely not responding |
++| Debug traces | ✅ Implemented | **Working** - captured timeout state |
++| IRQ counter | ✅ Implemented | **Working** - IRQs are firing |
++
++### 11.2 Debug Output Analysis
++
++The debug traces captured the following at timeout:
++```
++CSG 0 timeout: req=0x00000001 ack=0x00000021 mask=0x00000020 acked=0x00000000 pending=0x00000020
++```
++
++**Interpretation**:
++- `req=0x01`: Driver requested CSG_STATE_START (bit 0)
++- `ack=0x21`: Firmware acknowledged START (bit 0), but bit 5 (0x20) was already set
++- `mask=0x20`: Driver waiting for CSG_STATUS_UPDATE acknowledgment
++- `pending=0x20`: Firmware NEVER acknowledged STATUS_UPDATE
++
++**Key Insight**: The job itself hangs during execution on GPU hardware. CSG timeout is a consequence, not the cause. Firmware boots and responds to START, but when the job runs, GPU locks up completely.
++
++### 11.3 Already Implemented in Panthor
++
++| Feature | Location | Status |
++|---------|----------|--------|
++| RCSU QChannel clock gating | `panthor_device.c:196-200` | ✅ Working |
++| PBHA override | `panthor_gpu.c:303` | ✅ Present |
++| SYSC_ALLOC config | `panthor_gpu.c:304-311` | ✅ Present |
++| PWR_OVERRIDE1 | `panthor_gpu.c:322` | ✅ Present |
++
++### 11.4 Missing G720-Specific Workarounds
++
++Analysis of kbase reveals several G720-specific workarounds not in Panthor:
++
++#### 11.4.1 TITANHW_2938 - L2 Power Transition Wait
++
++**Location**: `mali_kbase_mmu_hw_direct.c:558-560`
++
++```c
++if (flush_op == KBASE_MMU_OP_FLUSH_MEM &&
++    kbdev->pm.backend.apply_hw_issue_TITANHW_2938_wa &&
++    kbdev->pm.backend.l2_state == KBASE_L2_PEND_OFF)
++    ret = wait_l2_power_trans_complete(kbdev);
++```
++
++**Function**: After MMU flush when L2 is powering off, wait for `L2_PWRTRANS == 0`.
++
++**Impact**: Without this, MMU operations can race with L2 power state changes, potentially causing GPU lockup.
++
++#### 11.4.2 RTU (Ray Tracing Unit) Enablement
++
++**Location**: `mali_kbase_csf_firmware.c:1877-1878`
++
++```c
++if (kbdev->csf.firmware_hctl_core_pwr)
++    kbase_reg_write32(kbdev, GPU_CONTROL_ENUM(SHADER_PWRFEATURES), 1);
++```
++
++**Register**: `SHADER_PWRFEATURES` at offset 0x188
++
++**Function**: Enables the Ray Tracing Unit subdomain when host controls shader core power. G720 Immortalis has ray tracing hardware.
++
++**Impact**: If RTU subdomain isn't enabled but shader code expects it, jobs may hang.
++
++#### 11.4.3 Additional HW Issues for G720 (tODx)
++
++| Issue | Description |
++|-------|-------------|
++| GPU2019_3212 | G720-specific |
++| GPU2022PRO_148 | G720-specific |
++| KRAKEHW_2321 | Kraken (G720) specific |
++| KRAKEHW_2151 | Kraken specific |
++
++### 11.5 Missing IRQ Mask Bits
++
++Panthor's `ack_irq_mask` is missing several bits that kbase enables:
++
++| Bit | Kbase | Panthor | Description |
++|-----|-------|---------|-------------|
++| PROTM_ENTER | ✅ | ❌ | Protected mode enter |
++| PROTM_EXIT | ✅ | ❌ | Protected mode exit |
++| FIRMWARE_CONFIG_UPDATE | ✅ | ❌ | FW config changes |
++| GLB_ACK_FATAL | ✅ | ❌ | Fatal error notification |
++| ITER_TRACE_ENABLE | ✅ | ❌ | Iterator trace |
++| EVICTION_TIMER | ✅ | ❌ | Eviction timer |
++
++### 11.6 Updated Root Cause Hypothesis
++
++The memory barrier fix eliminated the "stale read" hypothesis. The firmware genuinely isn't responding to STATUS_UPDATE because the GPU hardware is locked up.
++
++**Most likely causes** (in order of probability):
++
++1. **RTU not enabled**: If shader code uses ray tracing features and RTU subdomain isn't enabled, execution hangs.
++
++2. **L2 power transition race (TITANHW_2938)**: MMU operations racing with L2 power transitions could corrupt GPU state.
++
++3. **Missing hardware workaround**: One of the G720-specific issues (GPU2022PRO_148, KRAKEHW_2321, etc.) may require a workaround.
++
++### 11.7 Recommended Next Steps
++
++1. **Add RTU enablement**: Write `SHADER_PWRFEATURES = 1` during firmware init
++2. **Add L2 power transition wait**: Implement TITANHW_2938 workaround
++3. **Add GLB_FATAL IRQ mask**: Enable fatal error notifications to catch hardware errors earlier
++4. **Check shader_present alignment**: Verify panthor's core mask matches what firmware expects
++
++---
++
++## 12. Update: Implemented Fixes (2025-12-01)
++
++Following the analysis in Section 11, the following fixes were implemented and built into the kernel.
++
++### 12.1 Fix 1: RTU (Ray Tracing Unit) Enablement
++
++**Files Modified**:
++- `drivers/gpu/drm/panthor/panthor_regs.h`
++- `drivers/gpu/drm/panthor/panthor_gpu.c`
++
++**Implementation**:
++
++Added `SHADER_PWRFEATURES` register definition:
++```c
++/* panthor_regs.h */
++#define SHADER_PWRFEATURES              0x188
++#define   SHADER_PWRFEATURES_RTU_EN     BIT(0)
++```
++
++Added RTU enablement in Sky1-specific GPU initialization:
++```c
++/* panthor_gpu.c - in panthor_gpu_init() Sky1 block */
++/* Enable Ray Tracing Unit subdomain for shader cores */
++gpu_write(ptdev, SHADER_PWRFEATURES, SHADER_PWRFEATURES_RTU_EN);
++```
++
++**Rationale**: G720 Immortalis has ray tracing hardware. If RTU subdomain isn't enabled but shader code expects it, jobs may hang.
++
++### 12.2 Fix 2: TITANHW_2938 L2 Power Transition Wait
++
++**File Modified**: `drivers/gpu/drm/panthor/panthor_mmu.c`
++
++**Implementation**:
++
++Added L2 power transition wait after MMU flush operations:
++```c
++/* panthor_mmu.c - in mmu_queue_command() after issuing AS_COMMAND */
++/*
++ * G720 HW issue: After MMU flush, wait for L2 power transition
++ * to complete. Without this, MMU operations can race with L2
++ * power state changes, causing GPU lockup.
++ */
++if (op == AS_COMMAND_FLUSH_MEM) {
++    u64 val;
++
++    ret = gpu_read64_relaxed_poll_timeout(ptdev, L2_PWRTRANS,
++                         val, val == 0,
++                         100, 2000000);
++    if (ret)
++        drm_warn(&ptdev->base,
++             "L2_PWRTRANS timeout: 0x%llx", val);
++}
++```
++
++**Rationale**: This implements the TITANHW_2938 workaround. After MMU flush when L2 is in transition, wait for `L2_PWRTRANS == 0`. Without this, MMU operations can race with L2 power state changes, potentially corrupting GPU state.
++
++### 12.3 Fix 3: Extended IRQ Mask Bits
++
++**Files Modified**:
++- `drivers/gpu/drm/panthor/panthor_fw.h`
++- `drivers/gpu/drm/panthor/panthor_fw.c`
++- `drivers/gpu/drm/panthor/panthor_sched.c`
++
++**Implementation**:
++
++Added GLB_FATAL bit definition and extended GLB_EVT_MASK:
++```c
++/* panthor_fw.h */
++#define GLB_FATAL               BIT(27)
++#define GLB_EVT_MASK            GENMASK(27, 20)  /* Was GENMASK(26, 20) */
++```
++
++Extended `ack_irq_mask` with additional bits:
++```c
++/* panthor_fw.c - in panthor_fw_init() */
++glb_iface->input->ack_irq_mask = GLB_CFG_ALLOC_EN |
++                 GLB_PING |
++                 GLB_CFG_PROGRESS_TIMER |
++                 GLB_CFG_POWEROFF_TIMER |
++                 GLB_PROTM_ENTER |      /* NEW */
++                 GLB_PROTM_EXIT |       /* NEW */
++                 GLB_FWCFG_UPDATE |     /* NEW */
++                 GLB_IDLE_EN |
++                 GLB_IDLE |
++                 GLB_FATAL;             /* NEW */
++```
++
++Added GLB_FATAL handling in scheduler:
++```c
++/* panthor_sched.c - in sched_process_global_irq_locked() */
++if (evts & GLB_FATAL) {
++    drm_err(&ptdev->base,
++        "GPU firmware fatal error: req=0x%08x ack=0x%08x",
++        req, ack);
++    /* Acknowledge the fatal event */
++    panthor_fw_update_reqs(glb_iface, req, ack, GLB_FATAL);
++}
++```
++
++**Rationale**: Enables firmware fatal error notifications (GLB_FATAL), protected mode transitions, and firmware config updates. This allows the driver to catch and report GPU firmware errors earlier rather than waiting for timeout.
++
++### 12.4 Summary of Changes
++
++| Fix | Files | Purpose |
++|-----|-------|---------|
++| RTU enablement | `panthor_regs.h`, `panthor_gpu.c` | Enable ray tracing hardware subdomain |
++| L2 power transition wait | `panthor_mmu.c` | TITANHW_2938 workaround |
++| Extended IRQ masks | `panthor_fw.h`, `panthor_fw.c`, `panthor_sched.c` | Fatal error notification |
++
++### 12.5 Build Status
++
++Kernel built successfully and installed to:
++- Kernel: `/boot/efi/IMAGE-6.18-rc7-mainline-cix`
++- DTB: `/boot/efi/SKY1-ORION-O6-6.18-rc7-mainline-cix.DTB`
++
++Boot menu entry 3 (dev) contains the updated build.
++
++### 12.6 Next Steps
++
++1. **Reboot and test** with the updated kernel
++2. **Check dmesg** for GLB_FATAL messages or L2_PWRTRANS timeouts
++3. **Run GPU workload** to verify CSG timeout is resolved
++4. **If still failing**: Investigate remaining G720-specific hardware issues (GPU2022PRO_148, KRAKEHW_2321, KRAKEHW_2151)
++
++---
++
++## 13. Critical Update: G720 64-bit endpoint_req (2025-12-01)
++
++### 13.1 Root Cause of CSG Timeout - FOUND AND FIXED
++
++**Discovery**: G720 uses a completely different CSG endpoint_req register layout than older GPUs.
++
++| GPU Generation | Register | Offset | Size |
++|----------------|----------|--------|------|
++| Pre-G720 | `CSG_EP_REQ_LO` | 0x34 | 32-bit |
++| G720+ (arch >= 12) | `CSG_EP_REQ_LO_64B_ALIGNED` | 0x38 | 64-bit |
++
++**The Problem**: Panthor was writing endpoint configuration to offset 0x34. G720 firmware **ignores** this register entirely and expects the data at offset 0x38 in 64-bit format.
++
++**Vendor Driver Code** (`mali_kbase_csf_scheduler.c:3137-3146`):
++```c
++if (kbdev->gpu_props.gpu_id.arch_id >= GPU_ID_ARCH_MAKE(14, 8, 4)) {
++    // G720+ uses 64-bit register at different offset
++    kbase_csf_fw_io_group_write64(fw_io, slot, CSG_EP_REQ_LO_64B_ALIGNED, ep_cfg);
++} else {
++    // Older GPUs use 32-bit register
++    kbase_csf_fw_io_group_write(fw_io, slot, CSG_EP_REQ_LO, ep_cfg);
++}
++```
++
++### 13.2 Implementation Fix
++
++**Files Modified**:
++- `drivers/gpu/drm/panthor/panthor_fw.h` - Added `endpoint_req_hi` field and G720 macros
++- `drivers/gpu/drm/panthor/panthor_sched.c` - Three locations updated for G720 handling
++
++**panthor_fw.h changes**:
++```c
++u32 endpoint_req;
++/*
++ * G720+ uses 64-bit endpoint_req at offset 0x38 (endpoint_req_64).
++ * Older GPUs use 32-bit endpoint_req at 0x34 + endpoint_req_hi at 0x38.
++ */
++#define CSG_EP_REQ_NEURAL(x)           (((u64)(x) << 32) & GENMASK_ULL(39, 32))
++#define CSG_EP_REQ_COMP_PRI_THRESH(x)  (((u64)(x) << 40) & GENMASK_ULL(47, 40))
++#define CSG_EP_REQ_COMP_PRI_RATIO(x)   (((u64)(x) << 48) & GENMASK_ULL(51, 48))
++u32 endpoint_req_hi;
++u32 reserved2;
++```
++
++**panthor_sched.c changes** (three locations):
++
++1. `csg_slot_prog_locked()` - Write endpoint config:
++```c
++if (GPU_ARCH_MAJOR(ptdev->gpu_info.gpu_id) >= 12) {
++    u64 ep_cfg = CSG_EP_REQ_COMPUTE(group->max_compute_cores) |
++                 CSG_EP_REQ_FRAGMENT(group->max_fragment_cores) |
++                 CSG_EP_REQ_TILER(group->max_tiler_cores) |
++                 CSG_EP_REQ_PRIORITY(priority);
++    /* For G720, write 64-bit value at offset 0x38 (endpoint_req_hi) */
++    *((u64 *)&csg_iface->input->endpoint_req_hi) = ep_cfg;
++} else {
++    csg_iface->input->endpoint_req = ...;  // Original 32-bit path
++}
++```
++
++2. `csg_slot_sync_priority_locked()` - Read priority:
++```c
++if (GPU_ARCH_MAJOR(ptdev->gpu_info.gpu_id) >= 12)
++    ep_req = csg_iface->input->endpoint_req_hi;
++else
++    ep_req = csg_iface->input->endpoint_req;
++```
++
++3. Priority update path - Update correct field for G720
++
++### 13.3 Result: CSG Timeout FIXED
++
++After implementing the 64-bit endpoint_req fix:
++
++| Symptom | Before Fix | After Fix |
++|---------|------------|-----------|
++| CSG timeout | ❌ Constant timeout with panic | ✅ **FIXED** - No CSG timeout |
++| Kernel panic | ❌ Panic on every GPU use | ✅ **FIXED** - No panic |
++| `test_panthor` | ❌ Failed | ✅ **PASSES** - EGL context, GL queries work |
++| `test_render` | ❌ Failed | ⚠️ Job timeout (new issue) |
++
++**dmesg after fix**:
++```
++panthor 15010000.gpu: [drm] Mali-G720-Immortalis id 0xc870
++panthor 15010000.gpu: [drm] CSF FW using interface v3.13.0
++```
++
++No more CSG timeout messages.
++
++### 13.4 New Issue: Job Timeout During Shader Execution
++
++With CSG communication now working, a new problem is revealed:
++
++```
++panthor 15010000.gpu: [drm] job timeout: pid=1188, comm=test_render, seqno=2
++```
++
++**Analysis**:
++- CSG protocol works (firmware acknowledges START, STATE changes)
++- Jobs are submitted successfully to the ring buffer
++- Doorbell is rung
++- But shader execution never completes within 5 second timeout
++
++**Mesa behavior**:
++- Catches the error
++- Reports "Group became unusable"
++- Recovers gracefully (no crash)
++
++---
++
++## 14. Current Investigation: Job Timeout Root Cause
++
++### 14.1 What Works vs What Doesn't
++
++| Component | Status | Evidence |
++|-----------|--------|----------|
++| Firmware boot | ✅ Working | `CSF FW using interface v3.13.0` |
++| CSG protocol | ✅ Working | No CSG timeout after endpoint_req fix |
++| Job submission | ✅ Working | Ring buffer updated, doorbell rung |
++| Shader execution | ❌ Hangs | Jobs timeout after 5 seconds |
++| GL context creation | ✅ Working | `test_panthor` passes |
++| GL queries | ✅ Working | `GL_RENDERER: Mali-G720 (Panfrost)` |
++
++### 14.2 Remaining Hypotheses for Job Timeout
++
++**Hypothesis 1: Missing Global Firmware Initialization**
++
++Vendor's `global_init()` does additional setup that panthor might be missing:
++
++```c
++// Vendor global_init() sequence:
++kbasep_enable_rtu(kbdev);                    // RTU enablement (already added)
++enable_endpoints_global(fw_io, core_mask);   // GLB_ALLOC_EN setup
++set_shader_poweroff_timer(fw_io);            // Poweroff timer
++set_timeout_global(fw_io, timeout);          // Progress timer
++set_csg_suspend_timeout(kbdev);              // CSG suspend timeout
++```
++
++**Comparison with Panthor**:
++
++| Initialization | Vendor | Panthor | Notes |
++|----------------|--------|---------|-------|
++| RTU enablement | ✅ | ✅ Added | `SHADER_PWRFEATURES = 1` |
++| GLB_ALLOC_EN | `GLB_ALLOC_EN_LO/HI` @ 0x18 | `core_en_mask` @ 0x18 | ✅ Same offset |
++| Poweroff timer | `GLB_PWROFF_TIMER` | `poweroff_timer` | ✅ Similar |
++| Progress timer | `GLB_PROGRESS_TIMER` | `progress_timer` | ✅ Similar |
++| CSG suspend timeout | ✅ | ❌ Not configured | **Possibly relevant** |
++| Sleep-on-Idle config | `GLB_IDLE_TIMER_CONFIG` | Not explicitly set | **Possibly relevant** |
++
++**Hypothesis 2: Shader Core Power State**
++
++The GPU reports `shader_present=0x550555` which is an unusual pattern. Possible issues:
++- Some shader cores not powered on
++- Power domain configuration mismatch
++
++**Hypothesis 3: Memory/TLB Issues**
++
++Shader code might be failing to access memory due to:
++- TLB configuration issues
++- Page table problems
++- Cache coherency issues
++
++**Hypothesis 4: Missing Hardware Workaround**
++
++One of the G720-specific hardware issues may still need addressing:
++- GPU2022PRO_148
++- KRAKEHW_2321
++- KRAKEHW_2151
++
++### 14.3 Next Debugging Steps
++
++1. **Add shader core status logging**: Check if cores are actually executing
++2. **Check GPU_STATUS register**: See GPU state during job execution
++3. **Compare idle timer configuration**: Vendor's `GLB_IDLE_TIMER_CONFIG` setup
++4. **Add CSG state debugging**: Log CS slot state during timeout
++5. **Investigate KRAKEHW issues**: Check if these affect basic rendering
++
++### 14.4 Key Insight
++
++The progression of fixes shows a layered problem:
++
++```
++Layer 1: Memory barrier (dmb(osh))     → Eliminated stale read hypothesis
++Layer 2: RTU/L2/IRQ mask               → Basic GPU init improvements
++Layer 3: G720 endpoint_req offset      → FIXED CSG communication
++Layer 4: ??? (job execution)           → CURRENT BLOCKER
++```
++
++Each fix has peeled back a layer to reveal the next issue. The job timeout is now the deepest layer - actual shader execution on GPU hardware.
++
++---
++
++## 15. Critical Discovery: Shader Cores Not Powered (2025-12-01)
++
++### 15.1 Root Cause Identified
++
++Debug output during job timeout revealed:
++
++```
++GPU: status=0x00000000 fault=0x00000000 shader_ready=0x0 shader_pwractive=0x0
++```
++
++Despite `shader_present=0x550555` (10 shader cores available), **zero cores are powered or active**.
++
++**This is the root cause of job timeout**: Commands are queued, firmware receives them, but there are no powered shader cores to execute them.
++
++### 15.2 Vendor vs Panthor Power Management Architecture
++
++#### Vendor Driver (kbase) - Host-Controlled Power
++
++The vendor driver has two power management modes based on `firmware_hctl_core_pwr` flag:
++
++1. **Firmware-controlled** (`firmware_hctl_core_pwr = false`): Firmware manages shader power
++2. **Host-controlled** (`firmware_hctl_core_pwr = true`): Host driver explicitly powers cores
++
++When host-controlled (which appears to be the case for G720):
++
++```c
++// mali_kbase_pm_driver.c - KBASE_MCU_HCTL_SHADERS_PEND_ON state
++kbase_pm_invoke(kbdev, KBASE_PM_CORE_SHADER, backend->shaders_avail, ACTION_PWRON);
++// This writes to SHADER_PWRON register (0x180)
++```
++
++**Power-on sequence**:
++1. `global_init()` - Set `GLB_ALLOC_EN` mask, ring doorbell
++2. Wait for firmware acknowledgment
++3. Write `SHADER_PWRON` register with desired core mask
++4. Poll `SHADER_READY` register until cores are ready
++5. Notify MCU via `kbase_csf_firmware_update_core_attr()`
++
++#### Panthor Driver - Firmware-Only Power
++
++Panthor assumes firmware controls shader power:
++
++```c
++// panthor_fw.c - panthor_fw_init_global_iface()
++glb_iface->input->core_en_mask = ptdev->gpu_info.shader_present;
++// Sets which cores firmware CAN use, but doesn't power them on
++panthor_fw_toggle_reqs(glb_iface, req, ack, GLB_CFG_ALLOC_EN | ...);
++// Requests firmware to accept core allocation, but firmware doesn't power cores
++```
++
++**Missing in Panthor**:
++- No direct `SHADER_PWRON` register write
++- No `SHADER_READY` polling
++- No MCU core notification after power-on
++
++### 15.3 Register Analysis
++
++| Register | Offset | Purpose | Vendor Uses | Panthor Uses |
++|----------|--------|---------|-------------|--------------|
++| `SHADER_PRESENT` | 0x100 | Available shader cores | ✅ Read | ✅ Read |
++| `SHADER_READY` | 0x140 | Powered & ready cores | ✅ Poll | ❌ Never read |
++| `SHADER_PWRON` | 0x180 | Power on cores | ✅ Write | ❌ Never write |
++| `SHADER_PWROFF` | 0x1C0 | Power off cores | ✅ Write | ❌ Never write |
++| `SHADER_PWRTRANS` | 0x200 | Cores in transition | ✅ Poll | ❌ Never read |
++| `SHADER_PWRACTIVE` | 0x240 | Currently active cores | ✅ Check | ✅ Debug only |
++| `SHADER_PWRFEATURES` | 0x188 | RTU enable | ✅ Write | ✅ Added |
++
++### 15.4 Proposed Fix
++
++Implement host-controlled shader power for G720 in Panthor:
++
++**Phase 1: Power-on during firmware init**
++
++```c
++// In panthor_fw_init_global_iface() after setting core_en_mask:
++
++/* G720: Power on shader cores before CSG operations */
++if (GPU_ARCH_MAJOR(ptdev->gpu_info.gpu_id) >= 12) {
++    u64 shader_mask = ptdev->gpu_info.shader_present;
++
++    /* Write power-on request */
++    gpu_write64(ptdev, SHADER_PWRON, shader_mask);
++
++    /* Wait for cores to be ready */
++    ret = gpu_read64_poll_timeout(ptdev, SHADER_READY,
++                                   val, (val & shader_mask) == shader_mask,
++                                   100, 2000000);
++    if (ret)
++        drm_warn(&ptdev->base, "Shader power-on timeout: ready=0x%llx, wanted=0x%llx",
++                 val, shader_mask);
++}
++```
++
++**Phase 2: Dynamic power management** (TODO)
++
++After Phase 1 works, implement proper power management:
++- Power down idle cores for power savings
++- Power up cores on demand
++- Handle power state transitions properly
++- Notify MCU when core power state changes
++- Implement `firmware_hctl_core_pwr` equivalent flag for conditional behavior
++
++### 15.5 Investigation Files
++
++**Vendor Driver**:
++- `mali_kbase_pm_driver.c:1459-1514` - Shader power state machine
++- `mali_kbase_csf_firmware.c:1882-1905` - `global_init()` and `enable_endpoints_global()`
++- `mali_kbase_pm_internal.h:872-885` - `kbase_pm_no_mcu_core_pwroff()` definition
++
++**Panthor Driver**:
++- `panthor_fw.c:979-1014` - `panthor_fw_init_global_iface()`
++- `panthor_regs.h` - Register definitions (needs `SHADER_PWRON` etc.)
++
++### 15.6 Layer 4 Updated
++
++```
++Layer 1: Memory barrier (dmb(osh))     → Eliminated stale read hypothesis
++Layer 2: RTU/L2/IRQ mask               → Basic GPU init improvements
++Layer 3: G720 endpoint_req offset      → FIXED CSG communication
++Layer 4: Shader power management       → ROOT CAUSE IDENTIFIED
++         ↳ Cores not powered because Panthor expects firmware to do it
++         ↳ G720 firmware expects host to power cores via SHADER_PWRON
++```
++
++---
++
++## 16. Update: Legacy Shader Power Fallback Working (2025-12-01)
++
++### 16.1 HOST_POWER Investigation Results
++
++Deep investigation of the vendor DKMS driver and mainline Panthor revealed:
++
++| Finding | Status |
++|---------|--------|
++| Reset controller fix (only `gpu_reset`) | ✅ Applied, RCSU properly mapped |
++| Q-channel clock gating | ✅ Working (`PGCTRL: 0x3e77ffc -> 0x3e77ffd`) |
++| MCU running | ✅ `MCU_STATUS=0x00000001` |
++| HOST_POWER registers | ❌ **Still return 0x0** |
++| RETRACT command | ❌ Doesn't change PWR_STATUS |
++| Legacy SHADER_PWRON | ✅ **WORKS!** |
++
++### 16.2 Diagnostic Output Analysis
++
++```
++Sky1: reset_ctrl=000000006c261da8 rcsu=00000000e9ba4507
++Sky1: RCSU PGCTRL: 0x3e77ffc -> 0x3e77ffd
++Before shader power: MCU_STATUS=0x00000001 PWR_STATUS=0x0000000000000000
++G720: PWR_STATUS=0x0000000000000000 HP_SHADER_PRESENT=0x0 (vs gpu_info=0x550555)
++G720: PWR_STATUS=0, attempting to retract power control
++G720: RETRACT failed, PWR_STATUS still 0x0
++G720: HOST_POWER unavailable, trying legacy SHADER_PWRON
++G720: legacy shader power-on succeeded (ready=0x550555)
++```
++
++**Key Observations**:
++1. Reset controller and RCSU are properly acquired
++2. Q-channel clock gating is enabled correctly
++3. MCU is running (status = 1)
++4. HOST_POWER interface completely non-responsive (PWR_STATUS = 0x0)
++5. RETRACT command has no effect
++6. **Legacy SHADER_PWRON at 0x180 successfully powers shaders!**
++
++### 16.3 Implementation: Legacy Fallback Path
++
++Added to `panthor_gpu_g720_shader_power_on()`:
++
++```c
++/* If PWR_STATUS is 0, try RETRACT command */
++if (pwr_status == 0) {
++    gpu_write64(ptdev, PWR_CMDARG, 0);
++    gpu_write(ptdev, PWR_COMMAND,
++              PWR_COMMAND_DOMAIN_SHADER | PWR_COMMAND_RETRACT);
++    /* Poll for ALLOW_SHADER - times out after 50ms */
++}
++
++/* If still no ALLOW_SHADER, fall back to legacy registers */
++if (!(pwr_status & PWR_STATUS_ALLOW_SHADER)) {
++    gpu_write64(ptdev, SHADER_PWRON, shader_mask);
++    /* Poll SHADER_READY for completion */
++}
++```
++
++### 16.4 Current Test Results
++
++| Test | Result | Notes |
++|------|--------|-------|
++| `test_panthor` | ✅ **PASSES** | EGL context, GL queries work |
++| `test_render` | ❌ Job timeout | Shaders powered but jobs hang |
++
++**test_panthor output**:
++```
++GBM: drm
++EGL 1.5
++GL_VENDOR: Mesa
++GL_RENDERER: Mali-G720 (Panfrost)
++GL_VERSION: OpenGL ES 3.1 Mesa 25.3.0 (git-f7aeb0d677)
++```
++
++### 16.5 Job Timeout Analysis
++
++Job timeout error shows interesting state:
++
++```
++job timeout: pid=1753, comm=test_render, seqno=2
++  GPU: status=0x00 fault=0x00 shader_ready=0x550555 shader_pwractive=0x0
++```
++
++| Register | Value | Meaning |
++|----------|-------|---------|
++| `status` | 0x00 | No GPU errors |
++| `fault` | 0x00 | No page faults |
++| `shader_ready` | 0x550555 | ✅ All cores powered via legacy path |
++| `shader_pwractive` | 0x0 | ❌ No cores executing work |
++
++**Interpretation**: Shader cores are "ready" (powered) but not "active" (executing). The job is submitted but cores aren't picking up work.
++
++### 16.6 Why HOST_POWER Returns 0x0
++
++Possible causes (requires further investigation):
++
++1. **MCU firmware version mismatch**: The CSF firmware may expect a different HOST_POWER initialization sequence
++2. **Missing early initialization**: HOST_POWER may need to be enabled before MCU boots
++3. **Hardware revision difference**: Sky1's G720 implementation may have HOST_POWER disabled or require special enablement
++4. **Firmware delegation model**: MCU might be configured to NOT delegate power control to host
++
++### 16.7 Layer 4 Status Update
++
++```
++Layer 1: Memory barrier (dmb(osh))     → Eliminated stale read hypothesis
++Layer 2: RTU/L2/IRQ mask               → Basic GPU init improvements
++Layer 3: G720 endpoint_req offset      → FIXED CSG communication
++Layer 4: Shader power management       → PARTIAL FIX
++         ↳ HOST_POWER interface non-functional (returns 0x0)
++         ↳ Legacy SHADER_PWRON works (shader_ready=0x550555)
++         ↳ But shader_pwractive=0x0 - cores not executing jobs
++         ↳ NEW ISSUE: Why aren't ready cores becoming active?
++```
++
++### 16.8 Next Investigation: shader_pwractive = 0
++
++The shader cores are powered (`shader_ready=0x550555`) but not executing (`shader_pwractive=0x0`). Possible causes:
++
++1. **Missing CSG→Shader binding**: Firmware may not know which cores to assign to jobs
++2. **HOST_POWER required for activation**: Even though legacy power works, HOST_POWER may be needed for core activation during job execution
++3. **Endpoint configuration mismatch**: CSG endpoint config may not match available cores
++4. **Missing MCU notification**: MCU may need explicit notification that cores are powered
++
++### 16.9 Files Modified in This Update
++
++| File | Changes |
++|------|---------|
++| `panthor_regs.h` | Added `PWR_COMMAND_DELEGATE` (0x20), `PWR_COMMAND_RETRACT` (0x21) |
++| `panthor_device.c` | Added diagnostic output for reset/RCSU init |
++| `panthor_fw.c` | Added diagnostic output before shader power |
++| `panthor_gpu.c` | Implemented RETRACT + legacy fallback in `panthor_gpu_g720_shader_power_on()` |
++
++---
++
++## 17. Critical Fix: Initialization Sequence (2025-12-01)
++
++### 17.1 Root Cause: Incorrect Init Order
++
++Further analysis of vendor driver's `firmware_hctl_core_pwr` mode revealed the **exact initialization sequence** required:
++
++**Vendor Driver Sequence (when host controls power)**:
++1. MCU global reinit starts
++2. Host powers shader cores via `SHADER_PWRON`
++3. Host polls `SHADER_READY` until cores are ready
++4. Host writes `GLB_ALLOC_EN_LO/HI` with the READY core mask
++5. Host toggles `GLB_CFG_ALLOC_EN` request bit
++6. Host rings doorbell to notify MCU
++7. MCU acknowledges via `GLB_ACK`
++
++**Our Previous (Broken) Sequence**:
++1. Set `core_en_mask = shader_present`
++2. Toggle `GLB_CFG_ALLOC_EN`
++3. Ring doorbell
++4. THEN power shaders via legacy path ← **TOO LATE!**
++
++### 17.2 The Problem
++
++We were telling MCU "these cores are available" **before** the cores were actually powered. The MCU received the core mask, acknowledged it, but then when jobs arrived, it tried to activate cores via HOST_POWER (which doesn't work on Sky1).
++
++Even with `poweroff_timer=0` (which disables MCU's power-off logic), the MCU's job dispatch still expects cores to be "active" via HOST_POWER before using them.
++
++### 17.3 The Fix
++
++Power shaders FIRST, then notify MCU with the mask of **actually powered** cores:
++
++```c
++static void panthor_fw_init_global_iface(struct panthor_device *ptdev)
++{
++    bool is_sky1 = of_device_is_compatible(ptdev->base.dev->of_node, "cix,sky1-mali");
++    u64 shader_ready = 0;
++
++    /* Sky1: Power shaders BEFORE telling MCU about available cores */
++    if (is_sky1 && GPU_ARCH_MAJOR(ptdev->gpu_info.gpu_id) >= 12) {
++        panthor_gpu_g720_shader_power_on(ptdev);
++        shader_ready = gpu_read64(ptdev, SHADER_READY);
++    }
++
++    /* Tell MCU which cores are ACTUALLY powered */
++    if (is_sky1 && shader_ready)
++        glb_iface->input->core_en_mask = shader_ready;  /* powered cores */
++    else
++        glb_iface->input->core_en_mask = ptdev->gpu_info.shader_present;
++
++    /* Now toggle GLB_CFG_ALLOC_EN and ring doorbell */
++    /* ... */
++}
++```
++
++### 17.4 Vendor Code Reference
++
++From `mali_kbase_pm_driver.c` lines 1493-1517:
++
++```c
++case KBASE_MCU_HCTL_SHADERS_PEND_ON:
++    if (!hctl_shader_cores_power_up_done(kbdev, shaders_ready, shaders_trans,
++                                          backend->shaders_avail))
++        break;
++
++    /* Cores now stable, notify MCU the stable mask */
++    kbase_csf_firmware_update_core_attr(kbdev, false, true, shaders_ready);
++
++    backend->pm_shaders_core_mask = shaders_ready;
++    backend->mcu_state = KBASE_MCU_HCTL_CORES_NOTIFY_PEND;
++    break;
++
++case KBASE_MCU_HCTL_CORES_NOTIFY_PEND:
++    /* Wait for the acknowledgement */
++    if (kbase_csf_firmware_core_attr_updated(kbdev))
++        backend->mcu_state = KBASE_MCU_ON_HWCNT_ENABLE;
++    break;
++```
++
++The vendor driver:
++1. Powers cores (`KBASE_MCU_HCTL_SHADERS_PEND_ON`)
++2. Waits for power-up completion (`hctl_shader_cores_power_up_done`)
++3. Notifies MCU of powered cores (`kbase_csf_firmware_update_core_attr`)
++4. Waits for MCU acknowledgement (`kbase_csf_firmware_core_attr_updated`)
++5. Proceeds to normal operation
++
++### 17.5 Expected Result
++
++With the corrected sequence, the MCU should:
++1. Receive `core_en_mask` containing cores that are ALREADY POWERED
++2. See `poweroff_timer=0`, meaning don't try to manage power
++3. When jobs arrive, dispatch directly to the powered cores
++4. Cores should show `shader_pwractive != 0` during execution
++
++### 17.6 Layer 4 Final Status
++
++```
++Layer 1: Memory barrier (dmb(osh))     → Eliminated stale read hypothesis
++Layer 2: RTU/L2/IRQ mask               → Basic GPU init improvements
++Layer 3: G720 endpoint_req offset      → FIXED CSG communication
++Layer 4: Shader power management       → IMPLEMENTATION IN PROGRESS
++         ↳ HOST_POWER interface non-functional (Sky1-specific)
++         ↳ Legacy SHADER_PWRON works
++         ↳ poweroff_timer=0 disables MCU power management
++         ↳ NEW FIX: Power cores BEFORE notifying MCU
++```
++
++---
++
++## References
++
++### Vendor Driver (kbase)
++- `cix-drivers-dkms/src/gpu/drivers/gpu/arm/midgard/csf/mali_kbase_csf_scheduler.c` - CSG scheduler
++- `cix-drivers-dkms/src/gpu/drivers/gpu/arm/midgard/csf/mali_kbase_csf.c` - CSF core
++- `cix-drivers-dkms/src/gpu/drivers/gpu/arm/midgard/csf/mali_kbase_csf_fw_io.h` - FW I/O interface
++- `cix-drivers-dkms/src/gpu/drivers/gpu/arm/midgard/csf/mali_kbase_csf_firmware.c` - Firmware init
++- `cix-drivers-dkms/src/gpu/drivers/gpu/arm/midgard/backend/gpu/mali_kbase_pm_driver.c` - **Power management**
++- `cix-drivers-dkms/src/gpu/drivers/gpu/arm/midgard/backend/gpu/mali_kbase_pm_internal.h` - PM internals
++- `cix-drivers-dkms/src/gpu/drivers/gpu/arm/midgard/mmu/mali_kbase_mmu_hw_direct.c` - MMU
++- `cix-drivers-dkms/src/gpu/drivers/gpu/arm/midgard/mali_kbase_hwconfig_issues.h` - HW workarounds
++
++### Mainline Panthor Driver
++- `mainline-linux/drivers/gpu/drm/panthor/panthor_fw.c` - Firmware handling
++- `mainline-linux/drivers/gpu/drm/panthor/panthor_fw.h` - FW interface definitions
++- `mainline-linux/drivers/gpu/drm/panthor/panthor_sched.c` - Scheduler
++- `mainline-linux/drivers/gpu/drm/panthor/panthor_gpu.c` - GPU init
++- `mainline-linux/drivers/gpu/drm/panthor/panthor_regs.h` - Register definitions
++
++### Documentation
++- ARM Architecture Reference Manual (Memory Barriers)
++- `/home/radxa/docs/panthor-mesa-testing.md` - Mesa testing guide
+diff --git a/docs/gpu-panthor-sky1-vendor-analysis.md b/docs/gpu-panthor-sky1-vendor-analysis.md
+new file mode 100644
+index 000000000000..07a32bb3a49e
+--- /dev/null
++++ b/docs/gpu-panthor-sky1-vendor-analysis.md
+@@ -0,0 +1,678 @@
++# GPU Panthor Sky1 Vendor Driver Analysis
++
++**Date**: 2025-12-01
++**Hardware**: Radxa Orion O6 (CIX Sky1 SoC)
++**GPU**: ARM Immortalis G720 MC10 (arch 12.8)
++**Kernel**: Linux 6.18-rc7
++
++---
++
++## Executive Summary
++
++This document details a comprehensive investigation comparing the vendor DKMS GPU driver (kbase) with the mainline Panthor driver for the CIX Sky1 SoC. The goal is to identify all Sky1-specific initialization and configuration that must be ported to Panthor for GPU rendering to work.
++
++**Critical Finding (2025-12-01)**: The vendor kernel uses **kbase** (mali_kbase), NOT panthor, for GPU operation:
++- Vendor DT: `compatible = "arm,mali-valhall"` → kbase driver
++- Mainline DT: `compatible = "cix,sky1-mali"` → panthor driver
++
++**All hardware initialization workarounds have been ported** (Q-channel, AMBA_ENABLE, LS_MEM, PWR_OVERRIDE1, etc.), but GPU rendering still fails with "CSG update request timedout". This indicates a fundamental difference in how kbase vs panthor handles CSF firmware communication.
++
++**Status**: Hardware init matches vendor, but panthor CSF interface may need upstream fixes for G720.
++
++---
++
++## Investigation Methodology
++
++### 1. Source Identification
++
++Located all Sky1/CIX-specific code in vendor DKMS driver:
++
++```bash
++find /home/radxa/cix-drivers-dkms/src/gpu -type f \( -name "*.c" -o -name "*.h" \) \
++  | xargs grep -l -i "sky1\|cix\|CONFIG_ARCH_CIX"
++```
++
++**Key files identified**:
++- `platform/sky1/mali_kbase_config_platform.h` - Platform configuration header
++- `platform/sky1/mali_kbase_config_sky1.c` - Platform initialization
++- `platform/sky1/mali_kbase_runtime_pm.c` - Power management callbacks
++- `backend/gpu/mali_kbase_pm_driver.c` - PM driver with LS_MEM counter init
++- `backend/gpu/mali_kbase_cache_policy_backend.c` - Coherency configuration
++
++### 2. Register Mapping
++
++Cross-referenced vendor register enums with actual offsets:
++
++| Register | Vendor Name | Offset | Purpose |
++|----------|-------------|--------|---------|
++| RCSU PGCTRL | `GPU_RCSU_HWREG_PGCTRL` | 0x218 | Q-channel clock gating |
++| RCSU STRAP_PIN1 | `GPU_RCSU_HWREG_STRAP_PIN1` | 0x304 | Shader core harvesting |
++| LS_MEM CSHW | `GPU_RESERVED__CSHW` | 0x306C | Performance counter config |
++| LS_MEM SHADER | `GPU_RESERVED__SHADER` | 0x3070 | Performance counter config |
++| LS_MEM TILE | `GPU_RESERVED__TILE` | 0x3074 | Performance counter config |
++| LS_MEM MEMSYS | `GPU_RESERVED__MEMSYS` | 0x307C | Performance counter config |
++| CONFIG_INIT | `GPU_RESERVED__CONFIG_INIT` | 0x3068 | Counter initialization trigger |
++| AMBA_ENABLE | `GPU_CONTROL__AMBA_ENABLE` | 0x304 | Coherency protocol (arch12+) |
++| PWR_KEY | `GPU_CONTROL__PWR_KEY` | GPU reg | Power override unlock |
++| PWR_OVERRIDE1 | `GPU_CONTROL__PWR_OVERRIDE1` | GPU reg | Power transition latency |
++
++### 3. Execution Flow Tracing
++
++Traced vendor initialization by following function call chains:
++
++```
++probe
++  → kbase_platform_sky1_init()
++  → pm_callback_power_on()
++    → enable_gpu_power_control()
++    → execute_gpu_reset()
++    → gpu_qchannel_clock_gating_switch(true)
++  → [L2 power on path in pm_driver.c]
++    → kbase_enable_ls_mem_counter()
++    → kbase_cache_set_coherency_mode()
++    → kbase_amba_set_shareable_cache_support()
++```
++
++---
++
++## Vendor Driver Analysis
++
++### Platform Initialization (`kbase_platform_sky1_init`)
++
++```c
++static int kbase_platform_sky1_init(struct kbase_device *kbdev)
++{
++    // 1. Attach power domains
++    sky1_gpu_attach_pd(kbdev);  // pd_gpu and perf domains
++
++    // 2. Get reset control
++    kbdev->gpu_reset = devm_reset_control_get(kbdev->dev, "gpu_reset");
++
++    // 3. ioremap PM shared addresses
++    kbdev->clk_response_addr = ioremap(PM_CLK_RESPONSE_ADDR, SZ_4K);
++    kbdev->dynamic_power_addr = ioremap(PM_POWER_SHARE_ADDR, SZ_4K);
++
++    // 4. Read shader core harvesting
++    harvesting_reg_val = sky1_rcsu_reg_read32(kbdev, GPU_RCSU_HWREG_STRAP_PIN1);
++    kbdev->harvesting_core_mask = ~((harvesting_reg_val & 0xFFFFFF0) >> 4)
++                                   & MALI_TITAN_MC10_CORE_MASK;
++}
++```
++
++### Power-On Sequence (`pm_callback_power_on`)
++
++```c
++static int pm_callback_power_on(struct kbase_device *kbdev)
++{
++    // 1. Enable clocks and regulators
++    enable_gpu_power_control(kbdev);
++
++    // 2. First power-on only: reset + Q-channel enable
++    if (need_reset_flag) {
++        execute_gpu_reset(kbdev);           // Assert + deassert reset
++        gpu_qchannel_clock_gating_switch(kbdev, true);  // RCSU 0x218
++        need_reset_flag = false;
++    }
++    return 1;
++}
++```
++
++### Q-Channel Clock Gating
++
++```c
++static int gpu_qchannel_clock_gating_switch(struct kbase_device *kbdev, bool enable)
++{
++    uint32_t reg = sky1_rcsu_reg_read32(kbdev, GPU_RCSU_HWREG_PGCTRL);
++    reg = enable ? (reg | GPU_RCSU_QCHANNEL_CLOCK_GATE_ENABLE) :
++                   (reg & ~GPU_RCSU_QCHANNEL_CLOCK_GATE_ENABLE);
++    sky1_rcsu_reg_write32(kbdev, GPU_RCSU_HWREG_PGCTRL, reg);
++    return 0;
++}
++```
++
++**Purpose**: The Q-channel protocol allows the GPU to communicate with the RCSU (Reset and Clock Sequencing Unit) for dynamic clock gating. Without this, the GPU cannot properly manage its clock states during operation.
++
++### LS_MEM Counter Initialization
++
++Called after L2 power-on in `mali_kbase_pm_driver.c:4442`:
++
++```c
++void kbase_enable_ls_mem_counter(struct kbase_device *kbdev)
++{
++    kbase_reg_write32(kbdev, GPU_RESERVED_ENUM(CSHW), 0xFFFFFFFF);    // 0x306C
++    kbase_reg_write32(kbdev, GPU_RESERVED_ENUM(MEMSYS), 0xFFFFFFFF);  // 0x307C
++    kbase_reg_write32(kbdev, GPU_RESERVED_ENUM(TILE), 0xFFFFFFFF);    // 0x3074
++    kbase_reg_write32(kbdev, GPU_RESERVED_ENUM(SHADER), 0xFFFFFFFF);  // 0x3070
++    kbase_reg_write32(kbdev, GPU_RESERVED_ENUM(CONFIG_INIT), 0x1);    // 0x3068
++}
++```
++
++### Coherency Configuration (Arch 12+)
++
++```c
++void kbase_cache_set_coherency_mode(struct kbase_device *kbdev, u32 mode)
++{
++    kbdev->current_gpu_coherency_mode = mode;
++
++    if (kbdev->gpu_props.gpu_id.arch_id >= GPU_ID_ARCH_MAKE(12, 0, 1)) {
++        // AMBA_ENABLE present from arch 12.0.1
++        u32 val = kbase_reg_read32(kbdev, GPU_CONTROL_ENUM(AMBA_ENABLE));
++        val = AMBA_ENABLE_COHERENCY_PROTOCOL_SET(val, mode);
++        kbase_reg_write32(kbdev, GPU_CONTROL_ENUM(AMBA_ENABLE), val);
++    } else {
++        // Fallback for older architectures
++        kbase_reg_write32(kbdev, GPU_CONTROL_ENUM(COHERENCY_ENABLE), mode);
++    }
++}
++
++void kbase_amba_set_shareable_cache_support(struct kbase_device *kbdev)
++{
++    if (kbdev->system_coherency != COHERENCY_NONE) {
++        u32 val = kbase_reg_read32(kbdev, GPU_CONTROL_ENUM(AMBA_FEATURES));
++        if (AMBA_FEATURES_SHAREABLE_CACHE_SUPPORT_GET(val)) {
++            val = kbase_reg_read32(kbdev, GPU_CONTROL_ENUM(AMBA_ENABLE));
++            val = AMBA_ENABLE_SHAREABLE_CACHE_SUPPORT_SET(val, 1);
++            kbase_reg_write32(kbdev, GPU_CONTROL_ENUM(AMBA_ENABLE), val);
++        }
++    }
++}
++```
++
++**Key insight**: For arch12+ (G720), coherency is configured via `AMBA_ENABLE` (0x304), not the older `GPU_COHERENCY_PROTOCOL` register. Both are at offset 0x304 but used differently.
++
++### Soft Reset Callback
++
++```c
++static int pm_callback_soft_reset(struct kbase_device *kbdev)
++{
++    // Unlock power override register
++    kbase_reg_write32(kbdev, GPU_CONTROL_ENUM(PWR_KEY), 0x2968A819);
++    // Set maximum power transition latency
++    kbase_reg_write32(kbdev, GPU_CONTROL_ENUM(PWR_OVERRIDE1), 0xFFFFFF);
++    // Issue soft reset
++    kbase_reg_write32(kbdev, GPU_CONTROL_ENUM(GPU_COMMAND), GPU_COMMAND_SOFT_RESET);
++    return 0;
++}
++```
++
++### Runtime PM Callbacks
++
++```c
++static int pm_callback_runtime_on(struct kbase_device *kbdev)
++{
++    // Re-enable Q-channel after power gate reset
++    gpu_qchannel_clock_gating_switch(kbdev, true);
++    return 0;
++}
++
++static void pm_callback_runtime_off(struct kbase_device *kbdev)
++{
++    gpu_qchannel_clock_gating_switch(kbdev, false);
++}
++```
++
++---
++
++## Comparison: Vendor Kbase vs Panthor
++
++### Feature Matrix
++
++| Feature | Vendor Kbase | Panthor Status | Location |
++|---------|--------------|----------------|----------|
++| Force coherent mode | DTS `system-coherency=0` | ✅ Forced true | `panthor_device.c:38` |
++| AMBA_ENABLE coherency | R-M-W bits 0-4 = 0 (ACE_LITE) | ✅ **Implemented** | `panthor_gpu.c:61-76` |
++| AMBA shareable cache | Set bit 5 when coherent | ✅ **Implemented** | `panthor_gpu.c:87-107` |
++| Q-channel enable (boot) | RCSU 0x218 after reset | ✅ Present | `panthor_device.c:196` |
++| Q-channel disable (suspend) | RCSU 0x218 before clk off | ✅ **Implemented** | `panthor_device.c:737-746` |
++| LS_MEM counters | 0x306C/0x3070/0x307C/0x3074 | ✅ Present | `panthor_gpu.c:314-318` |
++| CONFIG_INIT | 0x3068 = 0x1 | ✅ Present | `panthor_gpu.c:318` |
++| PBHA/SYSC_ALLOC | From DTS | ✅ Hardcoded | `panthor_gpu.c:302-310` |
++| PWR_OVERRIDE1 (L2 power) | 0xFFFFFF | ✅ Present | `panthor_gpu.c:321-322` |
++| PWR_OVERRIDE1 (soft reset) | 0xFFFFFF | ✅ Present | `panthor_gpu.c:395-397` |
++| MMU AS_COMMAND workaround | Direct FLUSH_MEM/PT | ✅ Present | `panthor_mmu.c:611-614` |
++| Shader core harvesting | RCSU 0x304 | ⚠️ Uses GPU reg | Functional but different method |
++
++### Register Value Comparison
++
++**PBHA/SYSC_ALLOC Configuration**:
++
++Vendor DTS:
++```dts
++pbha {
++    int_id_override = <0x02 0x23 0x04 0x23 0x10 0x22 0x11 0x32
++                       0x12 0x52 0x15 0x32 0x16 0x52 0x18 0x22 0x1c 0x32>;
++};
++```
++
++Panthor hardcoded (matching vendor values):
++```c
++gpu_write(ptdev, GPU_SYSC_PBHA_OVERRIDE(3), 0x22000000);
++gpu_write(ptdev, GPU_SYSC_ALLOC(0), 0x00230000);
++gpu_write(ptdev, GPU_SYSC_ALLOC(1), 0x00000023);
++gpu_write(ptdev, GPU_SYSC_ALLOC(2), 0x00000000);
++gpu_write(ptdev, GPU_SYSC_ALLOC(3), 0x00000000);
++gpu_write(ptdev, GPU_SYSC_ALLOC(4), 0x00523222);
++gpu_write(ptdev, GPU_SYSC_ALLOC(5), 0x00523200);
++gpu_write(ptdev, GPU_SYSC_ALLOC(6), 0x00000022);
++gpu_write(ptdev, GPU_SYSC_ALLOC(7), 0x00000032);
++```
++
++---
++
++## Root Cause Analysis
++
++### Problem Symptoms
++
++1. Basic EGL context creation works: `GL_RENDERER: Mali-G720 (Panfrost)`
++2. Shader compilation works
++3. Job submission fails with timeout
++4. Error chain: `job timeout → CSG update timeout → soft reset timeout → AS_ACTIVE stuck`
++
++### Analysis
++
++The `AS_ACTIVE bit stuck` error indicates the GPU is hung during a memory operation. Vendor error message states:
++
++> "AS_ACTIVE bit stuck for MCU AS. Might be caused by unstable GPU clk/pwr or faulty system"
++
++This pointed to clock/power configuration issues rather than MMU or coherency problems.
++
++### Root Cause
++
++**Q-channel clock gating was not enabled**. Without Q-channel:
++
++1. GPU starts job execution
++2. GPU tries to signal clock state changes via Q-channel
++3. Q-channel not enabled → GPU enters undefined clock state
++4. GPU hangs mid-execution
++5. AS_ACTIVE remains set (GPU stuck in memory operation)
++6. Reset fails because GPU is in undefined state
++
++---
++
++## Fixes Applied to Panthor
++
++### 1. Force Coherent Mode (`panthor_device.c:38`)
++
++```c
++if (of_device_is_compatible(ptdev->base.dev->of_node, "cix,sky1-mali"))
++    ptdev->coherent = true;
++```
++
++### 2. Skip GPU_COHERENCY_PROTOCOL Write (`panthor_gpu.c:58`)
++
++```c
++if (of_device_is_compatible(ptdev->base.dev->of_node, "cix,sky1-mali"))
++    return;  // Don't write GPU_COHERENCY_PROTOCOL
++```
++
++### 3. PBHA/SYSC_ALLOC Configuration (`panthor_gpu.c:258-267`)
++
++Hardcoded values matching vendor DTS configuration.
++
++### 4. LS_MEM Counter Initialization (`panthor_gpu.c:269-274`)
++
++```c
++gpu_write(ptdev, 0x306C, 0xFFFFFFFF);
++gpu_write(ptdev, 0x3070, 0xFFFFFFFF);
++gpu_write(ptdev, 0x307C, 0xFFFFFFFF);
++gpu_write(ptdev, 0x3074, 0xFFFFFFFF);
++gpu_write(ptdev, 0x3068, 0x1);
++```
++
++### 5. PWR_OVERRIDE1 for L2 Power-On (`panthor_gpu.c:276-278`)
++
++```c
++gpu_write(ptdev, GPU_PWR_KEY, GPU_PWR_KEY_UNLOCK);
++gpu_write(ptdev, GPU_PWR_OVERRIDE1, 0xFFFFFF);
++```
++
++### 6. PWR_OVERRIDE1 for Soft Reset (`panthor_gpu.c:351-354`)
++
++```c
++if (of_device_is_compatible(ptdev->base.dev->of_node, "cix,sky1-mali")) {
++    gpu_write(ptdev, GPU_PWR_KEY, GPU_PWR_KEY_UNLOCK);
++    gpu_write(ptdev, GPU_PWR_OVERRIDE1, 0xFFFFFF);
++}
++```
++
++### 7. MMU AS_COMMAND Workaround (`panthor_mmu.c:611-614`)
++
++```c
++if (of_device_is_compatible(ptdev->base.dev->of_node, "cix,sky1-mali")) {
++    write_cmd(ptdev, as_nr, op);
++    return wait_ready(ptdev, as_nr);
++}
++```
++
++### 8. Q-Channel Clock Gating Enable (`panthor_device.c:191-200`) **NEW**
++
++```c
++/*
++ * Sky1 Q-channel clock gating: Enable after reset.
++ * Vendor enables this in pm_callback_power_on() after execute_gpu_reset().
++ * The Q-channel allows GPU to request clock gating from the RCSU.
++ */
++if (ptdev->rcsu) {
++    u32 val = readl(ptdev->rcsu + SKY1_RCSU_PGCTRL_OFFSET);
++    val |= SKY1_RCSU_QCHANNEL_CLK_GATE_EN;
++    writel(val, ptdev->rcsu + SKY1_RCSU_PGCTRL_OFFSET);
++}
++```
++
++### 9. Q-Channel Disable on Suspend (`panthor_device.c:737-746`) **NEW**
++
++```c
++/*
++ * Sky1 Q-channel clock gating: Disable before clock disable.
++ * Vendor disables this in pm_callback_runtime_off() before going
++ * to suspend. Must happen before clocks are turned off.
++ */
++if (ptdev->rcsu) {
++    u32 val = readl(ptdev->rcsu + SKY1_RCSU_PGCTRL_OFFSET);
++    val &= ~SKY1_RCSU_QCHANNEL_CLK_GATE_EN;
++    writel(val, ptdev->rcsu + SKY1_RCSU_PGCTRL_OFFSET);
++}
++```
++
++### 10. AMBA_ENABLE Coherency (ACE_LITE) (`panthor_gpu.c:61-76`) **NEW**
++
++```c
++/*
++ * Sky1/G720 (arch12+): Use AMBA_ENABLE register with read-modify-write.
++ * The coherency protocol is in bits 0-4, not the whole register.
++ * Vendor uses ACE_LITE (mode 0) for coherency.
++ */
++if (of_device_is_compatible(ptdev->base.dev->of_node, "cix,sky1-mali")) {
++    u32 val = gpu_read(ptdev, GPU_COHERENCY_PROTOCOL);
++    val &= ~AMBA_ENABLE_COHERENCY_MASK;  /* Set ACE_LITE (mode 0) */
++    gpu_write(ptdev, GPU_COHERENCY_PROTOCOL, val);
++    return;
++}
++```
++
++### 11. AMBA Shareable Cache Support (`panthor_gpu.c:87-107`) **NEW**
++
++```c
++/*
++ * Set AMBA shareable cache support for arch12+ GPUs.
++ * Enables the GPU to participate in shareable cache operations.
++ */
++static void panthor_gpu_amba_set_shareable_cache(struct panthor_device *ptdev)
++{
++    /* Check if shareable cache support is available in AMBA_FEATURES (0x300) */
++    features = gpu_read(ptdev, GPU_COHERENCY_FEATURES);
++    if (!(features & AMBA_ENABLE_SHAREABLE_CACHE))
++        return;
++
++    /* Set shareable cache support bit in AMBA_ENABLE (0x304) */
++    enable = gpu_read(ptdev, GPU_COHERENCY_PROTOCOL);
++    enable |= AMBA_ENABLE_SHAREABLE_CACHE;
++    gpu_write(ptdev, GPU_COHERENCY_PROTOCOL, enable);
++}
++```
++
++---
++
++## Potential Remaining Gaps
++
++### 1. Shader Core Harvesting
++
++Vendor reads RCSU 0x304 to determine which shader cores are available. Panthor uses GPU_SHADER_PRESENT register directly. This should be equivalent but the register value masking differs slightly.
++
++---
++
++## Testing Status
++
++| Test | Status | Notes |
++|------|--------|-------|
++| Q-channel enable (boot) | ✅ Tested | Added, still times out |
++| + AMBA_ENABLE coherency | ✅ Tested | Added ACE_LITE mode 0, still times out |
++| + Q-channel disable (suspend) | ✅ Tested | Added, still times out |
++| + AMBA shareable cache | ✅ Tested | Added, still times out |
++| **All workarounds combined** | ❌ Failed | Same error: CSG update timeout |
++
++---
++
++## Deep Dive: Kbase vs Panthor CSF Interface
++
++### Why Vendor Workarounds Aren't Enough
++
++The vendor kernel uses **kbase** (mali_kbase driver) for the G720 GPU, while mainline uses **panthor**. These are fundamentally different driver architectures:
++
++| Aspect | Kbase | Panthor |
++|--------|-------|---------|
++| Origin | ARM proprietary (in vendor kernels) | Mesa/freedesktop.org (mainline) |
++| DT compatible | `arm,mali-valhall` | `arm,mali-valhall-csf`, `cix,sky1-mali` |
++| Job submission | Kernel-side job queues | GPU firmware-managed CSG |
++| Memory management | UMM/kbase_mem | DRM GEM/GPUVA |
++| PM integration | Custom platform callbacks | Standard DRM PM |
++| CSF interface | Direct register + FW interface | Abstracted via panthor_fw.c |
++
++### CSG Command Stream Interface Comparison
++
++#### CSG State Values (Identical)
++Both drivers use the same CSG_REQ/CSG_ACK state values:
++- `CSG_STATE_TERMINATE` = 0
++- `CSG_STATE_START` = 1
++- `CSG_STATE_SUSPEND` = 2
++- `CSG_STATE_RESUME` = 3
++
++#### Firmware Wait Mechanism
++
++**Kbase** (`mali_kbase_csf_scheduler.c`):
++```c
++// Uses fw_io abstraction with event waitqueue
++kbase_csf_fw_io_wait_event_timeout(&kbdev->csf.fw_io, kbdev->csf.event_wait,
++    slots_update_state_changed(kbdev, field_mask, slot_mask, dones), remaining);
++```
++- Wait timeout: `kbase_get_timeout_ms(kbdev, CSF_FIRMWARE_TIMEOUT)` (configurable, can be >4 seconds)
++- Interrupt-driven: `wake_up_all(&kbdev->csf.event_wait)` called from IRQ handler
++
++**Panthor** (`panthor_sched.c:1867`):
++```c
++// Simpler wait mechanism
++ret = panthor_fw_csg_wait_acks(ptdev, csg_id, req_mask, &acked, 100);
++```
++- **Fixed 100ms timeout** - much shorter than kbase
++- Uses `ptdev->fw->req_waitqueue` with `wait_event_timeout`
++
++**Key Difference**: Panthor's 100ms timeout may be too aggressive for G720.
++
++#### CSG Slot Programming
++
++**Kbase** (`mali_kbase_csf_scheduler.c:3050-3200`):
++```c
++// Extensive endpoint configuration for G720 (arch >= 14.8.4)
++if (kbdev->gpu_props.gpu_id.arch_id >= GPU_ID_ARCH_MAKE(14, 8, 4)) {
++    ep_cfg = CSG_EP_REQ_NEURAL_EP_SET(ep_cfg, neural_max);
++    ep_cfg = CSG_EP_REQ_COMP_PRI_THRESHOLD_SET(ep_cfg, comp_pri_threshold);
++    ep_cfg = CSG_EP_REQ_COMP_PRI_RATIO_SET(ep_cfg, comp_pri_ratio);
++    kbase_csf_fw_io_group_write64(fw_io, slot, CSG_EP_REQ_LO_64B_ALIGNED, ep_cfg);
++}
++// Detailed setup: AS config, suspend buffers, DVS buffer, IRQ masks...
++kbase_csf_fw_io_group_write(fw_io, slot, CSG_ACK_IRQ_MASK, ~((u32)0));
++```
++
++**Panthor** (`panthor_sched.c:2280-2292`):
++```c
++// Simpler slot programming
++csg_slot_prog_locked(ptdev, csg_id, new_csg_prio--);
++csgs_upd_ctx_queue_reqs(ptdev, &upd_ctx, csg_id,
++    group->state == PANTHOR_CS_GROUP_SUSPENDED ?
++    CSG_STATE_RESUME : CSG_STATE_START, CSG_STATE_MASK);
++```
++
++**Key Difference**: Kbase has more extensive endpoint configuration, especially for neural engine and compute priority thresholds.
++
++#### Timeout Values Comparison
++
++| Operation | Kbase | Panthor |
++|-----------|-------|---------|
++| CSG wait ack | CSF_FIRMWARE_TIMEOUT (~4000ms) | 100ms |
++| Job timeout | Configurable | 5000ms |
++| Status update | STATUS_UPDATE_WAIT_TIMEOUT_NS (500ns per slot) | 100ms |
++| Progress timeout | DEFAULT_PROGRESS_TIMEOUT_CYCLES (2.5B cycles) | PROGRESS_TIMEOUT_CYCLES (2.5B cycles) |
++
++### G720 (tODx) Hardware Issues
++
++The G720 has these known hardware issues in kbase that may need workarounds:
++
++| Issue | Description |
++|-------|-------------|
++| `KBASE_HW_ISSUE_TSIX_2033` | Shared across multiple GPUs |
++| `KBASE_HW_ISSUE_TTRX_1337` | Shared across multiple GPUs |
++| `KBASE_HW_ISSUE_GPU2019_3212` | G720-specific CSF-related |
++| `KBASE_HW_ISSUE_GPU2019_3878` | G720-specific |
++| `KBASE_HW_ISSUE_GPU2019_3901` | G720-specific |
++| `KBASE_HW_ISSUE_TITANHW_2710` | Titan core issues |
++| `KBASE_HW_ISSUE_GPU2022PRO_148` | G720-specific |
++| `KBASE_HW_ISSUE_TITANHW_2938` | Titan core issues |
++| `KBASE_HW_ISSUE_KRAKEHW_2321` | Kraken (G720 codename) specific |
++| `KBASE_HW_ISSUE_KRAKEHW_2151` | Kraken specific |
++
++**Note**: Panthor does not have explicit hardware issue tracking like kbase. These may need to be addressed if they affect CSF operation.
++
++### The CSG Timeout Problem
++
++The error chain `job timeout → CSG update timeout → soft reset timeout → AS_ACTIVE stuck`:
++
++1. **Panthor submits CSG START/RESUME request** with `CSG_STATE_START` or `CSG_STATE_RESUME`
++2. **Firmware should acknowledge** by updating `CSG_ACK` register
++3. **Panthor waits 100ms** for acknowledgment via `panthor_fw_csg_wait_acks()`
++4. **Timeout fires** - firmware didn't respond in time
++5. **Reset initiated** - but GPU is in undefined state
++
++**Likely Causes**:
++1. **Timeout too short**: 100ms may not be enough for G720 firmware
++2. **Missing configuration**: CSG endpoint config not complete for G720
++3. **Firmware version mismatch**: Panthor may expect different FW behavior
++4. **IRQ handling**: Firmware interrupt may not be properly triggering waitqueue wakeup
++
++---
++
++## Comprehensive Porting Strategy
++
++### Option A: Upstream Panthor Fixes (Recommended)
++
++**Goal**: Make panthor work properly with G720/Sky1
++
++**Tasks**:
++1. **Increase CSG wait timeout** from 100ms to match kbase (~4000ms)
++   - File: `panthor_sched.c:1867`
++   - Change: `panthor_fw_csg_wait_acks(ptdev, csg_id, req_mask, &acked, 100)` → `4000`
++
++2. **Add G720 endpoint configuration**
++   - Port kbase's `CSG_EP_REQ_*` configuration for arch12+ GPUs
++   - Add neural engine, compute priority threshold settings
++
++3. **Verify IRQ handling**
++   - Ensure `wake_up_all(&ptdev->fw->req_waitqueue)` is being called
++   - Check if firmware interrupt is masked or missing
++
++4. **Test with debug firmware** (if available)
++   - ARM may provide debug firmware that logs more info
++
++### Option B: Port Kbase to Mainline (Complex)
++
++**Goal**: Use vendor kbase driver on mainline kernel
++
++**Challenges**:
++- Kbase uses non-standard DRM APIs
++- License issues (proprietary components)
++- Significant integration work
++- Not sustainable long-term
++
++**Not recommended** unless Option A completely fails.
++
++### Option C: Hybrid Approach
++
++**Goal**: Extract CSF-specific code from kbase to fix panthor
++
++**Tasks**:
++1. Create detailed trace of kbase CSG programming sequence
++2. Compare register-by-register with panthor
++3. Identify minimum delta needed
++4. Submit upstream patches to panthor
++
++---
++
++## Immediate Next Steps
++
++### 1. Test Timeout Increase (Quick Win)
++
++```diff
++--- a/drivers/gpu/drm/panthor/panthor_sched.c
+++++ b/drivers/gpu/drm/panthor/panthor_sched.c
++@@ -1864,7 +1864,7 @@ csgs_upd_ctx_apply_locked(...)
++        csg_iface = panthor_fw_get_csg_iface(ptdev, csg_id);
++
++-       ret = panthor_fw_csg_wait_acks(ptdev, csg_id, req_mask, &acked, 100);
+++       ret = panthor_fw_csg_wait_acks(ptdev, csg_id, req_mask, &acked, 4000);
++```
++
++### 2. Add Debug Logging
++
++Add temporary logging before/after CSG operations to trace:
++- What state the CSG is in
++- What request is being sent
++- What response is received
++- IRQ status at timeout
++
++### 3. Compare Register Dumps
++
++Use devmem2 to capture GPU register state:
++- Before CSG start
++- After timeout
++- Compare with kbase working state
++
++### 4. Check Mesa Version
++
++Ensure Mesa Panfrost driver is compatible:
++- Mesa 24.x+ required for G720
++- Check `MESA_DEBUG=cs` for shader debug
++- Check `PAN_MESA_DEBUG=trace` for command stream trace
++
++---
++
++## Appendix: Vendor Source File Locations
++
++| File | Purpose |
++|------|---------|
++| `platform/sky1/mali_kbase_config_platform.h` | Platform defines, core masks, RCSU enums |
++| `platform/sky1/mali_kbase_config_sky1.c` | Platform init, RCSU access, devfreq |
++| `platform/sky1/mali_kbase_runtime_pm.c` | PM callbacks, Q-channel, reset |
++| `backend/gpu/mali_kbase_pm_driver.c` | PM driver, LS_MEM init, coherency |
++| `backend/gpu/mali_kbase_cache_policy_backend.c` | AMBA_ENABLE coherency config |
++| `mali_kbase_pbha.c` | PBHA/SYSC_ALLOC configuration |
++| `hw_access/regmap/mali_kbase_regmap_csf_enums.h` | Register offset definitions |
++| `hw_access/mali_kbase_hw_access_regmap.h` | Register field macros |
++
++---
++
++*Investigation completed: 2025-12-01*
++*Last updated: 2025-12-01 (comprehensive CSF interface analysis completed)*
++*Kernel: 6.18-rc7-mainline-cix*
++*GPU: Immortalis G720 MC10 (arch12.8, codename tODx)*
++*Driver: Panthor (mainline) - vendor uses kbase which has different CSF handling*
++
++---
++
++## Summary
++
++**What we've done**:
++- ✅ All Sky1 hardware initialization workarounds ported from kbase to panthor
++- ✅ Q-channel, AMBA_ENABLE, LS_MEM, PWR_OVERRIDE1, MMU workaround all implemented
++- ✅ Comprehensive comparison of kbase vs panthor CSF interface
++
++**Root cause identified**:
++- Panthor uses **100ms timeout** for CSG firmware acknowledgment
++- Kbase uses **~4000ms timeout** for the same operation
++- G720 firmware may need longer to respond, especially during initialization
++
++**Recommended next step**:
++Try increasing `panthor_fw_csg_wait_acks()` timeout from 100ms to 4000ms in `panthor_sched.c:1867`
++
++**If that fails**:
++- Add debug logging to trace CSG state transitions
++- Compare register state between kbase (working) and panthor (failing)
++- Investigate if firmware IRQ is properly waking the waitqueue
+diff --git a/docs/panthor-power-management-analysis.md b/docs/panthor-power-management-analysis.md
+new file mode 100644
+index 000000000000..017c1f664a74
+--- /dev/null
++++ b/docs/panthor-power-management-analysis.md
+@@ -0,0 +1,588 @@
++# Panthor Driver Power Management Analysis
++
++## Executive Summary
++
++This document provides an exhaustive analysis of the mainline Panthor driver's power management system, focusing on the HOST_POWER interface and all related code paths. This analysis is essential for understanding how to port Sky1 GPU support given that Sky1's HOST_POWER registers are non-functional.
++
++---
++
++## 1. Register Definitions
++
++### 1.1 HOST_POWER Interface (G720/Arch >= 12)
++
++Located in `drivers/gpu/drm/panthor/panthor_regs.h`:
++
++| Register | Offset | Description |
++|----------|--------|-------------|
++| `PWR_STATUS` | 0x820 | Power domain status |
++| `PWR_COMMAND` | 0x828 | Power domain commands |
++| `PWR_READY` | 0x830 | Domain ready status |
++| `HOST_POWER_SHADER_PRESENT` | 0xA00 | Shader cores present (64-bit) |
++| `HOST_POWER_SHADER_READY` | 0xA08 | Shader cores ready (64-bit) |
++| `HOST_POWER_SHADER_PWRON` | 0xA10 | Shader power on request (64-bit) |
++| `HOST_POWER_SHADER_PWRACTIVE` | 0xA18 | Shader cores active (64-bit) |
++| `HOST_POWER_SHADER_COHERENCY` | 0xA20 | Shader coherency mask (64-bit) |
++| `HOST_POWER_TILER_PRESENT` | 0xC00 | Tiler cores present (64-bit) |
++| `HOST_POWER_TILER_READY` | 0xC08 | Tiler cores ready (64-bit) |
++| `HOST_POWER_TILER_PWRON` | 0xC10 | Tiler power on request (64-bit) |
++
++#### PWR_STATUS Bits (0x820)
++
++```c
++#define PWR_STATUS_ALLOW_L2         BIT(0)
++#define PWR_STATUS_ALLOW_TILER      BIT(4)
++#define PWR_STATUS_ALLOW_SHADER     BIT(8)
++#define PWR_STATUS_DELEGATED_L2     BIT(16)
++#define PWR_STATUS_DELEGATED_TILER  BIT(20)
++#define PWR_STATUS_DELEGATED_SHADER BIT(24)
++```
++
++#### PWR_COMMAND Values (0x828)
++
++```c
++#define PWR_COMMAND_POWER_UP    0x10
++#define PWR_COMMAND_POWER_DOWN  0x11
++#define PWR_COMMAND_DELEGATE    0x20
++#define PWR_COMMAND_RETRACT     0x21
++
++#define PWR_COMMAND_DOMAIN_L2     (0x0 << 8)
++#define PWR_COMMAND_DOMAIN_TILER  (0x4 << 8)
++#define PWR_COMMAND_DOMAIN_SHADER (0x8 << 8)
++```
++
++### 1.2 Legacy Power Interface
++
++| Register | Offset | Description |
++|----------|--------|-------------|
++| `L2_PWRON` | 0x1A0 | L2 cache power on request |
++| `L2_READY` | 0x1C0 | L2 cache ready status |
++| `SHADER_PWRON` | 0x180 | Shader power on request (64-bit) |
++| `SHADER_READY` | 0x140 | Shader ready status (64-bit) |
++| `SHADER_PWRACTIVE` | 0x240 | Shader active status (64-bit) |
++| `TILER_PWRON` | 0x190 | Tiler power on request (64-bit) |
++| `TILER_READY` | 0x150 | Tiler ready status (64-bit) |
++
++### 1.3 Sky1-Specific Registers
++
++```c
++#define GPU_PWR_KEY         0xD00   /* Unlock key register */
++#define GPU_PWR_KEY_UNLOCK  0x2968A819
++#define GPU_PWR_OVERRIDE1   0xD08   /* Power override register */
++#define SHADER_PWRFEATURES  0x188   /* Shader power features */
++#define SHADER_PWRFEATURES_RTU_EN  BIT(1)
++```
++
++---
++
++## 2. Power Domain Architecture
++
++### 2.1 Power Domains
++
++The GPU has three main power domains managed independently:
++
++1. **L2 Cache** - Must be powered first (foundation)
++2. **Tiler** - Geometry processing
++3. **Shaders** - Compute cores (most complex to manage)
++
++### 2.2 Power State Flow
++
++```
++                    ┌─────────────────────────────────────────┐
++                    │              GPU Power Flow             │
++                    └─────────────────────────────────────────┘
++                                        │
++                    ┌───────────────────┼───────────────────┐
++                    ▼                   ▼                   ▼
++             ┌──────────┐        ┌──────────┐        ┌──────────┐
++             │    L2    │        │  Tiler   │        │ Shaders  │
++             │  Cache   │        │          │        │          │
++             └──────────┘        └──────────┘        └──────────┘
++                    │                   │                   │
++            ┌───────┴───────┐   ┌───────┴───────┐   ┌───────┴───────┐
++            │               │   │               │   │               │
++     ┌──────▼──────┐ ┌──────▼──────┐     ┌──────▼──────┐     ┌──────▼──────┐
++     │   Legacy    │ │ HOST_POWER  │     │   Legacy    │     │ HOST_POWER  │
++     │ L2_PWRON    │ │ PWR_COMMAND │     │ SHADER_PWRON│     │ DELEGATE/   │
++     │ (all arch)  │ │ (arch >= 12)│     │ (fallback)  │     │ RETRACT     │
++     └─────────────┘ └─────────────┘     └─────────────┘     └─────────────┘
++```
++
++---
++
++## 3. Power Management Functions
++
++### 3.1 Generic Block Power On/Off
++
++**File**: `drivers/gpu/drm/panthor/panthor_gpu.c`
++
++```c
++static int panthor_gpu_block_power_on(struct panthor_device *ptdev,
++                                      const char *blk_name,
++                                      u32 pwron_reg, u32 ready_reg,
++                                      u64 mask, u32 timeout_us)
++```
++
++- Writes power-on mask to `pwron_reg`
++- Polls `ready_reg` until mask bits are set
++- Uses `readx_poll_timeout()` with configurable timeout
++- Returns 0 on success, -ETIMEDOUT on failure
++
++```c
++static int panthor_gpu_block_power_off(struct panthor_device *ptdev,
++                                       const char *blk_name,
++                                       u32 pwroff_reg, u32 ready_reg,
++                                       u64 mask, u32 timeout_us)
++```
++
++- Writes power-off mask to `pwroff_reg`
++- Polls `ready_reg` until mask bits are cleared
++- Returns 0 on success, -ETIMEDOUT on failure
++
++### 3.2 L2 Cache Power
++
++**Function**: `panthor_gpu_l2_power_on()`
++
++```c
++static int panthor_gpu_l2_power_on(struct panthor_device *ptdev)
++{
++    /* Sky1 workaround: Enable power override and RTU before L2 power */
++    if (of_device_is_compatible(ptdev->base.dev->of_node, "cix,sky1-mali")) {
++        /* Unlock power configuration */
++        gpu_write(ptdev, GPU_PWR_KEY, GPU_PWR_KEY_UNLOCK);
++        /* Enable all power overrides (24 bits) */
++        gpu_write(ptdev, GPU_PWR_OVERRIDE1, 0xFFFFFF);
++        /* Enable RTU (Ready-to-Use) feature */
++        gpu_write(ptdev, SHADER_PWRFEATURES, SHADER_PWRFEATURES_RTU_EN);
++    }
++
++    /* Apply PBHA (Page-Based Hardware Attributes) if set */
++    if (ptdev->gpu->l2_features_ext1) {
++        gpu_write(ptdev, GPU_L2_FEATURES_EXT1, ptdev->gpu->l2_features_ext1);
++    }
++
++    /* Apply SYSC_ALLOC config if present */
++    if (ptdev->gpu->sysc_alloc_config) {
++        for (i = 0; i < GPU_SYSC_ALLOC_REG_COUNT; i++) {
++            gpu_write(ptdev, GPU_SYSC_ALLOC(i),
++                      ptdev->gpu->sysc_alloc_config[i]);
++        }
++    }
++
++    /* Power on L2 via legacy register */
++    return panthor_gpu_block_power_on(ptdev, "l2",
++                                      L2_PWRON, L2_READY,
++                                      ptdev->gpu_info.l2_present, 2000);
++}
++```
++
++**Key Points**:
++- L2 uses legacy registers on all architectures
++- Sky1 requires unlocking power config before L2 power
++- PBHA/SYSC configuration applied during L2 power-on
++- L2 must be powered before any other domain
++
++### 3.3 G720 Shader Power (HOST_POWER Interface)
++
++**Function**: `panthor_gpu_g720_shader_power_on()`
++
++This is the critical function for G720/arch >= 12 shader power:
++
++```c
++static int panthor_gpu_g720_shader_power_on(struct panthor_device *ptdev)
++{
++    u64 shader_present = ptdev->gpu_info.shader_present;
++    u64 ready;
++    int ret;
++
++    /* Step 1: Check if HOST_POWER is functional */
++    u64 allow = gpu_read64(ptdev, PWR_STATUS);
++
++    if (!(allow & PWR_STATUS_ALLOW_SHADER)) {
++        /* HOST_POWER not allowing shaders - try DELEGATE */
++        gpu_write(ptdev, PWR_COMMAND,
++                  PWR_COMMAND_DELEGATE | PWR_COMMAND_DOMAIN_SHADER);
++
++        ret = readx_poll_timeout(gpu_read64, ptdev, allow,
++                                 allow & PWR_STATUS_DELEGATED_SHADER,
++                                 100, 10000);
++        if (ret) {
++            drm_warn(&ptdev->base,
++                     "HOST_POWER DELEGATE timeout, falling back to legacy\n");
++            goto legacy_fallback;
++        }
++    }
++
++    /* Step 2: Try HOST_POWER shader power-on */
++    gpu_write64(ptdev, HOST_POWER_SHADER_PWRON, shader_present);
++
++    ret = readx_poll_timeout(gpu_read64, ptdev, ready,
++                             ready == shader_present,
++                             100, 100000);
++    if (!ret) {
++        drm_dbg(&ptdev->base, "G720 shaders powered via HOST_POWER\n");
++        return 0;
++    }
++
++    drm_warn(&ptdev->base,
++             "HOST_POWER shader timeout, ready=0x%llx, trying legacy\n", ready);
++
++legacy_fallback:
++    /* Step 3: Fall back to legacy SHADER_PWRON */
++    return panthor_gpu_block_power_on(ptdev, "shader",
++                                      SHADER_PWRON, SHADER_READY,
++                                      shader_present, 100000);
++}
++```
++
++**Power Flow**:
++
++```
++┌─────────────────────────────────────────────────────────────────┐
++│           G720 Shader Power-On Flow (Panthor)                   │
++└─────────────────────────────────────────────────────────────────┘
++                              │
++                              ▼
++                   ┌─────────────────────┐
++                   │ Read PWR_STATUS     │
++                   │ Check ALLOW_SHADER  │
++                   └─────────────────────┘
++                              │
++              ┌───────────────┼───────────────┐
++              │ Not Allowed   │               │ Allowed
++              ▼               │               ▼
++    ┌─────────────────┐       │     ┌─────────────────────┐
++    │ DELEGATE shader │       │     │ HOST_POWER_SHADER_  │
++    │ domain to host  │       │     │ PWRON = present     │
++    └─────────────────┘       │     └─────────────────────┘
++              │               │               │
++              ▼               │               ▼
++    ┌─────────────────┐       │     ┌─────────────────────┐
++    │ Poll for        │       │     │ Poll HOST_POWER_    │
++    │ DELEGATED_SHADER│       │     │ SHADER_READY        │
++    └─────────────────┘       │     └─────────────────────┘
++              │               │               │
++              │ Timeout       │               │ Success/Timeout
++              ├───────────────┘               │
++              ▼                               ▼
++    ┌─────────────────────────────────────────────────────┐
++    │              Legacy Fallback                        │
++    │   SHADER_PWRON = present, poll SHADER_READY        │
++    └─────────────────────────────────────────────────────┘
++```
++
++### 3.4 Where Shader Power Is Called
++
++Shader power-on is called from `panthor_fw_init_global_iface()` in `panthor_fw.c`:
++
++```c
++static int panthor_fw_init_global_iface(struct panthor_device *ptdev)
++{
++    struct panthor_fw_global_iface *glb_iface;
++    bool is_sky1 = of_device_is_compatible(ptdev->base.dev->of_node,
++                                           "cix,sky1-mali");
++    u64 shader_ready = 0;
++
++    /* ... get interface pointer ... */
++
++    /* For Sky1 G720: Pre-power shaders before MCU config */
++    if (is_sky1 && GPU_ARCH_MAJOR(ptdev->gpu_info.gpu_id) >= 12) {
++        int ret = panthor_gpu_g720_shader_power_on(ptdev);
++        if (ret) {
++            drm_err(&ptdev->base,
++                    "Sky1: Failed to pre-power shaders: %d\n", ret);
++            return ret;
++        }
++        shader_ready = gpu_read64(ptdev, SHADER_READY);
++        drm_info(&ptdev->base,
++                 "Sky1: Shaders pre-powered, ready=0x%llx\n", shader_ready);
++    }
++
++    /* Configure MCU global interface */
++    /* ... standard configuration ... */
++
++    /* Sky1: Set core_en_mask to powered cores */
++    if (is_sky1 && shader_ready) {
++        glb_iface->input->core_en_mask = shader_ready;
++        drm_info(&ptdev->base,
++                 "Sky1: Set core_en_mask=0x%llx\n", shader_ready);
++    }
++
++    /* Sky1: Disable MCU power management */
++    if (is_sky1) {
++        glb_iface->input->poweroff_timer = 0;
++        drm_info(&ptdev->base,
++                 "Sky1: Disabled MCU poweroff_timer\n");
++    }
++
++    /* ... ring doorbell ... */
++}
++```
++
++---
++
++## 4. CSF Global Interface Power Configuration
++
++### 4.1 Global Input Interface Structure
++
++**File**: `drivers/gpu/drm/panthor/panthor_fw.h`
++
++```c
++struct panthor_fw_global_input_iface {
++    u32 req;                    /* 0x00: Request flags */
++    u32 ack_irq_mask;          /* 0x04: IRQ mask */
++    u32 doorbell_req;          /* 0x08: Doorbell request */
++    u32 reserved1;             /* 0x0C */
++    u32 progress_timer;        /* 0x10: Progress timeout (μs) */
++    u32 poweroff_timer;        /* 0x14: Power-off timeout (μs) */
++    u64 core_en_mask;          /* 0x18: Enabled core mask */
++    u32 reserved2;             /* 0x20 */
++    u32 idle_timer;            /* 0x24: Idle timeout */
++    /* ... additional fields ... */
++};
++```
++
++### 4.2 Key Power Configuration Fields
++
++| Field | Offset | Description |
++|-------|--------|-------------|
++| `poweroff_timer` | 0x14 | MCU shader power-off timer in μs. **0 = disabled** |
++| `core_en_mask` | 0x18 | 64-bit mask of cores available to MCU |
++| `idle_timer` | 0x24 | Idle detection timeout |
++
++### 4.3 Global Request Flags
++
++```c
++#define GLB_CFG_ALLOC_EN        BIT(2)  /* Enable allocation */
++#define GLB_CFG_POWEROFF_TIMER  BIT(3)  /* Enable power-off timer */
++#define GLB_CFG_PROGRESS_TIMER  BIT(4)  /* Enable progress timer */
++```
++
++### 4.4 Standard vs Sky1 Configuration
++
++**Standard G720**:
++- `poweroff_timer` = configured value (e.g., 64000 μs)
++- `core_en_mask` = `shader_present` (all possible cores)
++- MCU manages shader power via HOST_POWER internally
++
++**Sky1 Configuration**:
++- `poweroff_timer` = 0 (disabled - host controls power)
++- `core_en_mask` = `SHADER_READY` value (actually powered cores)
++- Host pre-powers shaders before MCU boot
++- MCU uses pre-powered cores, never tries to power them
++
++---
++
++## 5. Suspend/Resume Power Flow
++
++### 5.1 Platform Reset
++
++**File**: `drivers/gpu/drm/panthor/panthor_device.c`
++
++```c
++#define SKY1_RCSU_PGCTRL_OFFSET       0x218
++#define SKY1_RCSU_QCHANNEL_CLK_GATE_EN  BIT(0)
++
++static void panthor_platform_reset(struct panthor_device *ptdev)
++{
++    /* Assert reset */
++    reset_control_assert(ptdev->rstc);
++    usleep_range(10, 20);
++
++    /* Deassert reset */
++    reset_control_deassert(ptdev->rstc);
++    usleep_range(10, 20);
++
++    /* Sky1: Enable Q-channel clock gating via RCSU */
++    if (ptdev->rcsu) {
++        u32 pgctrl = readl(ptdev->rcsu + SKY1_RCSU_PGCTRL_OFFSET);
++        writel(pgctrl | SKY1_RCSU_QCHANNEL_CLK_GATE_EN,
++               ptdev->rcsu + SKY1_RCSU_PGCTRL_OFFSET);
++    }
++}
++```
++
++### 5.2 Suspend Flow
++
++```c
++static int panthor_device_suspend(struct device *dev)
++{
++    struct panthor_device *ptdev = dev_get_drvdata(dev);
++
++    /* 1. Suspend scheduler (stop job submission) */
++    panthor_sched_suspend(ptdev);
++
++    /* 2. Suspend firmware (halt MCU) */
++    panthor_fw_suspend(ptdev);
++
++    /* 3. Power off GPU (L2, shaders go down) */
++    panthor_gpu_suspend(ptdev);
++
++    /* 4. Disable clocks */
++    clk_disable_unprepare(ptdev->clks.core);
++
++    return 0;
++}
++```
++
++### 5.3 Resume Flow
++
++```c
++static int panthor_device_resume(struct device *dev)
++{
++    struct panthor_device *ptdev = dev_get_drvdata(dev);
++    int ret;
++
++    /* 1. Enable clocks */
++    ret = clk_prepare_enable(ptdev->clks.core);
++    if (ret)
++        return ret;
++
++    /* 2. Reset platform (includes Q-channel for Sky1) */
++    panthor_platform_reset(ptdev);
++
++    /* 3. Power on GPU (L2 first, then shaders if Sky1) */
++    ret = panthor_gpu_resume(ptdev);
++    if (ret)
++        goto disable_clk;
++
++    /* 4. Resume firmware (boot MCU, init interfaces) */
++    ret = panthor_fw_resume(ptdev);
++    if (ret)
++        goto suspend_gpu;
++
++    /* 5. Resume scheduler (allow job submission) */
++    panthor_sched_resume(ptdev);
++
++    return 0;
++}
++```
++
++---
++
++## 6. Scheduler Power State Debugging
++
++**File**: `drivers/gpu/drm/panthor/panthor_sched.c`
++
++On job timeout, the scheduler dumps power state for debugging:
++
++```c
++static void panthor_sched_timedout(struct drm_sched_job *sched_job)
++{
++    /* ... */
++
++    drm_warn(&ptdev->base,
++             "  GPU: status=0x%08x fault=0x%08x "
++             "shader_ready=0x%llx shader_pwractive=0x%llx\n",
++             gpu_read(ptdev, GPU_STATUS),
++             gpu_read(ptdev, GPU_FAULT_STATUS),
++             gpu_read64(ptdev, SHADER_READY),
++             gpu_read64(ptdev, SHADER_PWRACTIVE));
++
++    /* ... */
++}
++```
++
++**Key Registers Dumped**:
++- `GPU_STATUS` - Overall GPU status
++- `GPU_FAULT_STATUS` - Fault information
++- `SHADER_READY` - Which cores are powered/ready
++- `SHADER_PWRACTIVE` - Which cores are actively executing
++
++---
++
++## 7. Sky1 Power Management Issues
++
++### 7.1 Root Cause
++
++On Sky1, the HOST_POWER interface registers return 0x0:
++- `PWR_STATUS` = 0x0 (no domains allowed)
++- `HOST_POWER_SHADER_READY` = 0x0 (never reports ready)
++- HOST_POWER DELEGATE command has no effect
++
++### 7.2 Current Workarounds in Panthor
++
++1. **Power Override**: `GPU_PWR_OVERRIDE1 = 0xFFFFFF` unlocks power control
++2. **RTU Enable**: `SHADER_PWRFEATURES_RTU_EN` enables ready-to-use mode
++3. **Legacy Fallback**: `SHADER_PWRON` register still works
++4. **MCU Config**: `poweroff_timer = 0` disables MCU power management
++5. **Core Mask**: `core_en_mask = SHADER_READY` tells MCU which cores are available
++
++### 7.3 Remaining Problem
++
++Despite these workarounds, jobs still timeout with `shader_pwractive = 0x0`:
++- Shaders show as `SHADER_READY` (powered)
++- But `SHADER_PWRACTIVE` stays 0 (no job execution)
++- MCU may still be trying to use HOST_POWER internally for job dispatch
++
++---
++
++## 8. Code Location Summary
++
++| File | Function | Purpose |
++|------|----------|---------|
++| `panthor_regs.h` | - | All register definitions |
++| `panthor_gpu.c` | `panthor_gpu_block_power_on()` | Generic power on |
++| `panthor_gpu.c` | `panthor_gpu_block_power_off()` | Generic power off |
++| `panthor_gpu.c` | `panthor_gpu_l2_power_on()` | L2 power with Sky1 workaround |
++| `panthor_gpu.c` | `panthor_gpu_g720_shader_power_on()` | G720 shader power |
++| `panthor_fw.c` | `panthor_fw_init_global_iface()` | MCU power config |
++| `panthor_fw.h` | `struct panthor_fw_global_input_iface` | MCU interface |
++| `panthor_device.c` | `panthor_platform_reset()` | Reset with Q-channel |
++| `panthor_sched.c` | `panthor_sched_timedout()` | Power state debug dump |
++
++---
++
++## 9. Comparison: Panthor vs Vendor Driver
++
++| Aspect | Panthor (Mainline) | Vendor DKMS |
++|--------|-------------------|-------------|
++| HOST_POWER | Tries first, falls back | Skips entirely |
++| Shader power | Via HOST_POWER or legacy | `kbase_pm_shader_pwr_ctrl_power()` |
++| MCU power mgmt | poweroff_timer configurable | `firmware_hctl_core_pwr` flag |
++| Core mask | Set to present or ready | Direct register control |
++| Power tracking | Read-only monitoring | Active state machine |
++
++**Key Difference**: Vendor driver has explicit `firmware_hctl_core_pwr` flag that tells MCU "host controls power, don't try to manage it yourself." Panthor relies on `poweroff_timer = 0` to achieve similar effect.
++
++---
++
++## 10. Recommendations for Sky1 Fix
++
++Based on this analysis, the remaining issue is likely that MCU still tries to activate cores via HOST_POWER for job dispatch even with `poweroff_timer = 0`. Possible solutions:
++
++1. **Check if additional firmware flags exist** that tell MCU to skip core activation
++2. **Pre-activate shaders** before MCU boot (not just power on, but activate)
++3. **Investigate SHADER_PWRACTIVE vs SHADER_READY** difference
++4. **Check if firmware version matters** - vendor uses specific CSF FW version
++
++The porting plan in `docs/sky1-panthor-porting-plan.md` addresses these with a phased approach.
++
++---
++
++## Appendix: All Power-Related Code Paths
++
++```
++panthor_device_probe()
++  └─► panthor_device_init()
++        └─► panthor_gpu_init()
++              ├─► panthor_gpu_l2_power_on()     [Sky1: PWR_OVERRIDE1, RTU]
++              └─► [continue to FW init]
++                    └─► panthor_fw_init()
++                          └─► panthor_fw_init_global_iface()
++                                ├─► panthor_gpu_g720_shader_power_on() [Sky1]
++                                ├─► Set core_en_mask = SHADER_READY
++                                └─► Set poweroff_timer = 0
++
++panthor_device_suspend()
++  ├─► panthor_sched_suspend()
++  ├─► panthor_fw_suspend()
++  └─► panthor_gpu_suspend()
++
++panthor_device_resume()
++  ├─► panthor_platform_reset()  [Sky1: Q-channel clock gate]
++  ├─► panthor_gpu_resume()
++  │     └─► panthor_gpu_l2_power_on()
++  └─► panthor_fw_resume()
++        └─► panthor_fw_init_global_iface()
++              └─► [Same Sky1 path as init]
++```
+diff --git a/docs/sky1-gpu-power-state-model.md b/docs/sky1-gpu-power-state-model.md
+new file mode 100644
+index 000000000000..f02f90daffb8
+--- /dev/null
++++ b/docs/sky1-gpu-power-state-model.md
+@@ -0,0 +1,299 @@
++# Sky1 G720 GPU Power State Model
++
++## Overview
++
++This document details the CIX Sky1 Immortalis G720 GPU power control architecture, focusing on the HOST_POWER interface and the critical role of reset controller configuration.
++
++## Register Blocks
++
++The G720 has two power control interfaces:
++
++### Legacy GPU_CONTROL Registers (0x100-0x1FF)
++Traditional Mali power registers, works on all architectures:
++- `SHADER_PRESENT` (0x100) - Bitmap of available shader cores
++- `SHADER_READY` (0x140) - Bitmap of powered-on shader cores
++- `SHADER_PWRON` (0x180) - Write to power on shader cores
++- `SHADER_PWROFF` (0x1C0) - Write to power off shader cores
++- `SHADER_PWRTRANS` (0x200) - Power transition in progress
++
++### HOST_POWER Registers (0x800-0xBFF) - G720 Only
++New power control interface for arch >= 12 (G720/Immortalis):
++- `PWR_IRQ_RAWSTAT` (0x800) - Power interrupt raw status
++- `PWR_IRQ_CLEAR` (0x804) - Clear power interrupts
++- `PWR_IRQ_MASK` (0x808) - Power interrupt mask
++- `PWR_STATUS` (0x820) - Power delegation status (64-bit)
++- `PWR_COMMAND` (0x828) - Power command register
++- `PWR_CMDARG` (0x830) - Command argument (core mask, 64-bit)
++- `HOST_POWER_SHADER_PRESENT` (0xA00) - Shader present via HOST_POWER
++- `HOST_POWER_SHADER_READY` (0xA08) - Shader ready via HOST_POWER
++- `HOST_POWER_SHADER_PWRTRANS` (0xA10) - Shader power transition
++- `HOST_POWER_SHADER_PWRACTIVE` (0xA18) - Shader power active
++
++## PWR_STATUS Register Layout
++
++```
++Bit 0:  ALLOW_L2       - Host allowed to control L2 power
++Bit 1:  ALLOW_TILER    - Host allowed to control tiler power
++Bit 8:  ALLOW_SHADER   - Host allowed to control shader power
++Bit 16: DELEGATED_L2   - L2 power delegated to firmware
++Bit 17: DELEGATED_TILER - Tiler power delegated to firmware
++Bit 24: DELEGATED_SHADER - Shader power delegated to firmware
++```
++
++When `ALLOW_*` is set and `DELEGATED_*` is clear, host can control that power domain.
++
++## PWR_COMMAND Values
++
++```c
++PWR_COMMAND_POWER_UP    = 0x10  // Power up domain
++PWR_COMMAND_POWER_DOWN  = 0x11  // Power down domain
++PWR_COMMAND_RESET_HARD  = 0x30  // Hard reset
++PWR_COMMAND_RESET_SOFT  = 0x31  // Soft reset
++
++// Domain selection (bits 8-15)
++PWR_COMMAND_DOMAIN_L2     = 0x000
++PWR_COMMAND_DOMAIN_TILER  = 0x100
++PWR_COMMAND_DOMAIN_SHADER = 0x800
++```
++
++## Sky1 Reset Controllers
++
++The Sky1 GPU device tree defines TWO reset controllers:
++
++```dts
++resets = <&reset_ctrl 0x77>, <&reset_ctrl 0x09>;
++reset-names = "gpu_rcsu_reset", "gpu_reset";
++```
++
++### gpu_rcsu_reset (index 0x77)
++Resets the RCSU (Reset Control Status Unit) at 0x15000000.
++**DO NOT ASSERT THIS AT RUNTIME** - it appears to disable the HOST_POWER interface.
++
++### gpu_reset (index 0x09)
++Resets the GPU IP block at 0x15010000.
++This is the only reset that should be used during normal operation.
++
++## Critical Discovery: Reset Controller Bug
++
++**Root Cause of HOST_POWER returning 0x0:**
++
++Panthor was using `devm_reset_control_array_get_optional_exclusive()` which asserts/deasserts ALL resets (both `gpu_rcsu_reset` and `gpu_reset`).
++
++The vendor driver uses only `gpu_reset`:
++```c
++kbdev->gpu_reset = devm_reset_control_get(kbdev->dev, "gpu_reset");
++```
++
++Asserting `gpu_rcsu_reset` appears to wipe out power management configuration, causing:
++- `PWR_STATUS` to read as 0x0
++- `HOST_POWER_SHADER_PRESENT` to read as 0x0
++- All HOST_POWER registers to be non-functional
++
++**Fix:** Use `devm_reset_control_get_optional_exclusive(dev, "gpu_reset")` to get only the GPU IP reset.
++
++## Power-On Sequence
++
++### Vendor Driver (kbase) Sequence
++1. Power domain on (via generic PM domain)
++2. Enable clocks (core, stacks)
++3. Assert `gpu_reset` via reset_control
++4. Wait 10-20 usec
++5. Deassert `gpu_reset`
++6. Enable Q-channel clock gating (RCSU PGCTRL register)
++7. Read `PWR_STATUS` to verify HOST_POWER is available
++8. If `has_host_pwr_iface`: use HOST_POWER for all power control
++9. Otherwise: fall back to legacy SHADER_PWRON etc.
++
++### Panthor Sequence (after fix)
++1. `panthor_device_init()`: Set initial state to SUSPENDED
++2. `panthor_reset_init()`: Get only `gpu_reset` by name
++3. `pm_runtime_resume_and_get()` triggers `panthor_device_resume()`
++4. `panthor_device_resume()`:
++   - Enable clocks
++   - Call `panthor_platform_reset()`:
++     - Assert/deassert `gpu_reset`
++     - Enable Q-channel clock gating
++5. `panthor_gpu_init()`: Optional soft reset
++6. `panthor_fw_init()`: Load firmware, initialize CSF interface
++7. `panthor_gpu_g720_shader_power_on()`: Power on shaders via HOST_POWER
++
++## Shader Power Control
++
++### Using HOST_POWER (preferred for G720)
++```c
++// Check PWR_STATUS first
++pwr_status = gpu_read64(ptdev, PWR_STATUS);
++if (!(pwr_status & PWR_STATUS_ALLOW_SHADER))
++    return;  // Firmware controls shaders
++
++// Write core mask
++gpu_write64(ptdev, PWR_CMDARG, shader_mask);
++
++// Issue power-up command
++gpu_write(ptdev, PWR_COMMAND,
++          PWR_COMMAND_DOMAIN_SHADER | PWR_COMMAND_POWER_UP);
++
++// Wait for ready
++poll(HOST_POWER_SHADER_READY == shader_mask);
++```
++
++### Using Legacy Registers (fallback)
++```c
++// Write directly to SHADER_PWRON
++gpu_write64(ptdev, SHADER_PWRON, shader_mask);
++
++// Wait for SHADER_READY
++poll(SHADER_READY == shader_mask);
++```
++
++## Vendor Driver Feature Detection
++
++The vendor driver determines HOST_POWER availability via hardware feature flags:
++
++```c
++// In kbase_pm_backend_init()
++kbdev->pm.backend.has_host_pwr_iface =
++    kbase_hw_has_feature(kbdev, KBASE_HW_FEATURE_POWER_CONTROL);
++```
++
++`KBASE_HW_FEATURE_POWER_CONTROL` is set for G720 (tDRx) in `base_hw_features_tDRx_r0p0[]`.
++
++## RCSU (Reset Control Status Unit)
++
++Located at 0x15000000 (separate from GPU at 0x15010000).
++
++Key registers:
++- `PGCTRL` (0x218) - Power gating control
++  - Bit 0: Q-channel clock gating enable
++- `STRAP_PIN1` (0x08) - Core harvesting info
++  - Bits 4-27: Disabled shader core mask
++
++The RCSU manages:
++- Q-channel interface for clock gating requests
++- Core harvesting (disabled cores)
++- Power gating control
++
++## Files Reference
++
++- Panthor reset init: `drivers/gpu/drm/panthor/panthor_device.c:panthor_reset_init()`
++- Panthor platform reset: `drivers/gpu/drm/panthor/panthor_device.c:panthor_platform_reset()`
++- G720 shader power: `drivers/gpu/drm/panthor/panthor_gpu.c:panthor_gpu_g720_shader_power_on()`
++- HOST_POWER regs: `drivers/gpu/drm/panthor/panthor_regs.h`
++
++Vendor references:
++- Reset handling: `cix-drivers-dkms/src/gpu/.../platform/sky1/mali_kbase_runtime_pm.c`
++- Feature detection: `cix-drivers-dkms/src/gpu/.../mali_kbase_hwconfig_features.h`
++- Power driver: `cix-drivers-dkms/src/gpu/.../backend/gpu/mali_kbase_pm_driver.c`
++
++---
++
++## Current Status (2025-12-01)
++
++### HOST_POWER Interface - Non-Functional
++
++Despite applying the reset controller fix, HOST_POWER registers still return 0x0:
++
++```
++Before shader power: MCU_STATUS=0x00000001 PWR_STATUS=0x0000000000000000
++G720: PWR_STATUS=0x0000000000000000 HP_SHADER_PRESENT=0x0
++G720: RETRACT failed, PWR_STATUS still 0x0
++```
++
++Attempted fixes that did NOT resolve HOST_POWER:
++- ✅ Reset controller fix (use only `gpu_reset`)
++- ✅ RCSU mapping and Q-channel clock gating
++- ✅ PWR_COMMAND RETRACT sequence
++
++### Legacy Fallback - Working
++
++Legacy `SHADER_PWRON` register at 0x180 successfully powers shaders:
++
++```
++G720: HOST_POWER unavailable, trying legacy SHADER_PWRON
++G720: legacy shader power-on succeeded (ready=0x550555)
++```
++
++### Current Implementation
++
++`panthor_gpu_g720_shader_power_on()` now implements:
++
++1. Check `PWR_STATUS` for HOST_POWER availability
++2. If `PWR_STATUS == 0`, try RETRACT command (times out)
++3. If `ALLOW_SHADER` not set, fall back to legacy:
++   - Write `shader_mask` to `SHADER_PWRON` (0x180)
++   - Poll `SHADER_READY` (0x140) for completion
++4. Legacy path succeeds: `shader_ready=0x550555`
++
++### Remaining Issue: Shaders Ready but Not Executing
++
++Shaders are powered but not executing jobs:
++- `shader_ready=0x550555` ✅ (powered via legacy)
++- `shader_pwractive=0x0` ❌ (not executing)
++
++## Root Cause Analysis (2025-12-01)
++
++### MCU Shader Power Control Architecture
++
++The vendor driver has a key flag: `firmware_hctl_core_pwr` (firmware host control core power):
++
++- **When `firmware_hctl_core_pwr = false` (default)**:
++  - MCU controls shader core power transitions
++  - Uses `GLB_PWROFF_TIMER` to auto-power-off idle cores
++  - Uses HOST_POWER interface to power on cores when jobs arrive
++  - **This is where Sky1 fails** - HOST_POWER doesn't work
++
++- **When `firmware_hctl_core_pwr = true`**:
++  - Host driver controls shader core power
++  - `GLB_PWROFF_TIMER` is set to 0 (disabled)
++  - MCU just dispatches jobs to already-powered cores
++  - Host uses legacy `SHADER_PWRON` etc. directly
++
++### The Problem on Sky1
++
++1. Panthor sets `poweroff_timer` to a non-zero value (10000 µs)
++2. This tells MCU to manage shader power automatically
++3. MCU tries to power on shader cores via HOST_POWER when jobs arrive
++4. HOST_POWER doesn't respond (PWR_STATUS=0x0)
++5. MCU can't activate cores for jobs
++6. Jobs timeout with `shader_pwractive=0x0`
++
++Our legacy `SHADER_PWRON` write at boot powers cores to READY state, but MCU doesn't know about this and still tries to use HOST_POWER.
++
++### Proposed Fix
++
++Set `poweroff_timer = 0` for Sky1 to disable MCU's shader power management:
++
++```c
++// In panthor_fw.c:panthor_fw_init_global_iface()
++if (of_device_is_compatible(ptdev->base.dev->of_node, "cix,sky1-mali")) {
++    /* Sky1: HOST_POWER is non-functional. Disable MCU power management
++     * so it just dispatches to already-powered cores.
++     */
++    glb_iface->input->poweroff_timer = 0;
++} else {
++    glb_iface->input->poweroff_timer = panthor_fw_conv_timeout(ptdev, PWROFF_HYSTERESIS_US);
++}
++```
++
++With `poweroff_timer = 0`:
++1. MCU won't auto-power-off shader cores
++2. MCU won't try to power on cores (assumes already powered)
++3. MCU just dispatches jobs to cores specified in `core_en_mask`
++4. We power on all cores via legacy path at boot
++5. Jobs should execute successfully
++
++### Vendor Driver Reference
++
++Key files in vendor mali_kbase:
++- `csf/mali_kbase_csf_firmware.c:1619` - Sets `GLB_PWROFF_TIMER` based on `firmware_hctl_core_pwr`
++- `csf/mali_kbase_csf_defs.h:1749` - `firmware_hctl_core_pwr` definition
++- `backend/gpu/mali_kbase_pm_internal.h:872` - `kbase_pm_no_mcu_core_pwroff()`
++
++When `firmware_hctl_core_pwr = true`:
++```c
++pwroff_reg = GLB_PWROFF_TIMER_TIMER_SOURCE_SET(
++    DISABLE_GLB_PWROFF_TIMER, GLB_PWROFF_TIMER_TIMER_SOURCE_SYSTEM_TIMESTAMP);
++// DISABLE_GLB_PWROFF_TIMER = 0
++```
++
++See `docs/csf-interface-comparison.md` Section 16 for detailed analysis.
+diff --git a/docs/sky1-panthor-porting-plan.md b/docs/sky1-panthor-porting-plan.md
+new file mode 100644
+index 000000000000..3b12ff6fcfe5
+--- /dev/null
++++ b/docs/sky1-panthor-porting-plan.md
+@@ -0,0 +1,333 @@
++# Sky1 Panthor GPU Porting Plan
++
++## Executive Summary
++
++The CIX Sky1 SoC uses an Arm Immortalis-G720 GPU. While mainline Panthor driver supports G720, Sky1 has a **non-functional HOST_POWER interface** (registers return 0x0). This requires implementing host-controlled shader power mode, mirroring what the vendor driver does.
++
++### Current Status
++
++| Component | Status | Notes |
++|-----------|--------|-------|
++| Firmware boot | ✅ Working | CSF FW v3.13.0 |
++| CSG communication | ✅ Working | 64-bit endpoint_req fix applied |
++| Shader power-on | ✅ Working | Legacy SHADER_PWRON fallback |
++| EGL context | ✅ Working | test_panthor passes |
++| Job execution | ❌ Failing | `shader_pwractive=0x0` |
++
++### Root Cause
++
++MCU firmware internally uses HOST_POWER to activate cores for job execution. On Sky1:
++- HOST_POWER registers return 0x0
++- MCU can't activate cores via HOST_POWER
++- Jobs timeout waiting for core activation
++
++### Solution
++
++Implement **host-controlled power mode** in Panthor for Sky1:
++1. Host powers shaders via legacy registers BEFORE MCU boot
++2. Set `poweroff_timer = 0` to disable MCU power management
++3. Set `core_en_mask` to actual powered cores
++4. MCU dispatches jobs to pre-powered cores
++
++---
++
++## Implementation Plan
++
++### Phase 1: Shader Pre-Power (panthor_gpu.c)
++
++**Goal**: Power shaders via legacy path before MCU initialization.
++
++**File**: `drivers/gpu/drm/panthor/panthor_gpu.c`
++
++#### Step 1.1: Add Sky1 Detection Helper
++
++```c
++static bool panthor_gpu_is_sky1(struct panthor_device *ptdev)
++{
++    return of_device_is_compatible(ptdev->base.dev->of_node, "cix,sky1-mali");
++}
++```
++
++#### Step 1.2: Create Sky1 Shader Power Function
++
++```c
++static int panthor_gpu_sky1_power_shaders(struct panthor_device *ptdev)
++{
++    u64 shader_present, shader_ready;
++    int ret;
++
++    /* Read shader core mask from GPU */
++    shader_present = gpu_read64(ptdev, GPU_SHADER_PRESENT);
++    if (!shader_present) {
++        drm_err(&ptdev->base, "Sky1: No shader cores present\n");
++        return -ENODEV;
++    }
++
++    /* Power on all shaders via legacy register */
++    gpu_write64(ptdev, SHADER_PWRON, shader_present);
++
++    /* Wait for cores to power up (poll SHADER_READY) */
++    ret = readx_poll_timeout(gpu_read64, ptdev, shader_ready,
++                             shader_ready == shader_present,
++                             100, 100000);
++    if (ret) {
++        drm_err(&ptdev->base, "Sky1: Shader power-on timeout, ready=0x%llx expected=0x%llx\n",
++                shader_ready, shader_present);
++        return ret;
++    }
++
++    drm_info(&ptdev->base, "Sky1: Shaders powered via legacy path, ready=0x%llx\n",
++             shader_ready);
++
++    /* Store for later use by firmware init */
++    ptdev->gpu->sky1_shader_ready = shader_ready;
++
++    return 0;
++}
++```
++
++#### Step 1.3: Call from GPU Init
++
++In `panthor_gpu_init()`, after L2 is powered but before firmware:
++
++```c
++int panthor_gpu_init(struct panthor_device *ptdev)
++{
++    /* ... existing init code ... */
++
++    /* Sky1: Pre-power shaders before firmware boot */
++    if (panthor_gpu_is_sky1(ptdev)) {
++        ret = panthor_gpu_sky1_power_shaders(ptdev);
++        if (ret)
++            return ret;
++    }
++
++    /* ... continue with firmware init ... */
++}
++```
++
++#### Step 1.4: Add Storage for Shader Ready Mask
++
++In `struct panthor_gpu`:
++
++```c
++struct panthor_gpu {
++    /* ... existing fields ... */
++
++    /** @sky1_shader_ready: Powered shader mask for Sky1 (0 on other platforms) */
++    u64 sky1_shader_ready;
++};
++```
++
++---
++
++### Phase 2: Firmware Configuration (panthor_fw.c)
++
++**Goal**: Configure MCU global interface for host-controlled power mode.
++
++**File**: `drivers/gpu/drm/panthor/panthor_fw.c`
++
++#### Step 2.1: Modify panthor_fw_init_global_iface()
++
++In the global interface initialization, add Sky1-specific configuration:
++
++```c
++static int panthor_fw_init_global_iface(struct panthor_device *ptdev)
++{
++    struct panthor_fw_global_iface *glb_iface = panthor_fw_get_glb_iface(ptdev);
++
++    /* ... existing code to get interface pointers ... */
++
++    /* Sky1: Configure for host-controlled shader power */
++    if (of_device_is_compatible(ptdev->base.dev->of_node, "cix,sky1-mali")) {
++        u64 shader_ready = ptdev->gpu->sky1_shader_ready;
++
++        /*
++         * Disable MCU shader power management.
++         * Setting poweroff_timer = 0 tells MCU to NOT manage shader power.
++         * MCU will use cores that are already powered by host.
++         */
++        glb_iface->input->poweroff_timer = 0;
++
++        /*
++         * Set core allocation mask to the actual powered cores.
++         * This tells MCU which cores are available for job dispatch.
++         */
++        glb_iface->input->core_en_mask = shader_ready;
++
++        drm_info(&ptdev->base,
++                 "Sky1: MCU configured for host power mode, "
++                 "poweroff_timer=0, core_en_mask=0x%llx\n",
++                 shader_ready);
++    }
++
++    /* ... rest of existing init ... */
++}
++```
++
++#### Step 2.2: Ensure core_en_mask is Written Before GLB_REQ
++
++The `core_en_mask` must be set BEFORE ringing the global doorbell:
++
++```c
++/* Write the configuration */
++panthor_fw_update_reqs(glb_iface, ...);
++
++/* Ring doorbell to notify MCU */
++panthor_fw_ring_glb_doorbell(ptdev);
++```
++
++---
++
++### Phase 3: Remove/Simplify HOST_POWER Fallback (panthor_gpu.c)
++
++**Goal**: Clean up the G720 shader power function for Sky1.
++
++**File**: `drivers/gpu/drm/panthor/panthor_gpu.c`
++
++#### Step 3.1: Modify panthor_gpu_g720_shader_power_on()
++
++Since Sky1 pre-powers shaders in Phase 1, the G720 shader power function should detect this:
++
++```c
++static int panthor_gpu_g720_shader_power_on(struct panthor_device *ptdev,
++                                            u64 shader_mask)
++{
++    /* Sky1: Shaders already powered in panthor_gpu_init() */
++    if (panthor_gpu_is_sky1(ptdev)) {
++        u64 shader_ready = gpu_read64(ptdev, SHADER_READY);
++
++        if ((shader_ready & shader_mask) == shader_mask) {
++            drm_dbg(&ptdev->base, "Sky1: Shaders already powered, ready=0x%llx\n",
++                    shader_ready);
++            return 0;
++        }
++
++        /* If somehow cores are not ready, try legacy power-on */
++        drm_warn(&ptdev->base, "Sky1: Re-powering shaders, ready=0x%llx mask=0x%llx\n",
++                 shader_ready, shader_mask);
++        gpu_write64(ptdev, SHADER_PWRON, shader_mask);
++
++        return readx_poll_timeout(gpu_read64, ptdev, shader_ready,
++                                  (shader_ready & shader_mask) == shader_mask,
++                                  100, 100000);
++    }
++
++    /* Standard G720 HOST_POWER path for other platforms */
++    /* ... existing HOST_POWER code ... */
++}
++```
++
++---
++
++### Phase 4: Device Tree (optional cleanup)
++
++**File**: `arch/arm64/boot/dts/cix/sky1.dtsi`
++
++The GPU node should use `"cix,sky1-mali"` compatible for detection:
++
++```dts
++gpu: gpu@b500000 {
++    compatible = "cix,sky1-mali", "arm,mali-valhall-csf";
++    /* ... rest of node ... */
++};
++```
++
++This is likely already present, but verify.
++
++---
++
++## Testing Plan
++
++### Test 1: Basic Shader Power
++
++```bash
++# After boot, check shader status
++cat /sys/kernel/debug/dri/*/gpu_info
++# Should show: shader_ready=0x550555 (or similar non-zero)
++```
++
++### Test 2: EGL Context (existing test)
++
++```bash
++cd /home/radxa/scratch
++export LD_LIBRARY_PATH=/usr/local/lib/aarch64-linux-gnu:$LD_LIBRARY_PATH
++export LIBGL_DRIVERS_PATH=/usr/local/lib/aarch64-linux-gnu/dri
++./test_panthor
++# Should show: GL_RENDERER: Mali-G720 (Panfrost)
++```
++
++### Test 3: Job Execution (the critical test)
++
++```bash
++./test_render
++# Should complete without timeout
++# Should show rendered output
++```
++
++### Test 4: dmesg Verification
++
++```bash
++dmesg | grep -i sky1
++# Should show:
++# panthor ...: Sky1: Shaders powered via legacy path, ready=0x550555
++# panthor ...: Sky1: MCU configured for host power mode, poweroff_timer=0, core_en_mask=0x550555
++```
++
++### Test 5: shader_pwractive Check
++
++```bash
++# During job execution, check if cores are active
++cat /sys/kernel/debug/dri/*/gpu_info
++# shader_pwractive should be non-zero during job
++```
++
++---
++
++## Rollback Plan
++
++If the fix doesn't work, the changes are isolated to Sky1 detection paths:
++
++1. Remove `panthor_gpu_is_sky1()` checks
++2. Remove `sky1_shader_ready` field
++3. Remove Sky1 block in `panthor_fw_init_global_iface()`
++4. Revert to standard G720 code path
++
++---
++
++## Code Locations Summary
++
++| File | Function | Change |
++|------|----------|--------|
++| `panthor_gpu.c` | `panthor_gpu_is_sky1()` | Add helper |
++| `panthor_gpu.c` | `panthor_gpu_sky1_power_shaders()` | Add function |
++| `panthor_gpu.c` | `panthor_gpu_init()` | Call Sky1 pre-power |
++| `panthor_gpu.c` | `panthor_gpu_g720_shader_power_on()` | Add Sky1 shortcut |
++| `panthor_gpu.h` | `struct panthor_gpu` | Add `sky1_shader_ready` |
++| `panthor_fw.c` | `panthor_fw_init_global_iface()` | Add Sky1 MCU config |
++
++---
++
++## Appendix: Key Register Addresses
++
++| Register | Offset | Description |
++|----------|--------|-------------|
++| `GPU_SHADER_PRESENT` | 0x100 | Shader cores present mask |
++| `SHADER_READY` | 0x140 | Shader cores ready mask |
++| `SHADER_PWRON` | 0x180 | Write mask to power on shaders |
++| `SHADER_PWRACTIVE` | 0x240 | Shader cores actively executing |
++
++## Appendix: CSF Global Interface Fields
++
++| Field | Offset | Description |
++|-------|--------|-------------|
++| `poweroff_timer` | 0x14 | MCU auto power-off timer (0=disabled) |
++| `core_en_mask` | 0x18 | Shader cores available to MCU |
++
++---
++
++## References
++
++- `docs/vendor-mali-power-management-analysis.md` - Vendor driver power management deep dive
++- `docs/csf-interface-comparison.md` - CSF firmware interface details
++- `docs/sky1-gpu-power-state-model.md` - Sky1 power architecture
+diff --git a/docs/vendor-mali-power-management-analysis.md b/docs/vendor-mali-power-management-analysis.md
+new file mode 100644
+index 000000000000..8b78a23da7c7
+--- /dev/null
++++ b/docs/vendor-mali-power-management-analysis.md
+@@ -0,0 +1,511 @@
++# Vendor Mali DKMS Power Management System - Comprehensive Analysis
++
++## 1. Overview
++
++The vendor Mali driver has a sophisticated power management system designed for Gen12 (G720) GPUs. It supports two distinct power control modes:
++
++1. **Firmware-Controlled Power (MCU controls shader power)**
++2. **Host-Controlled Power (`firmware_hctl_core_pwr = true`)**
++
++The mode selection determines who manages shader core power-on/off during job execution.
++
++---
++
++## 2. HOST_POWER Interface (G720 Arch >= 12)
++
++### 2.1 Register Map (0x800+ region)
++
++| Register | Offset | Description |
++|----------|--------|-------------|
++| `PWR_IRQ_RAWSTAT` | 0x800 | Power IRQ raw status |
++| `PWR_IRQ_CLEAR` | 0x804 | Power IRQ clear |
++| `PWR_IRQ_MASK` | 0x808 | Power IRQ mask |
++| `PWR_IRQ_STAT` | 0x80C | Power IRQ status |
++| `PWR_STATUS` | 0x820 | Power domain status (64-bit) |
++| `PWR_COMMAND` | 0x828 | Power domain command |
++| `PWR_CMDARG` | 0x830 | Power command argument |
++
++### 2.2 HOST_POWER Core Presence/Ready Registers
++
++| Register | Offset | Description |
++|----------|--------|-------------|
++| `HOST_POWER_SHADER_PRESENT` | 0xA00 | Shader cores present |
++| `HOST_POWER_SHADER_READY` | 0xA08 | Shader cores ready |
++| `HOST_POWER_SHADER_PWRTRANS` | 0xA10 | Shader power transitioning |
++| `HOST_POWER_SHADER_PWRACTIVE` | 0xA18 | **Shader cores actively executing** |
++
++### 2.3 PWR_STATUS Register Bits (64-bit)
++
++```c
++// ALLOW bits (indicate domain is allowed to be powered)
++PWR_STATUS_ALLOW_L2_SHIFT      = 0    // L2 allowed
++PWR_STATUS_ALLOW_TILER_SHIFT   = 1    // Tiler allowed
++PWR_STATUS_ALLOW_SHADER_SHIFT  = 8    // Shader allowed
++
++// DELEGATED bits (indicate domain control given to MCU)
++PWR_STATUS_DELEGATED_L2_SHIFT      = 16  // L2 delegated to MCU
++PWR_STATUS_DELEGATED_TILER_SHIFT   = 17  // Tiler delegated to MCU
++PWR_STATUS_DELEGATED_SHADER_SHIFT  = 24  // Shader delegated to MCU
++PWR_STATUS_DELEGATED_NEURAL_SHIFT  = 25  // Neural delegated to MCU
++
++// Other status bits
++PWR_STATUS_RETRACT_PENDING_SHIFT   = 43  // Retract operation pending
++```
++
++### 2.4 PWR_COMMAND Values
++
++| Command | Value | Description |
++|---------|-------|-------------|
++| `PWR_COMMAND_NOP` | 0x00 | No operation |
++| `PWR_COMMAND_POWER_UP` | 0x10 | Power up domain |
++| `PWR_COMMAND_POWER_DOWN` | 0x11 | Power down domain |
++| `PWR_COMMAND_DELEGATE` | 0x20 | **Give control to MCU firmware** |
++| `PWR_COMMAND_RETRACT` | 0x21 | **Take control back from MCU** |
++| `PWR_COMMAND_RESET_HARD` | 0x30 | Hard reset |
++| `PWR_COMMAND_RESET_SOFT` | 0x31 | Soft reset |
++| `PWR_COMMAND_INSPECT` | 0xF0 | Inspect domain status |
++
++### 2.5 Power Domain IDs
++
++```c
++PWR_COMMAND_DOMAIN_L2      = 0x0   // L2 cache
++PWR_COMMAND_DOMAIN_TILER   = 0x1   // Tiler
++PWR_COMMAND_DOMAIN_SHADER  = 0x8   // Shader cores
++PWR_COMMAND_DOMAIN_NEURAL  = 0x9   // Neural engine
++PWR_COMMAND_DOMAIN_BASE    = 0xE   // Base
++PWR_COMMAND_DOMAIN_STACK   = 0xF   // Core stack
++```
++
++---
++
++## 3. Power Control Mode Selection
++
++### 3.1 `has_host_pwr_iface` Flag
++
++Set during PM backend init based on hardware feature:
++
++```c
++// mali_kbase_pm_backend.c:167
++kbdev->pm.backend.has_host_pwr_iface =
++    kbase_hw_has_feature(kbdev, KBASE_HW_FEATURE_POWER_CONTROL);
++```
++
++This indicates whether the GPU supports the HOST_POWER interface (arch >= 12).
++
++### 3.2 `firmware_hctl_core_pwr` Flag
++
++**Critical flag determining who controls shader power:**
++
++```c
++// Set during firmware initialization
++kbdev->csf.firmware_hctl_core_pwr = kbase_pm_no_mcu_core_pwroff(kbdev);
++
++// kbase_pm_no_mcu_core_pwroff() definition:
++static inline bool kbase_pm_no_mcu_core_pwroff(struct kbase_device *kbdev) {
++    return kbdev->pm.backend.csf_pm_sched_flags & CSF_DYNAMIC_PM_CORE_KEEP_ON;
++}
++```
++
++**When `firmware_hctl_core_pwr = true`:**
++- Host driver directly controls shader power via registers
++- MCU firmware does NOT manage shader power
++- `GLB_PWROFF_TIMER` set to 0 (disabled)
++- Host must notify MCU of core changes via `kbase_csf_firmware_update_core_attr()`
++
++**When `firmware_hctl_core_pwr = false`:**
++- MCU firmware manages shader power automatically
++- MCU uses `GLB_PWROFF_TIMER` to power off idle shaders
++- Power control DELEGATED to MCU
++
++### 3.3 Power Policy and `CSF_DYNAMIC_PM_CORE_KEEP_ON`
++
++The `always_on` power policy sets this flag:
++
++```c
++// mali_kbase_pm_defs.h:588
++#define ALWAYS_ON_PM_SCHED_FLAGS                                          \
++    (CSF_DYNAMIC_PM_CORE_KEEP_ON | CSF_DYNAMIC_PM_SCHED_IGNORE_IDLE | \
++     CSF_DYNAMIC_PM_SCHED_NO_TICK)
++```
++
++When the `always_on` policy is active -> `firmware_hctl_core_pwr = true` -> host controls shader power.
++
++---
++
++## 4. DELEGATE/RETRACT Mechanism
++
++### 4.1 Delegation to MCU Firmware
++
++```c
++static int delegate_pm_domain_control_to_fw(struct kbase_device *kbdev, u32 pm_domain) {
++    u64 pwr_cmd = PWR_COMMAND_COMMAND_SET(0, PWR_COMMAND_COMMAND_DELEGATE);
++    pwr_cmd = PWR_COMMAND_DOMAIN_SET(pwr_cmd, pm_domain);
++
++    // Send DELEGATE command
++    kbase_reg_write32(kbdev, HOST_POWER_ENUM(PWR_COMMAND), pwr_cmd);
++
++    // Wait for ALLOW bit cleared and DELEGATED bit set
++    kbase_reg_poll64_timeout(kbdev, HOST_POWER_ENUM(PWR_STATUS), val,
++                             !(val & allow_mask) && (val & delegate_mask), ...);
++}
++
++// Delegate all domains (Tiler, Shader, Neural) at once
++static void delegate_pm_domains_control_to_fw(struct kbase_device *kbdev) {
++    delegate_pm_domain_control_to_fw(kbdev, PWR_COMMAND_DOMAIN_TILER);
++    delegate_pm_domain_control_to_fw(kbdev, PWR_COMMAND_DOMAIN_SHADER);
++    if (has_neural_engine)
++        delegate_pm_domain_control_to_fw(kbdev, PWR_COMMAND_DOMAIN_NEURAL);
++}
++```
++
++### 4.2 Retraction from MCU Firmware
++
++```c
++static int retract_pm_domain_control_from_fw(struct kbase_device *kbdev, u32 pm_domain) {
++    u64 pwr_cmd = PWR_COMMAND_COMMAND_SET(0, PWR_COMMAND_COMMAND_RETRACT);
++    pwr_cmd = PWR_COMMAND_DOMAIN_SET(pwr_cmd, pm_domain);
++
++    // Send RETRACT command
++    kbase_reg_write32(kbdev, HOST_POWER_ENUM(PWR_COMMAND), pwr_cmd);
++
++    // Wait for RETRACT_PENDING to clear
++    kbase_reg_poll64_timeout(kbdev, HOST_POWER_ENUM(PWR_STATUS), val,
++                             !PWR_STATUS_RETRACT_PENDING_GET(val), ...);
++}
++```
++
++### 4.3 When Delegation/Retraction Occurs
++
++In `kbase_pm_l2_update_state()`:
++
++```c
++case KBASE_L2_OFF:
++    if (need_tiler_control(kbdev)) {
++        // Host controls power -> RETRACT from MCU
++        if (backend->pwr_cntl_delegated) {
++            retract_pm_domains_control_from_fw(kbdev);
++            backend->pwr_cntl_delegated = false;
++        }
++    } else {
++        // MCU controls power -> DELEGATE to MCU
++        if (has_host_pwr_iface && !backend->pwr_cntl_delegated) {
++            delegate_pm_domains_control_to_fw(kbdev);
++            backend->pwr_cntl_delegated = true;
++        }
++    }
++```
++
++`need_tiler_control()` returns `true` when `kbase_pm_no_mcu_core_pwroff()` is true (host-controlled mode).
++
++---
++
++## 5. MCU State Machine (Host-Controlled Mode)
++
++When `firmware_hctl_core_pwr = true`, the MCU state machine follows this sequence:
++
++```
++KBASE_MCU_OFF
++    |
++KBASE_MCU_PEND_ON_RELOAD
++    |
++KBASE_MCU_ON_GLB_REINIT_PEND
++    | (firmware_hctl_core_pwr = true)
++KBASE_MCU_HCTL_STACK_PEND_ON     <- Host powers on core stacks
++    |
++KBASE_MCU_HCTL_BASE_PEND_ON      <- Host powers on base domains
++    |
++KBASE_MCU_HCTL_SHADERS_PEND_ON   <- Host powers on shader cores
++    |
++KBASE_MCU_HCTL_CORES_NOTIFY_PEND <- Host notifies MCU via update_core_attr()
++    |
++KBASE_MCU_ON_HWCNT_ENABLE
++    |
++KBASE_MCU_ON
++```
++
++**Key Code:**
++
++```c
++case KBASE_MCU_ON_GLB_REINIT_PEND:
++    if (kbase_csf_firmware_global_reinit_complete(kbdev)) {
++        if (kbdev->csf.firmware_hctl_core_pwr) {
++            // Host powers cores directly
++            kbase_pm_invoke(kbdev, KBASE_PM_CORE_SHADER,
++                            backend->shaders_avail, ACTION_PWRON);
++            backend->mcu_state = KBASE_MCU_HCTL_SHADERS_PEND_ON;
++        } else {
++            // MCU handles power automatically
++            backend->mcu_state = KBASE_MCU_ON_HWCNT_ENABLE;
++        }
++    }
++
++case KBASE_MCU_HCTL_SHADERS_PEND_ON:
++    if (hctl_shader_cores_power_up_done(kbdev, shaders_ready, ...)) {
++        // Notify MCU which cores are powered
++        kbase_csf_firmware_update_core_attr(kbdev, false, true, shaders_ready);
++        backend->mcu_state = KBASE_MCU_HCTL_CORES_NOTIFY_PEND;
++    }
++```
++
++---
++
++## 6. CSF Firmware Interface
++
++### 6.1 Global Interface Registers
++
++| Register | Offset | Description |
++|----------|--------|-------------|
++| `GLB_PWROFF_TIMER` | 0x14 | Shader power-off timer |
++| `GLB_ALLOC_EN_LO` | 0x18 | Shader core allocation mask (low 32 bits) |
++| `GLB_ALLOC_EN_HI` | 0x1C | Shader core allocation mask (high 32 bits) |
++| `GLB_PWROFF_TIMER_CONFIG` | 0x88 | Power-off timer configuration |
++
++### 6.2 `GLB_PWROFF_TIMER` Settings
++
++```c
++static void set_shader_poweroff_timer(struct kbase_csf_fw_io *fw_io) {
++    if (kbdev->csf.firmware_hctl_core_pwr) {
++        // Host controls power -> DISABLE timer
++        pwroff_reg = GLB_PWROFF_TIMER_TIMER_SOURCE_SET(
++            DISABLE_GLB_PWROFF_TIMER,  // 0
++            GLB_PWROFF_TIMER_TIMER_SOURCE_SYSTEM_TIMESTAMP);
++    } else {
++        // MCU controls power -> use configured timeout
++        pwroff_reg = kbdev->csf.mcu_core_pwroff_dur_count;
++    }
++
++    kbase_csf_fw_io_global_write(fw_io, GLB_PWROFF_TIMER, pwroff_reg);
++}
++```
++
++**When `GLB_PWROFF_TIMER = 0`:**
++- MCU does NOT automatically power off idle shaders
++- MCU expects host to manage shader power
++
++### 6.3 `enable_endpoints_global()` - Setting Core Allocation Mask
++
++```c
++static void enable_endpoints_global(struct kbase_csf_fw_io *fw_io, u64 shader_core_mask) {
++    // Write the mask of available shader cores to MCU
++    kbase_csf_fw_io_global_write(fw_io, GLB_ALLOC_EN_LO, shader_core_mask & U32_MAX);
++    kbase_csf_fw_io_global_write(fw_io, GLB_ALLOC_EN_HI, shader_core_mask >> 32);
++
++    // Request MCU acknowledge the configuration
++    set_global_request(fw_io, GLB_REQ_CFG_ALLOC_EN_MASK);
++}
++```
++
++This tells MCU which cores are available for job allocation.
++
++### 6.4 `kbase_csf_firmware_update_core_attr()` - Notifying MCU
++
++```c
++void kbase_csf_firmware_update_core_attr(struct kbase_device *kbdev,
++                                         bool update_core_pwroff_timer,
++                                         bool update_core_mask,
++                                         u64 core_mask) {
++    if (update_core_mask)
++        enable_endpoints_global(fw_io, core_mask);
++    if (update_core_pwroff_timer)
++        set_shader_poweroff_timer(fw_io);
++
++    // Ring doorbell to notify MCU
++    kbase_csf_ring_doorbell(kbdev, CSF_KERNEL_DOORBELL_NR);
++}
++```
++
++---
++
++## 7. `hctl_*` Functions (Host Control Helpers)
++
++These functions check power state transitions when host controls power:
++
++| Function | Purpose |
++|----------|---------|
++| `hctl_shader_cores_active()` | Check if shaders are actively executing |
++| `hctl_shader_cores_power_up_done()` | Check shader power-up complete |
++| `hctl_shader_cores_power_down_done()` | Check shader power-down complete |
++| `hctl_cores_power_up_done()` | Generic core power-up check |
++| `hctl_cores_power_down_done()` | Generic core power-down check |
++| `hctl_tiler_power_up_done()` | Check/initiate tiler power-up |
++| `hctl_l2_power_down()` | Initiate L2 power-down |
++| `hctl_neural_engines_active()` | Check neural engine activity |
++
++**Example - `hctl_shader_cores_active()`:**
++
++```c
++static bool hctl_shader_cores_active(struct kbase_device *kbdev, u64 shaders_ready) {
++    u64 shaders_active = kbase_pm_get_active_cores(kbdev, KBASE_PM_CORE_SHADER);
++    bool cores_are_active = (shaders_active != 0);
++
++    // Also check neural engine activity
++    cores_are_active = cores_are_active || hctl_neural_engines_active(kbdev);
++    return cores_are_active;
++}
++```
++
++---
++
++## 8. Sky1-Specific Power Code
++
++### 8.1 Platform Init Sequence
++
++```c
++// mali_kbase_config_sky1.c
++static int kbase_platform_sky1_init(struct kbase_device *kbdev) {
++    err = sky1_gpu_attach_pd(kbdev);  // Attach power domains
++
++    // Read harvesting info from RCSU
++    harvesting_reg_val = sky1_rcsu_reg_read32(kbdev, GPU_RCSU_HWREG_STRAP_PIN1);
++    // ... configure based on harvesting
++}
++```
++
++### 8.2 Power-On Sequence
++
++```c
++// mali_kbase_runtime_pm.c
++/*
++ * sky1 GPU power probe sequence:
++ * Power domain on->clock enable->IP Reset assert->IP Reset de-assert
++ */
++static int pm_callback_power_on(struct kbase_device *kbdev) {
++    enable_gpu_power_control(kbdev);
++
++    if (need_reset_flag) {
++        execute_gpu_reset(kbdev);                    // Assert/deassert reset
++        gpu_qchannel_clock_gating_switch(kbdev, true); // Enable Q-channel
++        need_reset_flag = false;
++    }
++}
++
++static void execute_gpu_reset(struct kbase_device *kbdev) {
++    reset_control_assert(kbdev->gpu_reset);
++    usleep_range(10, 20);
++    reset_control_deassert(kbdev->gpu_reset);
++}
++```
++
++### 8.3 RCSU Registers
++
++The RCSU (Reset and Clock Sequencing Unit) provides platform-specific control:
++
++```c
++enum gpu_rcsu_hwreg {
++    GPU_RCSU_HWREG_PGCTRL,     // Power gate control
++    GPU_RCSU_HWREG_STRAP_PIN1, // Harvesting/strap configuration
++    GPU_RCSU_HWREG_MAX
++};
++
++#define GPU_RCSU_QCHANNEL_CLOCK_GATE_ENABLE (1 << 0)
++
++// Enable Q-channel clock gating
++static int gpu_qchannel_clock_gating_switch(struct kbase_device *kbdev, bool enable) {
++    reg = sky1_rcsu_reg_read32(kbdev, GPU_RCSU_HWREG_PGCTRL);
++    reg = enable ? (reg | GPU_RCSU_QCHANNEL_CLOCK_GATE_ENABLE) :
++                   (reg & ~GPU_RCSU_QCHANNEL_CLOCK_GATE_ENABLE);
++    sky1_rcsu_reg_write32(kbdev, GPU_RCSU_HWREG_PGCTRL, reg);
++}
++```
++
++### 8.4 Sky1 Power Model
++
++Sky1 has a custom power model for thermal management:
++
++```c
++bool enable_sky1_power_model = true;
++module_param(enable_sky1_power_model, bool, 0660);
++
++// Timer-based power monitoring
++static enum hrtimer_restart sky1_power_timer_callback(struct hrtimer *timer) {
++    if (enable_sky1_power_model) {
++        queue_work(kbdev->sky1_power_wq, &kbdev->sky1_power_work);
++    }
++    // Re-arm timer every 100ms
++    hrtimer_forward_now(timer, ms_to_ktime(100));
++    return HRTIMER_RESTART;
++}
++```
++
++---
++
++## 9. Power Flow Summary
++
++### 9.1 Firmware-Controlled Mode (`firmware_hctl_core_pwr = false`)
++
++```
++1. L2 power-on -> DELEGATE(TILER, SHADER, NEURAL) to MCU
++2. MCU boots, receives GLB_ALLOC_EN with available cores
++3. MCU receives GLB_PWROFF_TIMER with timeout value
++4. During job execution:
++   - MCU powers cores via HOST_POWER interface
++   - MCU sets SHADER_PWRACTIVE when cores execute
++   - MCU powers off idle cores after timeout
++5. L2 power-off -> RETRACT(TILER, SHADER, NEURAL) from MCU
++```
++
++### 9.2 Host-Controlled Mode (`firmware_hctl_core_pwr = true`)
++
++```
++1. L2 power-on -> RETRACT (ensure host has control)
++2. Host powers shaders via SHADER_PWRON register
++3. Host waits for SHADER_READY
++4. Host notifies MCU via kbase_csf_firmware_update_core_attr()
++   - GLB_ALLOC_EN set to powered cores
++   - GLB_PWROFF_TIMER set to 0 (disabled)
++5. MCU boots, uses already-powered cores
++6. MCU does NOT use HOST_POWER for job activation
++7. During job execution:
++   - Cores already powered by host
++   - MCU just dispatches jobs
++8. L2 power-off -> Host powers down shaders
++```
++
++---
++
++## 10. Key Implications for Sky1/Panthor
++
++### 10.1 Why Host-Controlled Mode Exists
++
++The `firmware_hctl_core_pwr` mode exists because:
++1. Some platforms may not have working HOST_POWER interface
++2. `always_on` policy benefits from keeping cores powered
++3. Debugging/testing without MCU power management
++
++### 10.2 Sky1 HOST_POWER Status
++
++On Sky1, HOST_POWER registers return 0x0:
++- `PWR_STATUS` = 0x0 (no domains allowed/delegated)
++- `HOST_POWER_SHADER_PWRACTIVE` = 0x0 (no active cores via HOST_POWER)
++
++This explains why:
++1. DELEGATE command times out (no status bits change)
++2. RETRACT command times out (no status bits change)
++3. Legacy `SHADER_PWRON` works (0x180 register)
++4. MCU can't activate cores for jobs (tries HOST_POWER internally)
++
++### 10.3 Vendor Driver Workaround
++
++The vendor driver likely uses `firmware_hctl_core_pwr = true` on Sky1:
++1. Uses `always_on` policy or sets `mcu_shader_pwroff_timeout = 0`
++2. Host powers cores via legacy registers
++3. Sets `GLB_PWROFF_TIMER = 0` to disable MCU power management
++4. Notifies MCU of powered cores via `GLB_ALLOC_EN`
++5. MCU dispatches jobs to pre-powered cores
++
++---
++
++## 11. Files Reference
++
++| File | Purpose |
++|------|---------|
++| `backend/gpu/mali_kbase_pm_driver.c` | Main power state machines |
++| `backend/gpu/mali_kbase_pm_defs.h` | Power management definitions |
++| `backend/gpu/mali_kbase_pm_backend.c` | PM backend initialization |
++| `backend/gpu/mali_kbase_pm_internal.h` | PM internal functions |
++| `backend/gpu/mali_kbase_pm_always_on.c` | always_on policy |
++| `csf/mali_kbase_csf_firmware.c` | CSF firmware interface |
++| `csf/mali_kbase_csf_registers.h` | CSF register definitions |
++| `hw_access/regmap/mali_kbase_regmap_csf_macros.h` | Register macros |
++| `platform/sky1/mali_kbase_runtime_pm.c` | Sky1 runtime PM |
++| `platform/sky1/mali_kbase_config_sky1.c` | Sky1 platform config |
 diff --git a/drivers/gpu/drm/panthor/panthor_device.c b/drivers/gpu/drm/panthor/panthor_device.c
 index 27bcba8a1ba2..b867009816b5 100644
 --- a/drivers/gpu/drm/panthor/panthor_device.c

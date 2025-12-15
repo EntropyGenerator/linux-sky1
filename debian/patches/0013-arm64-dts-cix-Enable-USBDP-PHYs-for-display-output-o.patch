@@ -1,7 +1,7 @@
-From 109b0792962d2dea44d9a4b81f478bfd55fb0581 Mon Sep 17 00:00:00 2001
+From bad39280122bddaa6ea9b0dd324b9dc9c7c07b26 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sun, 30 Nov 2025 19:54:16 +0800
-Subject: [PATCH 13/53] arm64: dts: cix: Enable USBDP PHYs for display output
+Subject: [PATCH 13/55] arm64: dts: cix: Enable USBDP PHYs for display output
  on Orion O6
 
 Enable the USBDP PHYs needed for display output:
@@ -13,7 +13,7 @@ The HDMI output uses the DP TX connected to usbc_phy1, which must be
 configured in pure DP mode (not USB/DP combo) since it's a fixed
 HDMI connector, not a Type-C port.
 
-Also add build-install.sh helper script and update .gitignore.
+Also add build-install.sh helper script.
 ---
  arch/arm64/boot/dts/cix/sky1-orion-o6.dts |  7 ++-
  scripts/build-install.sh                  | 72 +++++++++++++++++++++++

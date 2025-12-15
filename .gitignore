@@ -1,0 +1,30 @@
+# Kernel source tarballs (download during build)
+linux-*.tar.xz
+linux-*.tar.gz
+
+# Extracted kernel source
+linux-6.*/
+
+# Debian build artifacts
+debian/linux-*-sky1/
+debian/.debhelper/
+debian/debhelper-build-stamp
+debian/files
+debian/*.substvars
+debian/*.debhelper
+
+# Build output (parent directory)
+/*.deb
+/*.buildinfo
+/*.changes
+
+# Editor/IDE
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db

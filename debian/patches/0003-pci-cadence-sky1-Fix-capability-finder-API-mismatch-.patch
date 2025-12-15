@@ -1,7 +1,7 @@
-From 4a3aadd4150dc3ac0760214e34d313d64ff263f1 Mon Sep 17 00:00:00 2001
+From b230d50ed3a21e932cece4f976d20e28c967ec00 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sat, 29 Nov 2025 11:09:28 +0800
-Subject: [PATCH 03/53] pci: cadence: sky1: Fix capability finder API mismatch
+Subject: [PATCH 03/55] pci: cadence: sky1: Fix capability finder API mismatch
  with mainline
 
 The vendor 6.6 kernel uses cdns_pcie_find_capability(void __iomem *addr, u8 cap)

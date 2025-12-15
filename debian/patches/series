@@ -51,3 +51,5 @@
 0051-drm-panthor-Add-CIX-Sky1-GPU-support.patch
 0052-arm64-dts-cix-Update-GPU-node-to-match-vendor-Pantho.patch
 0053-drm-panthor-Add-Sky1-GPU-power-on-reset-sequence.patch
+0054-PCI-cadence-sky1-Disable-portdrv-AER-PME-to-prevent-.patch
+0055-wifi-rtw89-Add-scan-offload-robustness-for-hotplug-s.patch

@@ -1,7 +1,7 @@
-From 7d40c75903d7ce1ee79bec94bf2695ed7bbd1ed2 Mon Sep 17 00:00:00 2001
+From 33a3c69b09e4109d92f00bc53c50b54bbcf14aae Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sat, 29 Nov 2025 18:29:04 +0800
-Subject: [PATCH 06/53] arm64: dts: cix: Enable 5GBE PCIe controllers on Orion
+Subject: [PATCH 06/55] arm64: dts: cix: Enable 5GBE PCIe controllers on Orion
  O6
 
 Enable both RTL8126 5GbE ethernet controllers (pcie_x1_0_rc and

@@ -1,7 +1,7 @@
-From 4d72f735c7b25a672bf033f2aa1794d6e671f273 Mon Sep 17 00:00:00 2001
+From c1643b0fb6f11b4ff34d9419fb003926e6edf5c7 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sun, 30 Nov 2025 19:51:46 +0800
-Subject: [PATCH 12/53] drm: cix: Add CIX Sky1 display drivers (linlon-dp,
+Subject: [PATCH 12/55] drm: cix: Add CIX Sky1 display drivers (linlon-dp,
  trilin-dpsub)
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8

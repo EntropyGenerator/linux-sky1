@@ -1,7 +1,7 @@
-From 80d3074d7f55005bb5890666558bd91e9917158a Mon Sep 17 00:00:00 2001
+From b5eaeea2030c686e34998b15872bd340b8170337 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sat, 6 Dec 2025 15:29:19 +0800
-Subject: [PATCH 32/53] remoteproc: cix_dsp_rproc: Fix build for mainline 6.18
+Subject: [PATCH 32/55] remoteproc: cix_dsp_rproc: Fix build for mainline 6.18
 
 Two fixes for mainline compatibility:
 

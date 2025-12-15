@@ -1,0 +1,78 @@
+From fa78f0011ab1e328ac24f9ff6bad23ea587b831f Mon Sep 17 00:00:00 2001
+From: Entrpi <entrpi@proton.me>
+Date: Mon, 15 Dec 2025 09:17:37 +0800
+Subject: [PATCH 55/55] wifi: rtw89: Add scan offload robustness for hotplug
+ scenarios
+
+During rapid driver rebind (PCIe hotplug), userspace may trigger
+WiFi scans before the driver is fully initialized, or firmware
+may need extra time to be ready for scan commands.
+
+Add two improvements:
+
+1. Check RTW89_FLAG_RUNNING before sending scan H2C commands.
+   Return -EBUSY if driver isn't fully started, allowing mac80211
+   to retry later.
+
+2. Retry scan start commands up to 3 times with increasing backoff
+   (100ms, 200ms, 300ms) on timeout. Only retry scan start, not
+   abort - abort failures during teardown are expected and should
+   fail fast.
+
+These changes improve reliability during hotplug stress testing
+without affecting normal operation.
+---
+ drivers/net/wireless/realtek/rtw89/fw.c | 29 +++++++++++++++++++++++++
+ 1 file changed, 29 insertions(+)
+
+diff --git a/drivers/net/wireless/realtek/rtw89/fw.c b/drivers/net/wireless/realtek/rtw89/fw.c
+index 080c4f8a655a..cc9869875599 100644
+--- a/drivers/net/wireless/realtek/rtw89/fw.c
++++ b/drivers/net/wireless/realtek/rtw89/fw.c
+@@ -8210,6 +8210,20 @@ int rtw89_hw_scan_offload(struct rtw89_dev *rtwdev,
+ 	if (!rtwvif_link)
+ 		return -EINVAL;
+ 
++	/*
++	 * Check driver/firmware readiness before sending H2C commands.
++	 * During rapid driver rebind (hotplug), userspace may trigger
++	 * scans before driver is fully initialized, causing timeouts.
++	 * RTW89_FLAG_RUNNING is set at the end of rtw89_core_start()
++	 * after firmware init and RF calibration complete.
++	 * Return -EBUSY so mac80211 can retry later.
++	 */
++	if (!test_bit(RTW89_FLAG_RUNNING, rtwdev->flags)) {
++		rtw89_debug(rtwdev, RTW89_DBG_FW,
++			    "scan offload rejected: driver not running\n");
++		return -EBUSY;
++	}
++
+ 	connected = rtwdev->scan_info.connected;
+ 	opt.enable = enable;
+ 	opt.target_ch_mode = connected;
+@@ -8233,7 +8247,22 @@ int rtw89_hw_scan_offload(struct rtw89_dev *rtwdev,
+ 		opt.opch_end = connected ? 0 : RTW89_CHAN_INVALID;
+ 	}
+ 
++	/*
++	 * During rapid driver rebind (hotplug), firmware may need extra time
++	 * to be ready for scan commands. Retry with backoff on timeout.
++	 * Only retry scan start - abort failures during teardown are expected
++	 * and non-fatal, so fail fast rather than delaying shutdown.
++	 */
+ 	ret = rtw89_mac_scan_offload(rtwdev, &opt, rtwvif_link, false);
++	if (ret == -ETIMEDOUT && enable) {
++		int retry;
++
++		for (retry = 1; retry <= 3 && ret == -ETIMEDOUT; retry++) {
++			rtw89_info(rtwdev, "scan offload timeout, retry %d/3\n", retry);
++			msleep(100 * retry);
++			ret = rtw89_mac_scan_offload(rtwdev, &opt, rtwvif_link, false);
++		}
++	}
+ 
+ out:
+ 	return ret;
+-- 
+2.51.0
+

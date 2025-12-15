@@ -1,7 +1,7 @@
-From 73d46cd021b1ab7e85977e8576fedbab4dffde59 Mon Sep 17 00:00:00 2001
+From 2882bffa4c5c3aa5f9182c5915aa5024223fb252 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sat, 29 Nov 2025 19:50:09 +0800
-Subject: [PATCH 07/53] pci: cadence: sky1: Use vendor-style PCI resource
+Subject: [PATCH 07/55] pci: cadence: sky1: Use vendor-style PCI resource
  assignment
 
 Add custom sky1_pci_host_probe() and sky1_cdns_pcie_host_setup()

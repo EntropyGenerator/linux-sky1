@@ -4,9 +4,11 @@ export DH_VERBOSE = 1
 export ARCH = arm64
 export CROSS_COMPILE =
 
-KERNEL_VERSION = 6.18.0
+KERNEL_VERSION = 6.18.1
 LOCALVERSION = -sky1
 FULL_VERSION = $(KERNEL_VERSION)$(LOCALVERSION)
+# Package names use major.minor only
+PKG_VERSION = 6.18-sky1
 
 # Source directory
 KSRC = $(CURDIR)/linux-$(KERNEL_VERSION)
@@ -34,23 +36,23 @@ override_dh_auto_build:
 override_dh_auto_install:
 	# Install modules
 	$(MAKE) -C $(KSRC) ARCH=$(ARCH) \
-		INSTALL_MOD_PATH=$(CURDIR)/debian/linux-image-$(FULL_VERSION) \
+		INSTALL_MOD_PATH=$(CURDIR)/debian/linux-image-$(PKG_VERSION) \
 		modules_install
 	# Install kernel image
 	install -D -m 644 $(KSRC)/arch/arm64/boot/Image \
-		$(CURDIR)/debian/linux-image-$(FULL_VERSION)/boot/vmlinuz-$(FULL_VERSION)
+		$(CURDIR)/debian/linux-image-$(PKG_VERSION)/boot/vmlinuz-$(FULL_VERSION)
 	# Install System.map
 	install -D -m 644 $(KSRC)/System.map \
-		$(CURDIR)/debian/linux-image-$(FULL_VERSION)/boot/System.map-$(FULL_VERSION)
+		$(CURDIR)/debian/linux-image-$(PKG_VERSION)/boot/System.map-$(FULL_VERSION)
 	# Install config
 	install -D -m 644 $(KSRC)/.config \
-		$(CURDIR)/debian/linux-image-$(FULL_VERSION)/boot/config-$(FULL_VERSION)
+		$(CURDIR)/debian/linux-image-$(PKG_VERSION)/boot/config-$(FULL_VERSION)
 	# Install DTBs
 	install -D -m 644 $(KSRC)/arch/arm64/boot/dts/cix/sky1-orion-o6.dtb \
-		$(CURDIR)/debian/linux-dtbs-$(FULL_VERSION)/boot/dtbs/$(FULL_VERSION)/cix/sky1-orion-o6.dtb
+		$(CURDIR)/debian/linux-dtbs-$(PKG_VERSION)/boot/dtbs/$(FULL_VERSION)/cix/sky1-orion-o6.dtb
 	# Install headers
 	$(MAKE) -C $(KSRC) ARCH=$(ARCH) \
-		INSTALL_HDR_PATH=$(CURDIR)/debian/linux-headers-$(FULL_VERSION)/usr \
+		INSTALL_HDR_PATH=$(CURDIR)/debian/linux-headers-$(PKG_VERSION)/usr \
 		headers_install
 
 override_dh_auto_clean:

@@ -1,7 +1,7 @@
-From 809595f487bd11801734a4e24471a40e7de6cac6 Mon Sep 17 00:00:00 2001
+From d127a46643cc59b4e22edfe1bab913e5300a0315 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Wed, 10 Dec 2025 19:53:03 +0800
-Subject: [PATCH 50/53] firmware: cix: Add DSP IPC driver and SOF platform
+Subject: [PATCH 50/55] firmware: cix: Add DSP IPC driver and SOF platform
  support for Sky1
 
 Port CIX DSP mailbox driver and Sound Open Firmware (SOF) platform

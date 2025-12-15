@@ -1,7 +1,7 @@
-From 848a5b720f5619b7343fa226a2f3a1c10dd407a0 Mon Sep 17 00:00:00 2001
+From 13650f04c06d6ca8c2b55eed76b92d52785ade68 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Fri, 5 Dec 2025 10:52:58 +0800
-Subject: [PATCH 41/53] Enable Cix Sky1 PDC, Thermal, and Device Tree nodes
+Subject: [PATCH 41/55] Enable Cix Sky1 PDC, Thermal, and Device Tree nodes
 
 This commit integrates critical vendor drivers required for power management,
 thermal safety, and proper interrupt routing on the Radxa Orion O6 (Cix Sky1 SoC).

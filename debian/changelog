@@ -1,7 +1,15 @@
+linux-sky1 (6.18.1-sky1.1) unstable; urgency=medium
+
+  * Rebase to Linux 6.18.1 stable with 55 Sky1 patches
+  * PCIe: Fix portdrv AER/PME IRQ conflicts during hotplug
+  * WiFi: Add rtw89 scan offload robustness for hotplug
+
+ -- Entrpi <entrpi@proton.me>  Sun, 15 Dec 2025 10:00:00 +0800
+
 linux-sky1 (6.18.0-sky1.1) unstable; urgency=medium
 
   * Initial release for CIX Sky1 SoC
-  * Based on Linux 6.18 LTS with 56 Sky1 patches
+  * Based on Linux 6.18 LTS with 53 Sky1 patches
   * Panthor GPU support (Mali-G720-Immortalis)
   * Display: linlon-dp, trilin-dpsub drivers
   * PCIe: Cadence controller with MSI-X support
