@@ -86,6 +86,10 @@ sudo apt update
 sudo apt install linux-image-6.18-sky1 linux-headers-6.18-sky1 sky1-firmware
 ```
 
+## Documentation
+
+- [Kernel Configuration Guide](debian/config/README.md) - Essential vs optional configs for Sky1
+
 ## License
 
 - Kernel patches: GPL-2.0 (same as Linux kernel)
