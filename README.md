@@ -1,13 +1,25 @@
 # linux-sky1
 
-Linux kernel packages for CIX Sky1 SoC (Radxa Orion O6 and compatible boards).
+Linux kernel patches and configuration for CIX Sky1 SoC (Radxa Orion O6 and compatible boards).
 
 ## Overview
 
-This repository contains:
-- 58 patches on top of Linux 6.18.2 for CIX Sky1 SoC support
-- Debian packaging to build kernel .deb packages
-- Kernel configuration for arm64
+This repository contains the Sky1 kernel patch set:
+- **58 patches** on top of Linux 6.18.x for CIX Sky1 SoC support
+- **Kernel configuration** for arm64
+
+## Repository Structure
+
+```
+linux-sky1/
+├── patches/           # Git-formatted kernel patches
+│   ├── 0001-*.patch
+│   └── ...
+├── config/
+│   ├── config.sky1    # Production kernel config
+│   └── README.md      # Config documentation
+└── CHANGELOG.md       # Patch set version history
+```
 
 ## Supported Hardware
 
@@ -16,47 +28,29 @@ This repository contains:
 - **GPU**: Mali-G720-Immortalis (via Panthor driver)
 - **Display**: DisplayPort via linlon-dp/trilin-dpsub
 
-## Packages
+## Using These Patches
 
-| Package | Description |
-|---------|-------------|
-| `linux-image-6.18-sky1` | Kernel image and modules |
-| `linux-headers-6.18-sky1` | Headers for DKMS module builds |
-| `linux-dtbs-6.18-sky1` | Device tree blobs |
-
-## Building
-
-### Prerequisites
+### Apply to Kernel Source
 
 ```bash
-sudo apt install build-essential bc bison flex libelf-dev libssl-dev
-```
-
-### Build Packages
-
-```bash
-# Download kernel source
+# Download kernel
 wget https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.18.2.tar.xz
-
-# Build
-dpkg-buildpackage -us -uc -b
-```
-
-### Quick Local Build (without packaging)
-
-```bash
-# Clone with patches applied
-git clone --depth=1 https://github.com/Sky1-Linux/linux-sky1.git
-cd linux-sky1
-
-# Extract and patch
 tar xf linux-6.18.2.tar.xz
 cd linux-6.18.2
-for p in ../debian/patches/*.patch; do patch -p1 < "$p"; done
-cp ../debian/config/arm64/config .config
 
-# Build
+# Apply patches
+for p in /path/to/linux-sky1/patches/*.patch; do
+    patch -p1 < "$p"
+done
+
+# Use config
+cp /path/to/linux-sky1/config/config.sky1 .config
 make ARCH=arm64 olddefconfig
+```
+
+### Build Kernel
+
+```bash
 make ARCH=arm64 -j$(nproc) Image modules dtbs
 ```
 
@@ -70,32 +64,36 @@ make ARCH=arm64 -j$(nproc) Image modules dtbs
 | USB | 0014-0017 | CDNSP, RTS5453 Type-C PD |
 | GPU | 0018-0021, 0043, 0051-0053 | Panthor Sky1 support |
 | Audio | 0022-0040 | HDA, DMA-350, DSP |
-| Misc | 0041-0042, 0044-0050, 0055 | PDC, hwspinlock, eFuse, SoC info, WiFi |
+| Misc | 0041-0042, 0044-0050, 0055-0058 | PDC, hwspinlock, eFuse, SoC info, cpufreq, SMMU |
 
-## Installation
+## Installing Pre-built Packages
+
+Pre-built kernel packages are available from the Sky1 Linux apt repository:
 
 ```bash
 # Add repository key
 wget -qO- https://sky1-linux.github.io/apt/key.gpg | sudo tee /usr/share/keyrings/sky1-linux.asc > /dev/null
 
 # Add repository
-echo "deb [signed-by=/usr/share/keyrings/sky1-linux.asc] https://sky1-linux.github.io/apt sid main non-free-firmware" | sudo tee /etc/apt/sources.list.d/sky1-linux.list
+echo "deb [signed-by=/usr/share/keyrings/sky1-linux.asc] https://sky1-linux.github.io/apt sid main" | \
+    sudo tee /etc/apt/sources.list.d/sky1-linux.list
 
-# Install
+# Install kernel
 sudo apt update
-sudo apt install linux-image-6.18-sky1 linux-headers-6.18-sky1 sky1-firmware
+sudo apt install linux-image-6.18.2-sky1 linux-headers-6.18.2-sky1 sky1-firmware
 ```
 
 ## Documentation
 
-- [Kernel Configuration Guide](debian/config/README.md) - Essential vs optional configs for Sky1
+- [Kernel Configuration Guide](config/README.md) - Essential vs optional configs for Sky1
+
+## Related Repositories
+
+- [sky1-linux-build](https://github.com/Sky1-Linux/sky1-linux-build) - Build tooling for kernel packages
+- [apt](https://github.com/Sky1-Linux/apt) - APT repository
+- [sky1-firmware](https://github.com/Sky1-Linux/sky1-firmware) - Firmware packages
+- [sky1-drivers-dkms](https://github.com/Sky1-Linux/sky1-drivers-dkms) - DKMS drivers (VPU, NPU, 5GbE)
 
 ## License
 
 - Kernel patches: GPL-2.0 (same as Linux kernel)
-- Packaging: GPL-2.0
-
-## Links
-
-- [APT Repository](https://github.com/Sky1-Linux/apt)
-- [Issue Tracker](https://github.com/Sky1-Linux/linux-sky1/issues)
