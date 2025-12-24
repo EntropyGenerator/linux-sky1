@@ -1,0 +1,104 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Entrpi <entrpi@proton.me>
+Date: Wed, 24 Dec 2025 16:00:26 +1100
+Subject: [PATCH] pci: cadence: sky1: Enable I/O and prefetchable memory
+ windows
+
+CIX Sky1 uses a different RC BAR Configuration register layout than
+standard Cadence IP. The register is at offset 0x4c14 (vs Cadence
+0x1300) with different bit positions:
+
+  CIX Sky1:                    Cadence:
+  Bit 20: PRMBLE (pref mem)    Bit 17: PREFETCH_MEM_ENABLE
+  Bit 21: PRMBLSI (64-bit)     Bit 18: PREFETCH_MEM_64BITS
+  Bit 22: IOBLE (I/O enable)   Bit 19: IO_ENABLE
+  Bit 23: IOBLSI (32-bit)      Bit 20: IO_32BITS
+
+Without setting these bits, the Type 1 config space I/O Base/Limit
+registers (offset 0x1C) are hardwired to zero, causing the kernel's
+I/O window probe to fail with "bridge window [??? ...]: can't assign".
+
+Add sky1_pcie_init_rc_bar_cfg() to write the correct CIX bit pattern
+during controller initialization, enabling proper I/O BAR assignment
+for devices like RTL8852BE WiFi and RTL8126 5GbE NICs.
+---
+ drivers/pci/controller/cadence/pci-sky1.c | 54 +++++++++++++++++++++++
+ 1 file changed, 54 insertions(+)
+
+diff --git a/drivers/pci/controller/cadence/pci-sky1.c b/drivers/pci/controller/cadence/pci-sky1.c
+index 99e847b283bf..7512a7b92354 100644
+--- a/drivers/pci/controller/cadence/pci-sky1.c
++++ b/drivers/pci/controller/cadence/pci-sky1.c
+@@ -32,6 +32,27 @@
+ #define CDNS_PCIE_IP_REG_BANK_BASE		0x1000
+ #define CDNS_PCIE_IP_AXI_SLAVE_BASE		0x9000
+ 
++/*
++ * Sky1 RC BAR Configuration Register (i_rp_bar_cfg_reg).
++ *
++ * On standard Cadence IP, this is at CDNS_PCIE_LM_BASE + 0x0300 = 0x1300.
++ * On CIX Sky1, it's at 0x4c14 (in the ip_cfg_ctrl_reg_bank).
++ *
++ * This register controls whether Type 1 config space I/O Base/Limit
++ * registers (offset 0x1C) are writable or hardwired to zero.
++ *
++ * CIX Sky1 bit layout (different from Cadence!):
++ * Bit 20: PRMBLE  - Enable Prefetchable Memory Base/Limit in Type 1 config
++ * Bit 21: PRMBLSI - Prefetchable Memory width (0=32-bit, 1=64-bit)
++ * Bit 22: IOBLE   - Enable I/O Base/Limit in Type 1 config
++ * Bit 23: IOBLSI  - I/O width (0=16-bit, 1=32-bit)
++ */
++#define SKY1_RC_BAR_CFG			0x4c14
++#define SKY1_RC_BAR_CFG_PRMBLE		BIT(20)	/* Prefetch MEM enable */
++#define SKY1_RC_BAR_CFG_PRMBLSI		BIT(21)	/* Prefetch MEM 64-bit */
++#define SKY1_RC_BAR_CFG_IOBLE		BIT(22)	/* I/O enable */
++#define SKY1_RC_BAR_CFG_IOBLSI		BIT(23)	/* I/O 32-bit */
++
+ /* Message routing and codes (CIX extensions) */
+ #define MSG_ROUTING_BCAST	3
+ #define MSG_CODE_PME_TURN_OFF	0x19
+@@ -1785,11 +1806,44 @@ static void sky1_pcie_set_l0s_disable(struct sky1_pcie *pcie)
+ 	sky1_pcie_ctrl_writel_reg(pcie, offset + PCI_EXP_LNKCAP, reg);
+ }
+ 
++/*
++ * Initialize RC BAR configuration for I/O window support.
++ *
++ * The Cadence common code (cdns_pcie_host_init_root_port) writes to
++ * CDNS_PCIE_LM_RC_BAR_CFG at offset 0x1300, but CIX Sky1 has this
++ * register at offset 0x4c14. Write to the correct address here.
++ *
++ * Without this, the Type 1 config space I/O Base/Limit registers
++ * (offset 0x1C) are hardwired to zero, and the kernel's I/O window
++ * probe fails.
++ */
++static void sky1_pcie_init_rc_bar_cfg(struct sky1_pcie *pcie)
++{
++	u32 value;
++
++	/*
++	 * Enable Type 1 config space base/limit registers.
++	 * CIX Sky1 uses different bit positions than Cadence!
++	 * - Enable prefetchable memory base/limit, 64-bit
++	 * - Enable I/O base/limit, 32-bit
++	 */
++	value = SKY1_RC_BAR_CFG_PRMBLE |	/* Prefetch MEM enable */
++		SKY1_RC_BAR_CFG_PRMBLSI |	/* Prefetch MEM 64-bit */
++		SKY1_RC_BAR_CFG_IOBLE |		/* I/O enable */
++		SKY1_RC_BAR_CFG_IOBLSI;		/* I/O 32-bit */
++
++	writel(value, pcie->reg_base + SKY1_RC_BAR_CFG);
++}
++
+ static void sky1_pcie_init(struct sky1_pcie *pcie)
+ {
+ 	struct device *dev = pcie->dev;
+ 
+ 	dev_dbg(dev, "%s, %i\n", __func__, __LINE__);
++
++	/* Initialize RC BAR config for I/O window support (CIX-specific) */
++	sky1_pcie_init_rc_bar_cfg(pcie);
++
+ 	sky1_pcie_set_devctrl(pcie);
+ 	sky1_pcie_set_l0s_disable(pcie);
+ 

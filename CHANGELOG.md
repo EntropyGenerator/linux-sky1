@@ -2,6 +2,18 @@
 
 All notable changes to the Sky1 kernel patch set.
 
+## [6.18.2-2] - 2025-12-24
+
+### Fixed
+- PCIe: Enable I/O and prefetchable memory windows in RC BAR config
+- Fixes "bridge window [??? ...]: can't assign" errors for I/O BARs
+- Uses correct CIX Sky1 bit positions (20-23) vs Cadence standard (17-20)
+
+### Added
+- DTS: CPU cache topology (L2/L3 hierarchy)
+- DTS: USB3 LPM (Link Power Management) support
+- perf: ARM SPE heterogeneous CPU support (A720+A520)
+
 ## [6.18.2-1] - 2025-12-22
 
 ### Changed
