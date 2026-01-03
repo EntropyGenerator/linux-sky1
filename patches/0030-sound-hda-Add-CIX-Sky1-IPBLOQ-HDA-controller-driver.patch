@@ -1,7 +1,7 @@
-From 17f188356a7208983d4c26322217e136dcb0f00c Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sat, 6 Dec 2025 13:27:02 +0800
-Subject: [PATCH 30/70] sound: hda: Add CIX Sky1 IPBLOQ HDA controller driver
+Subject: [PATCH] sound: hda: Add CIX Sky1 IPBLOQ HDA controller driver
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
@@ -1035,6 +1035,3 @@ index 0000000000000..df1facafc75a3
 +MODULE_LICENSE("GPL");
 +MODULE_DESCRIPTION("CIX IPBLOQ HDA bus driver");
 +MODULE_AUTHOR("Joakim Zhang <joakim.zhang@cixtech.com>");
--- 
-2.51.0
-

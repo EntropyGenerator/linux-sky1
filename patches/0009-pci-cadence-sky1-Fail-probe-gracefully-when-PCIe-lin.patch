@@ -1,8 +1,8 @@
-From 628b1b324eeff1a509bf288745ae076a3ac73103 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sun, 30 Nov 2025 00:51:17 +0800
-Subject: [PATCH 09/70] pci: cadence: sky1: Fail probe gracefully when PCIe
- link is down
+Subject: [PATCH] pci: cadence: sky1: Fail probe gracefully when PCIe link is
+ down
 
 Mainline's cdns_pcie_host_link_setup() returns 0 even when the PCIe
 link doesn't come up (e.g., empty slot). This differs from vendor
@@ -51,6 +51,3 @@ index 24a301d17e8d6..0a9c9714bd5f0 100644
  	for (bar = RP_BAR0; bar <= RP_NO_BAR; bar++)
  		rc->avail_ib_bar[bar] = true;
  
--- 
-2.51.0
-

@@ -1,8 +1,8 @@
-From 42551fbb1d71f0fb5c6b9b17a3ecde8ff1a46c04 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Fri, 19 Dec 2025 22:51:33 +1100
-Subject: [PATCH 58/70] arm64: cix: change core Sky1 Kconfig entries from
- tristate to bool
+Subject: [PATCH] arm64: cix: change core Sky1 Kconfig entries from tristate to
+ bool
 
 Core SoC infrastructure drivers must be built-in and cannot be modules:
 - CIX_MBOX (mailbox for SCMI)
@@ -142,6 +142,3 @@ index 3fdc7a0130ed6..8bc1af280b77d 100644
  	depends on ARCH_CIX || COMPILE_TEST
  	default ARCH_CIX
  	help
--- 
-2.51.0
-

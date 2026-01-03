@@ -2,6 +2,14 @@
 
 All notable changes to the Sky1 kernel patch set.
 
+## [6.18.3-1] - 2026-01-03
+
+### Changed
+- Rebased to Linux 6.18.3 stable
+
+### Fixed
+- config: Disable DRM_SIMPLEDRM to fix KDE Plasma (simpledrm conflicted with linlon_dp)
+
 ## [6.18.2-3] - 2026-01-03
 
 ### Added

@@ -1,8 +1,7 @@
-From c28cfd50a90414319eafd24e40ef096f27198358 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sun, 7 Dec 2025 22:48:49 +0800
-Subject: [PATCH 39/70] rpmsg: virtio: Add CIX DSP quirk for bidirectional TX
- vring
+Subject: [PATCH] rpmsg: virtio: Add CIX DSP quirk for bidirectional TX vring
 
 CIX Sky1 HiFi5 DSP uses rpmsg-lite firmware which operates differently
 from standard virtio rpmsg:
@@ -238,6 +237,3 @@ index ad67bba2721cd..4ca980dfc1bdd 100644
  	dev_info(&vdev->dev, "rpmsg host is online\n");
  
  	return 0;
--- 
-2.51.0
-

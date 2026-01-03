@@ -1,7 +1,7 @@
-From 82f5061bfd166f3de6dbc6fba22550dba76b8112 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Tue, 30 Dec 2025 19:37:34 +1100
-Subject: [PATCH 68/70] soc: cix: Fix DDR LP and bus DVFS initialization
+Subject: [PATCH] soc: cix: Fix DDR LP and bus DVFS initialization
 
 Fix two initialization issues in the power management drivers:
 
@@ -85,6 +85,3 @@ index 0db9a82d7618b..09076f37a11c9 100644
  	dev_info(&pdev->dev, "DDR low power control initialized\n");
  	return 0;
  }
--- 
-2.51.0
-

@@ -1,8 +1,8 @@
-From 9a74652725a0c14e45b8f9d0eb60ed2a2f63eef0 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sun, 30 Nov 2025 00:52:30 +0800
-Subject: [PATCH 10/70] arm64: dts: cix: Restore IO ranges and enable x16 slot
- on Orion O6
+Subject: [PATCH] arm64: dts: cix: Restore IO ranges and enable x16 slot on
+ Orion O6
 
 With the vendor-style PCI resource assignment in the sky1 driver,
 pci=realloc is no longer needed. The driver now properly sizes and
@@ -102,6 +102,3 @@ index bb002d66d61d9..94f16aa9461a2 100644
  				 <0x43000000 0x08 0x00000000 0x08 0x00000000 0x04 0x00000000>;
  			cdns,no-inbound-bar;
  			clocks = <&scmi_clk CLK_TREE_PCIE_CTRL3_CLK>,
--- 
-2.51.0
-

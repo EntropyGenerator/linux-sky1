@@ -1,7 +1,7 @@
-From 88abfdadd6258b5145b739468a0f6364b1a21b5c Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sat, 27 Dec 2025 23:29:15 +1100
-Subject: [PATCH 65/70] drm/cix: dptx: Fix null pointer dereference in unbind
+Subject: [PATCH] drm/cix: dptx: Fix null pointer dereference in unbind
 
 Check if dpsub->link is valid before calling device_link_del(). The link
 can be NULL if component binding failed before link creation.
@@ -23,6 +23,3 @@ index 18b3c6a5ad939..8cfe75180379e 100644
  }
  
  static const struct component_ops trilin_dptx_cix_ops = {
--- 
-2.51.0
-

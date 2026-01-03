@@ -1,8 +1,8 @@
-From fb107c768fab5ed6e01b484cb067b473dd5acb96 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Mon, 8 Dec 2025 13:02:29 +0800
-Subject: [PATCH 40/70] WIP: rpmsg: Add deferred vq0 kick and debug prints for
- DSP link-up
+Subject: [PATCH] WIP: rpmsg: Add deferred vq0 kick and debug prints for DSP
+ link-up
 
 Add mechanism to send vq0 kick after REPROC_READY to trigger rpmsg-lite
 link_state=1 on DSP. The DSP firmware waits in a loop for link_state
@@ -152,6 +152,3 @@ index 4ca980dfc1bdd..7c6b25565abaa 100644
  	/* Process new entries in avail ring */
  	while (last_avail != avail_idx) {
  		u16 desc_idx;
--- 
-2.51.0
-

@@ -1,8 +1,8 @@
-From c23d0fa231adf7898214b7ac0ece5d4a6b19bffc Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Tue, 23 Dec 2025 18:24:11 +1100
-Subject: [PATCH 59/70] perf: arm_spe: Check per-CPU SPE support for
- heterogeneous systems
+Subject: [PATCH] perf: arm_spe: Check per-CPU SPE support for heterogeneous
+ systems
 
 On heterogeneous big.LITTLE systems like CIX Sky1 (Cortex-A720 + A520),
 only the big cores (A720) implement SPE while the little cores (A520)
@@ -65,6 +65,3 @@ index fa50645feddad..fade9b93f615f 100644
  	disable_percpu_irq(spe_pmu->irq);
  	__arm_spe_pmu_reset_local();
  }
--- 
-2.51.0
-

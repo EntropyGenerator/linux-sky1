@@ -1,7 +1,7 @@
-From c7f067f100498392cd3a97e8e30c1df49b420f5e Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Thu, 4 Dec 2025 19:08:25 +0800
-Subject: [PATCH 26/70] dma: arm-dma350: Fix interrupt handling for cyclic DMA
+Subject: [PATCH] dma: arm-dma350: Fix interrupt handling for cyclic DMA
 
 Fix DMA-350 cyclic transfers not generating interrupts despite successful
 audio playback. The issue was a multi-stage interrupt routing problem
@@ -188,6 +188,3 @@ index d85cea1952f57..b2f28897451bd 100644
  	ret = dma_async_device_register(&dmac->dma);
  	if (ret) {
  		dev_err(dev, "Failed to register DMA device: %d\n", ret);
--- 
-2.51.0
-

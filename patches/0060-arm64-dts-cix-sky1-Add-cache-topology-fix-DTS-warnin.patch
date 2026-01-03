@@ -1,8 +1,8 @@
-From 86e453e758564e7a1107e86e74a8c18dc816f02a Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Wed, 24 Dec 2025 12:13:37 +1100
-Subject: [PATCH 60/70] arm64: dts: cix: sky1: Add cache topology, fix DTS
- warnings, enable USB3 LPM
+Subject: [PATCH] arm64: dts: cix: sky1: Add cache topology, fix DTS warnings,
+ enable USB3 LPM
 
 Add CPU cache topology for Sky1 SoC:
 - CPU0-3 (A520): 32KB L1I, 32KB L1D, direct to L3
@@ -524,6 +524,3 @@ index e4dd690113bf7..1f2161240df9d 100644
  		compatible = "cadence,ddr_ctrl";
  		reg = <0x0 0x0C070000 0x0 0x20000>,
  			<0x0 0x83c00000 0x0 0x1000>;
--- 
-2.51.0
-

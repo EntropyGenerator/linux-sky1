@@ -1,8 +1,7 @@
-From 0ae0bcfd2bbfbbeadc836fd1cb95343b31a96c32 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sun, 30 Nov 2025 22:05:36 +0800
-Subject: [PATCH 15/70] arm64: dts: cix: Fix USB controller interrupt cell
- count
+Subject: [PATCH] arm64: dts: cix: Fix USB controller interrupt cell count
 
 The GIC interrupt controller requires 4 cells per interrupt specifier,
 but the USB controller nodes only specified 3 cells. Add the missing
@@ -169,6 +168,3 @@ index 94f16aa9461a2..2bbcc25b6970f 100644
  				interrupt-names = "host",
  						"peripheral",
  						"otg",
--- 
-2.51.0
-

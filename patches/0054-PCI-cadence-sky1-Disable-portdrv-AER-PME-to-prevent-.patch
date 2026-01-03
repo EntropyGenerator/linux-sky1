@@ -1,8 +1,8 @@
-From 28f0a77fea64b808ce37aed948afa25865df13f6 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Mon, 15 Dec 2025 09:16:51 +0800
-Subject: [PATCH 54/70] PCI: cadence: sky1: Disable portdrv AER/PME to prevent
- IRQ conflicts
+Subject: [PATCH] PCI: cadence: sky1: Disable portdrv AER/PME to prevent IRQ
+ conflicts
 
 Sky1 PCIe controller handles AER and PME through platform-level
 interrupts defined in device tree (pcie-aer-c/f/nf, pcie-local),
@@ -42,6 +42,3 @@ index 0a9c9714bd5f0..99e847b283bfe 100644
  	return sky1_pci_host_probe(bridge);
  }
  
--- 
-2.51.0
-

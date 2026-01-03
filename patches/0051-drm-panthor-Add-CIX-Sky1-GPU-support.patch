@@ -1,7 +1,7 @@
-From 3ae1029231fb97bf9bd1deb9c74d89800b67021b Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Thu, 11 Dec 2025 22:57:43 +0800
-Subject: [PATCH 51/70] drm/panthor: Add CIX Sky1 GPU support
+Subject: [PATCH] drm/panthor: Add CIX Sky1 GPU support
 
 Port Sky1-specific initialization from vendor kernel 6.6 to
 mainline 6.18 Panthor driver.
@@ -948,6 +948,3 @@ index 6beb35a28bd90..881a07ffbabc8 100644
  	drm_WARN_ON(&ptdev->base, atomic_read(&sched->reset.in_progress));
  
  	queue_stop(queue, job);
--- 
-2.51.0
-

@@ -1,8 +1,7 @@
-From a38a6122ac1757047237210cda740370425b0507 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sun, 30 Nov 2025 22:07:35 +0800
-Subject: [PATCH 17/70] usb: typec: Add Realtek RTS5453 USB PD controller
- driver
+Subject: [PATCH] usb: typec: Add Realtek RTS5453 USB PD controller driver
 
 Add driver for Realtek RTS5453H USB Type-C Power Delivery controller.
 This I2C-based controller handles USB PD negotiation, USB role
@@ -679,6 +678,3 @@ index 0000000000000..f71b7a632b6c4
 +MODULE_AUTHOR("Chao Zeng <Chao.Zeng@cixtech.com>");
 +MODULE_DESCRIPTION("Realtek RTS5453 USB Type-C PD Controller Driver");
 +MODULE_LICENSE("GPL");
--- 
-2.51.0
-

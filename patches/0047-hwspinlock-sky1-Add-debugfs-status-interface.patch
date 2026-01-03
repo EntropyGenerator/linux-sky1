@@ -1,7 +1,7 @@
-From 4b21f767daf6297d63f2720da4a81ed0ccc0497f Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Wed, 10 Dec 2025 11:30:33 +0800
-Subject: [PATCH 47/70] hwspinlock: sky1: Add debugfs status interface
+Subject: [PATCH] hwspinlock: sky1: Add debugfs status interface
 
 Add debugfs support to expose lock status at:
   /sys/kernel/debug/sky1_hwspinlock/status
@@ -131,6 +131,3 @@ index a59021dd6cfb7..c73ca035def8c 100644
  	pm_runtime_disable(&pdev->dev);
  }
  
--- 
-2.51.0
-

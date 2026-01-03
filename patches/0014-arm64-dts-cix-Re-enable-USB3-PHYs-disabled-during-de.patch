@@ -1,8 +1,7 @@
-From ad5994684faadf82b2e9b3dafd2d1a24b74b6601 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sun, 30 Nov 2025 20:04:09 +0800
-Subject: [PATCH 14/70] arm64: dts: cix: Re-enable USB3 PHYs disabled during
- debug
+Subject: [PATCH] arm64: dts: cix: Re-enable USB3 PHYs disabled during debug
 
 Re-enable USB PHYs that were disabled as debug workarounds during
 early boot debugging:
@@ -57,6 +56,3 @@ index a1eca84153608..c8e9505dff392 100644
  };
  
  &usb3_phy3 {
--- 
-2.51.0
-

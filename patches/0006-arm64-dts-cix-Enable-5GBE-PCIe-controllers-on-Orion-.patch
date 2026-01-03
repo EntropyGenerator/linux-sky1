@@ -1,8 +1,7 @@
-From 18955842cd9b5b4de3444277a3693cf63eb40135 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sat, 29 Nov 2025 18:29:04 +0800
-Subject: [PATCH 06/70] arm64: dts: cix: Enable 5GBE PCIe controllers on Orion
- O6
+Subject: [PATCH] arm64: dts: cix: Enable 5GBE PCIe controllers on Orion O6
 
 Enable both RTL8126 5GbE ethernet controllers (pcie_x1_0_rc and
 pcie_x1_1_rc) on the Radxa Orion O6 board. These use separate PCIe
@@ -120,6 +119,3 @@ index 94f16aa9461a2..bb002d66d61d9 100644
  				 <0x43000000 0x08 0x00000000 0x08 0x00000000 0x04 0x00000000>;
  			cdns,no-inbound-bar;
  			clocks = <&scmi_clk CLK_TREE_PCIE_CTRL3_CLK>,
--- 
-2.51.0
-

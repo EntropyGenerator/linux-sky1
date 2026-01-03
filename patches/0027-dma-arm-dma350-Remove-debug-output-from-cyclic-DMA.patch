@@ -1,7 +1,7 @@
-From 49c06a2c0d2e91175b983b687240efc9a7711182 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Thu, 4 Dec 2025 19:44:47 +0800
-Subject: [PATCH 27/70] dma: arm-dma350: Remove debug output from cyclic DMA
+Subject: [PATCH] dma: arm-dma350: Remove debug output from cyclic DMA
 
 Remove verbose dev_info debug messages added during development.
 Keep dev_err for actual error conditions and dev_dbg for optional
@@ -122,6 +122,3 @@ index b2f28897451bd..7ae54f52b47de 100644
  	return vchan_tx_prep(&dch->vc, &desc->vd, flags);
  }
  
--- 
-2.51.0
-

@@ -1,8 +1,8 @@
-From 19aa5b0ba98f2ebfac23536ebfa3c986fc6af562 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Fri, 2 Jan 2026 23:31:34 +1100
-Subject: [PATCH 70/70] arm64: dts: cix: orion-o6n: Remove regulator-boot-on
- from modem regulators
+Subject: [PATCH] arm64: dts: cix: orion-o6n: Remove regulator-boot-on from
+ modem regulators
 
 The LTE modem power and reset regulators had regulator-boot-on which
 forces early GPIO/pinctrl initialization. This can block on SCMI clock
@@ -39,6 +39,3 @@ index 6b4f446999cd3..71b5a2c961e37 100644
  		regulator-always-on;
  	};
  
--- 
-2.51.0
-

@@ -1,8 +1,8 @@
-From ae84e622a7e8d96e9f98e06c1efdb81fcda9b18e Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sun, 30 Nov 2025 22:06:41 +0800
-Subject: [PATCH 16/70] usb: cdns3: Add CDNSP platform driver for Cadence
- USBSSP controllers
+Subject: [PATCH] usb: cdns3: Add CDNSP platform driver for Cadence USBSSP
+ controllers
 
 Add platform driver (cdnsp-plat.c) for Cadence USBSSP dual-role
 controllers. This driver probes devices with compatible "cdns,usbssp"
@@ -515,6 +515,3 @@ index 0000000000000..cc7bb4b7ba6d4
 +MODULE_AUTHOR("Roger Quadros <rogerq@ti.com>");
 +MODULE_LICENSE("GPL v2");
 +MODULE_DESCRIPTION("Cadence USBSSP DRD Controller Platform Driver");
--- 
-2.51.0
-

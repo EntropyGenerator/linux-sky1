@@ -1,8 +1,8 @@
-From 001b1338524d7b66ae4d11378f37515d3d059280 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Wed, 10 Dec 2025 19:53:03 +0800
-Subject: [PATCH 50/70] firmware: cix: Add DSP IPC driver and SOF platform
- support for Sky1
+Subject: [PATCH] firmware: cix: Add DSP IPC driver and SOF platform support
+ for Sky1
 
 Port CIX DSP mailbox driver and Sound Open Firmware (SOF) platform
 support for Sky1 SoC.
@@ -1187,6 +1187,3 @@ index 0000000000000..a2e226cccf749
 +MODULE_IMPORT_NS("SND_SOC_SOF_XTENSA");
 +MODULE_AUTHOR("Joakim Zhang <joakim.zhang@cixtech.com>");
 +MODULE_LICENSE("Dual BSD/GPL");
--- 
-2.51.0
-

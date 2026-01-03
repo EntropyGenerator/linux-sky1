@@ -1,8 +1,8 @@
-From 7d27570cd6249d95c3135e0355409379a42ce4a1 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sat, 29 Nov 2025 14:49:26 +0800
-Subject: [PATCH 04/70] pci: cadence: sky1: Fix ATU/ECAM register layout for
- CIX Sky1 SoC
+Subject: [PATCH] pci: cadence: sky1: Fix ATU/ECAM register layout for CIX Sky1
+ SoC
 
 The CIX Sky1 SoC uses a Cadence PCIe IP with vendor-specific register
 layout that differs from mainline. This patch fixes the following issues:
@@ -790,6 +790,3 @@ index e2a853d2c0ab0..dc77e1f2df7bd 100644
  };
  
  /**
--- 
-2.51.0
-

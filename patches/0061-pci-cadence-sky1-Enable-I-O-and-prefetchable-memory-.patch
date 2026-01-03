@@ -1,7 +1,7 @@
-From d3bcff32f16fb12a216c5b266f13c84c2c5fe62b Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Wed, 24 Dec 2025 16:00:26 +1100
-Subject: [PATCH 61/70] pci: cadence: sky1: Enable I/O and prefetchable memory
+Subject: [PATCH] pci: cadence: sky1: Enable I/O and prefetchable memory
  windows
 
 CIX Sky1 uses a different RC BAR Configuration register layout than
@@ -102,6 +102,3 @@ index 99e847b283bfe..7512a7b923549 100644
  	sky1_pcie_set_devctrl(pcie);
  	sky1_pcie_set_l0s_disable(pcie);
  
--- 
-2.51.0
-

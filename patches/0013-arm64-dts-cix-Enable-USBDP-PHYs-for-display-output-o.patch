@@ -1,8 +1,8 @@
-From f385551e9b045aea05c58ba1d03bfb07045fa958 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sun, 30 Nov 2025 19:54:16 +0800
-Subject: [PATCH 13/70] arm64: dts: cix: Enable USBDP PHYs for display output
- on Orion O6
+Subject: [PATCH] arm64: dts: cix: Enable USBDP PHYs for display output on
+ Orion O6
 
 Enable the USBDP PHYs needed for display output:
 
@@ -126,6 +126,3 @@ index 0000000000000..80f27c3b9a7d2
 +echo
 +echo "Verified: EFI files match build artifacts."
 +echo "Ready to reboot. Use menu entry 3 (dev) for latest build."
--- 
-2.51.0
-

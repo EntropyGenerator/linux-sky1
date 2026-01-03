@@ -1,8 +1,7 @@
-From f1ed860c01f39f1e36e7f34d2551a017c6cf8280 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Mon, 1 Dec 2025 16:14:37 +0800
-Subject: [PATCH 20/70] drm/panthor: Sky1 G720 support with debug
- instrumentation
+Subject: [PATCH] drm/panthor: Sky1 G720 support with debug instrumentation
 
 Work-in-progress Sky1/G720 support including:
 - HOST_POWER register definitions for G720 (arch >= 12)
@@ -913,6 +912,3 @@ index 881a07ffbabc8..6beb35a28bd90 100644
  	drm_WARN_ON(&ptdev->base, atomic_read(&sched->reset.in_progress));
  
  	queue_stop(queue, job);
--- 
-2.51.0
-

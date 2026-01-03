@@ -1,8 +1,7 @@
-From 30245162849ae4b74504c6bc10024f178061684b Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Thu, 4 Dec 2025 15:14:52 +0800
-Subject: [PATCH 22/70] dma/clk/reset/sound: Add CIX Sky1 audio subsystem
- support
+Subject: [PATCH] dma/clk/reset/sound: Add CIX Sky1 audio subsystem support
 
 Add support for the CIX Sky1 audio subsystem including:
 
@@ -4700,6 +4699,3 @@ index 0000000000000..b5eead0d44d72
 +MODULE_DESCRIPTION("Sky1 ALSA machine driver for Cix Technology");
 +MODULE_AUTHOR("Xing.Wang <xing.wang@cixtech.com>");
 +MODULE_LICENSE("GPL v2");
--- 
-2.51.0
-

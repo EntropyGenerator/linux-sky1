@@ -1,7 +1,7 @@
-From bfd943f5c04def32e9392cc5f927c57b6ca1f219 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Wed, 10 Dec 2025 11:00:09 +0800
-Subject: [PATCH 46/70] hwspinlock: Add Sky1 hardware spinlock driver
+Subject: [PATCH] hwspinlock: Add Sky1 hardware spinlock driver
 
 Add hardware spinlock driver for CIX Sky1 SoC. The controller provides
 100 hardware spinlocks for inter-processor synchronization.
@@ -185,6 +185,3 @@ index 0000000000000..a59021dd6cfb7
 +MODULE_LICENSE("GPL");
 +MODULE_DESCRIPTION("Sky1 Hardware Spinlock driver");
 +MODULE_AUTHOR("Cix Technology Group Co., Ltd.");
--- 
-2.51.0
-

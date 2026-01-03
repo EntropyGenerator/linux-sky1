@@ -1,8 +1,7 @@
-From 2873a0dad47f3cfe2849b7d6e82303189a51f8ec Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sun, 30 Nov 2025 02:29:01 +0800
-Subject: [PATCH 11/70] PCI: Add quirk to disable MSI for CIX CD8180 PCIe root
- ports
+Subject: [PATCH] PCI: Add quirk to disable MSI for CIX CD8180 PCIe root ports
 
 CIX CD8180 PCIe root ports (used in Sky1/Orion SoCs) advertise MSI-X
 capability but the MSI-X table is located in BAR0 which doesn't exist.
@@ -50,6 +49,3 @@ index b9c252aa6fe08..ac8a17e88bda4 100644
  /*
   * Some versions of the MCP55 bridge from Nvidia have a legacy IRQ routing
   * config register.  This register controls the routing of legacy
--- 
-2.51.0
-

@@ -1,8 +1,7 @@
-From c815cfa13b548dff86f542eac5ac7103b6d11c85 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Wed, 10 Dec 2025 10:49:11 +0800
-Subject: [PATCH 45/70] scripts: Update build-install.sh for 6.18 release
- naming
+Subject: [PATCH] scripts: Update build-install.sh for 6.18 release naming
 
 ---
  scripts/build-install.sh | 4 ++--
@@ -23,6 +22,3 @@ index 80f27c3b9a7d2..8237cf03c0991 100755
  EFI_DIR="/boot/efi"
  JOBS=$(nproc)
  
--- 
-2.51.0
-

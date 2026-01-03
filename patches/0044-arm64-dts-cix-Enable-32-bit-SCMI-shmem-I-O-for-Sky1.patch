@@ -1,7 +1,7 @@
-From cc692c1051a9391286e7dba28443983584c25365 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Wed, 10 Dec 2025 10:08:08 +0800
-Subject: [PATCH 44/70] arm64: dts: cix: Enable 32-bit SCMI shmem I/O for Sky1
+Subject: [PATCH] arm64: dts: cix: Enable 32-bit SCMI shmem I/O for Sky1
 
 Add reg-io-width = <4> to SCMI shared memory nodes to enable 32-bit
 word-aligned I/O operations. The Sky1 SoC requires aligned 32-bit
@@ -48,6 +48,3 @@ index b53e2355a2414..2ceaba390e3d9 100644
  		status = "disabled";
  	};
  
--- 
-2.51.0
-

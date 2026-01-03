@@ -1,7 +1,7 @@
-From 5caec6a2626755ba3477795e608f89410e06cbb5 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sat, 27 Dec 2025 23:27:58 +1100
-Subject: [PATCH 63/70] thermal: cix: Add CPU IPA power monitoring driver
+Subject: [PATCH] thermal: cix: Add CPU IPA power monitoring driver
 
 Add driver for reading per-CPU power measurements on CIX Sky1 SoC. The
 driver reads static (leakage) and dynamic power from a memory-mapped
@@ -196,6 +196,3 @@ index 0000000000000..77d656826e071
 +
 +MODULE_DESCRIPTION("CIX CPU IPA Power Monitoring Driver");
 +MODULE_LICENSE("GPL");
--- 
-2.51.0
-

@@ -1,7 +1,7 @@
-From 51da0ebfb53629fc1fd2f1e97ef637ee8ff0c371 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Mon, 1 Dec 2025 18:20:17 +0800
-Subject: [PATCH 21/70] drm/panthor: Remove debug instrumentation for Sky1 GPU
+Subject: [PATCH] drm/panthor: Remove debug instrumentation for Sky1 GPU
 
 Remove verbose debug logging that was added during Sky1 GPU bringup.
 The core Sky1 workarounds remain in place:
@@ -276,6 +276,3 @@ index 749b56ab0f04e..952fe7cb9760c 100644
  }
  
  /**
--- 
-2.51.0
-

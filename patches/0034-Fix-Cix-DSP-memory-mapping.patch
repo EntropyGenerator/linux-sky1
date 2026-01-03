@@ -1,7 +1,7 @@
-From 344ea7ca588868dffb60732e2c061551dd645708 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sat, 6 Dec 2025 19:17:30 +0800
-Subject: [PATCH 34/70] Fix Cix DSP memory mapping
+Subject: [PATCH] Fix Cix DSP memory mapping
 
 Map vdev0buffer and vrings in addr_init so da_to_va works.
 This allows the host to access rpmsg buffers and receive
@@ -26,6 +26,3 @@ index eb4d220f9961b..022a4aa57f5ed 100644
  		p_mem[i].cpu_addr = devm_ioremap_wc(dev, mem_reg[i].sa, mem_reg[i].len);
  		if (!p_mem[i].cpu_addr) {
  			dev_err(dev, "failed to remap %#x bytes from %#llx\n",
--- 
-2.51.0
-

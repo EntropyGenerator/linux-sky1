@@ -1,8 +1,7 @@
-From 4f0168791db616fb58e0745205e9856ad303e14f Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sun, 7 Dec 2025 17:34:32 +0800
-Subject: [PATCH 37/70] rpmsg: virtio: Fix DMA address translation for
- remoteproc DSP
+Subject: [PATCH] rpmsg: virtio: Fix DMA address translation for remoteproc DSP
 
 The CIX Sky1 DSP sees memory at different addresses than the host CPU.
 The virtio buffer region is at physical address 0xCDE08000 but the DSP
@@ -255,6 +254,3 @@ index 484890b4a6a74..2467a14a73923 100644
  		WARN_ON(err); /* sanity check; this can't really happen */
  	}
  
--- 
-2.51.0
-

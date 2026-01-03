@@ -1,7 +1,7 @@
-From 45a85db80813f9b39f7639a3e309305b6103e9f1 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sun, 7 Dec 2025 21:15:55 +0800
-Subject: [PATCH 38/70] rpmsg: Add rpmsg-lite RX avail ring support for CIX DSP
+Subject: [PATCH] rpmsg: Add rpmsg-lite RX avail ring support for CIX DSP
 
 rpmsg-lite firmware (used by CIX DSP) differs from standard virtio rpmsg:
 - Standard: Host provides RX buffers, remote fills them and puts in used ring
@@ -344,6 +344,3 @@ index 2467a14a73923..ad67bba2721cd 100644
  }
  
  /*
--- 
-2.51.0
-

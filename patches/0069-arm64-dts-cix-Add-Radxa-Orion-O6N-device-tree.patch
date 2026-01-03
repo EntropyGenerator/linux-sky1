@@ -1,7 +1,7 @@
-From cba29e927ed62b5d9ac9f46f63a6fa313451f602 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Fri, 2 Jan 2026 23:00:12 +1100
-Subject: [PATCH 69/70] arm64: dts: cix: Add Radxa Orion O6N device tree
+Subject: [PATCH] arm64: dts: cix: Add Radxa Orion O6N device tree
 
 Add device tree for the Radxa Orion O6N, a cost and size optimized
 variant of the O6 designed for micro-ITX and mobile applications.
@@ -2596,6 +2596,3 @@ index 0000000000000..6b4f446999cd3
 +&sfh_scp {
 +	status = "okay";
 +};
--- 
-2.51.0
-

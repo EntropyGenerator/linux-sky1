@@ -1,8 +1,7 @@
-From 411bc38d82dd1cc65464f7f5af2f341357de385e Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Thu, 4 Dec 2025 16:21:56 +0800
-Subject: [PATCH 24/70] dma: arm-dma350: implement cyclic DMA for audio
- streaming
+Subject: [PATCH] dma: arm-dma350: implement cyclic DMA for audio streaming
 
 Implement proper cyclic DMA support for the ARM DMA-350 controller,
 enabling audio playback via hardware command linking.
@@ -594,6 +593,3 @@ index 88761fd79390c..b17797e256a75 100644
  	dev_dbg(dev, "DMA-350 r%dp%d with %d channels, %d requests\n", r, p, dmac->nchan, dmac->nreq);
  
  	dmac->dma.dev = dev;
--- 
-2.51.0
-

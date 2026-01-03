@@ -1,8 +1,7 @@
-From c6bb0659dfc847d076f7bb5c1ee4fca2f822d42e Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sat, 27 Dec 2025 23:28:52 +1100
-Subject: [PATCH 64/70] arm64: dts: cix: orion-o6: Enable DDR LP and CPU IPA
- drivers
+Subject: [PATCH] arm64: dts: cix: orion-o6: Enable DDR LP and CPU IPA drivers
 
 Enable the DDR low power control driver and CPU IPA power monitoring
 driver on the Radxa Orion O6 board.
@@ -26,6 +25,3 @@ index 184a151684c9d..3a30a9ae86890 100644
 +&cix_ipa {
 +	status = "okay";
 +};
--- 
-2.51.0
-

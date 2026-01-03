@@ -1,8 +1,7 @@
-From d7ae053bfd4ac5187a6b77cfbf1a1c2309e90167 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sat, 29 Nov 2025 15:33:25 +0800
-Subject: [PATCH 05/70] pci: cadence: sky1: Enable WiFi PCIe controller
- (pcie_x2_rc)
+Subject: [PATCH] pci: cadence: sky1: Enable WiFi PCIe controller (pcie_x2_rc)
 
 Remove temporary debug code that restricted PCIe probing to only the
 NVMe controller. Enable pcie_x2_rc (M.2 E-Key) for WiFi support.
@@ -62,6 +61,3 @@ index 993ff61350b31..efc5f1f08b711 100644
  	pcie = devm_kzalloc(dev, sizeof(*pcie), GFP_KERNEL);
  	if (!pcie)
  		return -ENOMEM;
--- 
-2.51.0
-

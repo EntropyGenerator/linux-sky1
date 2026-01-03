@@ -1,7 +1,7 @@
-From df6f8281d3fde0b16bbb26984d76ac7df534f575 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Fri, 5 Dec 2025 13:52:56 +0800
-Subject: [PATCH 29/70] Enable Cix Audio DSP and Mailbox
+Subject: [PATCH] Enable Cix Audio DSP and Mailbox
 
 Ported 'cix_dsp_rproc' driver from vendor kernel.
 Enabled CIX_MBOX and CIX_DSP_RPROC in Kconfig/Makefile.
@@ -1078,6 +1078,3 @@ index 0000000000000..00fcc341f0372
 +MODULE_LICENSE("GPL v2");
 +MODULE_DESCRIPTION("CIX Audio DSP Remote Processor Control Driver");
 +MODULE_AUTHOR("Lihua Liu <Lihua.Liu@cixcomputing.com>");
--- 
-2.51.0
-
