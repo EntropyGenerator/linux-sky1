@@ -1,0 +1,89 @@
+From 63b0a20d7a3285433289db15a9b515f3811a665a Mon Sep 17 00:00:00 2001
+From: Entrpi <entrpi@proton.me>
+Date: Wed, 14 Jan 2026 20:48:21 +1100
+Subject: [PATCH 73/73] arm64: dts: cix: sky1: Disable IOMMU for display
+ controllers
+
+Remove iommus property from all five display controllers (dpu0-dpu4)
+to fix ACE (Address Cache Engine) errors during compositor transitions.
+
+The LPU's Address Cache Engine caches IOVA-to-PA translations
+independently from the ARM SMMUv3 TLB. When IOVAs are recycled during
+GDM to KWin compositor handoffs, SMMU TLB invalidation does not
+propagate to the ACE, leaving stale translations that cause persistent
+MERR/FERR errors when those IOVAs are reused by new framebuffers.
+
+With IOMMU disabled, display uses physical addresses directly,
+eliminating the translation caching that causes stale entries. Display
+buffers are kernel-managed so IOMMU protection is not required.
+---
+ arch/arm64/boot/dts/cix/sky1.dtsi | 25 +++++++++++++++----------
+ 1 file changed, 15 insertions(+), 10 deletions(-)
+
+diff --git a/arch/arm64/boot/dts/cix/sky1.dtsi b/arch/arm64/boot/dts/cix/sky1.dtsi
+index 1f2161240df9d..728cc7bc750a6 100644
+--- a/arch/arm64/boot/dts/cix/sky1.dtsi
++++ b/arch/arm64/boot/dts/cix/sky1.dtsi
+@@ -2599,8 +2599,9 @@ dpu0: disp-controller@14010000 {
+ 			compatible = "armchina,linlon-d6";
+ 			reg = <0x0 0x14010000 0x0 0x20000>;
+ 			interrupts = <GIC_SPI 316 IRQ_TYPE_LEVEL_HIGH 0>;
+-			iommus = <&smmu_mmhub 0>, <&smmu_mmhub 1>,
+-				 <&smmu_mmhub 3>, <&smmu_mmhub 4>;
++			/* IOMMU disabled to avoid ACE errors from stale TLB entries */
++			/* iommus = <&smmu_mmhub 0>, <&smmu_mmhub 1>,
++				 <&smmu_mmhub 3>, <&smmu_mmhub 4>; */
+ 			power-domains = <&smc_devpd SKY1_PD_DPU0>;
+ 			power-domain-names = "dpu_pd";
+ 			clocks = <&scmi_clk CLK_TREE_DPU0_ACLK>;
+@@ -2632,8 +2633,9 @@ dpu1: disp-controller@14080000 {
+ 			compatible = "armchina,linlon-d6";
+ 			reg = <0x0 0x14080000 0x0 0x20000>;
+ 			interrupts = <GIC_SPI 318 IRQ_TYPE_LEVEL_HIGH 0>;
+-			iommus = <&smmu_mmhub 6>, <&smmu_mmhub 7>,
+-				 <&smmu_mmhub 9>, <&smmu_mmhub 10>;
++			/* IOMMU disabled to avoid ACE errors from stale TLB entries */
++			/* iommus = <&smmu_mmhub 6>, <&smmu_mmhub 7>,
++				 <&smmu_mmhub 9>, <&smmu_mmhub 10>; */
+ 			power-domains = <&smc_devpd SKY1_PD_DPU1>;
+ 			power-domain-names = "dpu_pd";
+ 			clocks = <&scmi_clk CLK_TREE_DPU1_ACLK>;
+@@ -2665,8 +2667,9 @@ dpu2: disp-controller@140f0000 {
+ 			compatible = "armchina,linlon-d6";
+ 			reg = <0x0 0x140f0000 0x0 0x20000>;
+ 			interrupts = <GIC_SPI 320 IRQ_TYPE_LEVEL_HIGH 0>;
+-			iommus = <&smmu_mmhub 12>, <&smmu_mmhub 13>,
+-				 <&smmu_mmhub 15>, <&smmu_mmhub 16>;
++			/* IOMMU disabled to avoid ACE errors from stale TLB entries */
++			/* iommus = <&smmu_mmhub 12>, <&smmu_mmhub 13>,
++				 <&smmu_mmhub 15>, <&smmu_mmhub 16>; */
+ 			power-domains = <&smc_devpd SKY1_PD_DPU2>;
+ 			power-domain-names = "dpu_pd";
+ 			clocks = <&scmi_clk CLK_TREE_DPU2_ACLK>;
+@@ -2698,8 +2701,9 @@ dpu3: disp-controller@14160000 {
+ 			compatible = "armchina,linlon-d6";
+ 			reg = <0x0 0x14160000 0x0 0x20000>;
+ 			interrupts = <GIC_SPI 322 IRQ_TYPE_LEVEL_HIGH 0>;
+-			iommus = <&smmu_mmhub 18>, <&smmu_mmhub 19>,
+-				 <&smmu_mmhub 21>, <&smmu_mmhub 22>;
++			/* IOMMU disabled to avoid ACE errors from stale TLB entries */
++			/* iommus = <&smmu_mmhub 18>, <&smmu_mmhub 19>,
++				 <&smmu_mmhub 21>, <&smmu_mmhub 22>; */
+ 			power-domains = <&smc_devpd SKY1_PD_DPU3>;
+ 			power-domain-names = "dpu_pd";
+ 			clocks = <&scmi_clk CLK_TREE_DPU3_ACLK>;
+@@ -2731,8 +2735,9 @@ dpu4: disp-controller@141d0000 {
+ 			compatible = "armchina,linlon-d6";
+ 			reg = <0x0 0x141d0000 0x0 0x20000>;
+ 			interrupts = <GIC_SPI 324 IRQ_TYPE_LEVEL_HIGH 0>;
+-			iommus = <&smmu_mmhub 24>, <&smmu_mmhub 25>,
+-				 <&smmu_mmhub 27>, <&smmu_mmhub 28>;
++			/* IOMMU disabled to avoid ACE errors from stale TLB entries */
++			/* iommus = <&smmu_mmhub 24>, <&smmu_mmhub 25>,
++				 <&smmu_mmhub 27>, <&smmu_mmhub 28>; */
+ 			power-domains = <&smc_devpd SKY1_PD_DPU4>;
+ 			power-domain-names = "dpu_pd";
+ 			clocks = <&scmi_clk CLK_TREE_DPU4_ACLK>;
+-- 
+2.51.0
+

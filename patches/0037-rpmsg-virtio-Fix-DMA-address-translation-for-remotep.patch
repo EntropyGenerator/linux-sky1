@@ -1,7 +1,7 @@
 From d125e8717fe99f269b187258efacb14f042dd036 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sun, 7 Dec 2025 17:34:32 +0800
-Subject: [PATCH 37/72] rpmsg: virtio: Fix DMA address translation for
+Subject: [PATCH 37/73] rpmsg: virtio: Fix DMA address translation for
  remoteproc DSP
 
 The CIX Sky1 DSP sees memory at different addresses than the host CPU.

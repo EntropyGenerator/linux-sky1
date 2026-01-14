@@ -1,7 +1,7 @@
 From 853a232ac6479c7fb72294a143acff9efe88aade Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sat, 6 Dec 2025 13:27:02 +0800
-Subject: [PATCH 30/72] sound: hda: Add CIX Sky1 IPBLOQ HDA controller driver
+Subject: [PATCH 30/73] sound: hda: Add CIX Sky1 IPBLOQ HDA controller driver
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit

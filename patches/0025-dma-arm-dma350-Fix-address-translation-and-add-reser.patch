@@ -1,7 +1,7 @@
 From 81a4b73e7474620a87323536260ab25de1bc2433 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Thu, 4 Dec 2025 17:29:57 +0800
-Subject: [PATCH 25/72] dma: arm-dma350: Fix address translation and add
+Subject: [PATCH 25/73] dma: arm-dma350: Fix address translation and add
  reserved memory support
 
 Fix DMA-350 cyclic audio support for Sky1 SoC:

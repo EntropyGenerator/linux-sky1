@@ -1,7 +1,7 @@
 From a2ece199d0f291111286dc6a8f5f03727219a6f1 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sat, 6 Dec 2025 19:17:30 +0800
-Subject: [PATCH 34/72] Fix Cix DSP memory mapping
+Subject: [PATCH 34/73] Fix Cix DSP memory mapping
 
 Map vdev0buffer and vrings in addr_init so da_to_va works.
 This allows the host to access rpmsg buffers and receive

@@ -1,7 +1,7 @@
 From 3b370eff476843cef7b65879155a073185e6717c Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Tue, 23 Dec 2025 18:24:11 +1100
-Subject: [PATCH 59/72] perf: arm_spe: Check per-CPU SPE support for
+Subject: [PATCH 59/73] perf: arm_spe: Check per-CPU SPE support for
  heterogeneous systems
 
 On heterogeneous big.LITTLE systems like CIX Sky1 (Cortex-A720 + A520),

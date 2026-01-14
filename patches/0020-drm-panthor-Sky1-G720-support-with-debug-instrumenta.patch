@@ -1,7 +1,7 @@
 From 68ad99b74f270e335f1167b8c0306274b6df13af Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Mon, 1 Dec 2025 16:14:37 +0800
-Subject: [PATCH 20/72] drm/panthor: Sky1 G720 support with debug
+Subject: [PATCH 20/73] drm/panthor: Sky1 G720 support with debug
  instrumentation
 
 Work-in-progress Sky1/G720 support including:

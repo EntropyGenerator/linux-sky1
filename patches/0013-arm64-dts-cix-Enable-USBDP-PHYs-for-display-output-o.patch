@@ -1,7 +1,7 @@
 From 4ccf83f7d25ea5f5274bcf9a12ffd10bea921fb2 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sun, 30 Nov 2025 19:54:16 +0800
-Subject: [PATCH 13/72] arm64: dts: cix: Enable USBDP PHYs for display output
+Subject: [PATCH 13/73] arm64: dts: cix: Enable USBDP PHYs for display output
  on Orion O6
 
 Enable the USBDP PHYs needed for display output:

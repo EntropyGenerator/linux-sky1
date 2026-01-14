@@ -1,7 +1,7 @@
 From 740b40276c6dd22f5594458dd5a8fdbcdc2d9146 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Wed, 24 Dec 2025 12:13:37 +1100
-Subject: [PATCH 60/72] arm64: dts: cix: sky1: Add cache topology, fix DTS
+Subject: [PATCH 60/73] arm64: dts: cix: sky1: Add cache topology, fix DTS
  warnings, enable USB3 LPM
 
 Add CPU cache topology for Sky1 SoC:

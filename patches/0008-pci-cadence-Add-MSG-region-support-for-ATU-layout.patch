@@ -1,7 +1,7 @@
 From 23eb9197c3d7a78a80164524fa6f7ed675660cdb Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sat, 29 Nov 2025 19:53:43 +0800
-Subject: [PATCH 08/72] pci: cadence: Add MSG region support for ATU layout
+Subject: [PATCH 08/73] pci: cadence: Add MSG region support for ATU layout
 
 Add msg_res field to struct cdns_pcie and set up ATU region 1 for
 PCIe messaging (PME_TURN_OFF, etc.) when msg_res is defined.

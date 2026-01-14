@@ -1,7 +1,7 @@
 From 01dea8a80974c0d689d4dd566025ccac8ef4ffd5 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Wed, 17 Dec 2025 15:29:37 +1100
-Subject: [PATCH 57/72] iommu/arm-smmu-v3: Add DT support for boot-active
+Subject: [PATCH 57/73] iommu/arm-smmu-v3: Add DT support for boot-active
  stream IDs
 
 Some devices (e.g., display controllers) may be left running by the

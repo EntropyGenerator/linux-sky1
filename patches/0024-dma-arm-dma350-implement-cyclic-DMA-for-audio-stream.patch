@@ -1,7 +1,7 @@
 From a58eaa2f8e7d2627537c290fb4d53654430540aa Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Thu, 4 Dec 2025 16:21:56 +0800
-Subject: [PATCH 24/72] dma: arm-dma350: implement cyclic DMA for audio
+Subject: [PATCH 24/73] dma: arm-dma350: implement cyclic DMA for audio
  streaming
 
 Implement proper cyclic DMA support for the ARM DMA-350 controller,

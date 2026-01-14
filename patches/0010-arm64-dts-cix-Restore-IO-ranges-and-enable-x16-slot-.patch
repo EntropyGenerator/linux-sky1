@@ -1,7 +1,7 @@
 From f703be626dfcc060754676dd40a29b979f1c6be8 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sun, 30 Nov 2025 00:52:30 +0800
-Subject: [PATCH 10/72] arm64: dts: cix: Restore IO ranges and enable x16 slot
+Subject: [PATCH 10/73] arm64: dts: cix: Restore IO ranges and enable x16 slot
  on Orion O6
 
 With the vendor-style PCI resource assignment in the sky1 driver,

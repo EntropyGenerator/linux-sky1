@@ -1,7 +1,7 @@
 From 78b94616a1824b08b5e1c703d6580ee374987f06 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Fri, 2 Jan 2026 23:00:12 +1100
-Subject: [PATCH 69/72] arm64: dts: cix: Add Radxa Orion O6N device tree
+Subject: [PATCH 69/73] arm64: dts: cix: Add Radxa Orion O6N device tree
 
 Add device tree for the Radxa Orion O6N, a cost and size optimized
 variant of the O6 designed for micro-ITX and mobile applications.

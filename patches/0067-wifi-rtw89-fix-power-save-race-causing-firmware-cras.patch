@@ -1,7 +1,7 @@
 From 7de7e9ef166b9aafb940fe154de942c27fae1e00 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Mon, 29 Dec 2025 10:04:42 +1100
-Subject: [PATCH 67/72] wifi: rtw89: fix power save race causing firmware crash
+Subject: [PATCH 67/73] wifi: rtw89: fix power save race causing firmware crash
 
 RTL8852B and other chips without low_power_hci_modes configured would
 call rtw89_mac_power_mode_change() directly without first synchronizing

@@ -1,7 +1,7 @@
 From 1dbd6651683ae445b5a7606217334190964794c9 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Wed, 10 Dec 2025 14:34:26 +0800
-Subject: [PATCH 48/72] nvmem: Add CIX Sky1 eFuse driver
+Subject: [PATCH 48/73] nvmem: Add CIX Sky1 eFuse driver
 
 Add NVMEM driver for CIX Sky1 SoC eFuse access. The driver reads
 one-time programmable fuse data via ARM SMCCC firmware calls to the

@@ -1,7 +1,7 @@
 From 829428f2923ecd159be1deb8a452a9a456c59f81 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sat, 3 Jan 2026 19:52:54 +1100
-Subject: [PATCH 72/72] arm64: dts: cix: orion-o6n: Use level-low for power
+Subject: [PATCH 72/73] arm64: dts: cix: orion-o6n: Use level-low for power
  button interrupt
 
 Change the power button interrupt type from IRQ_TYPE_EDGE_BOTH to

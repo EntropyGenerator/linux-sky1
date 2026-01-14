@@ -1,7 +1,7 @@
 From d65b62bd6793801a9b08ba2847d76526bea28ef8 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Fri, 2 Jan 2026 23:31:34 +1100
-Subject: [PATCH 70/72] arm64: dts: cix: orion-o6n: Remove regulator-boot-on
+Subject: [PATCH 70/73] arm64: dts: cix: orion-o6n: Remove regulator-boot-on
  from modem regulators
 
 The LTE modem power and reset regulators had regulator-boot-on which

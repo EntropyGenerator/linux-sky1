@@ -1,7 +1,7 @@
 From e160f4014809e03c9634baa8c9b0166415540e4a Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sun, 30 Nov 2025 02:29:01 +0800
-Subject: [PATCH 11/72] PCI: Add quirk to disable MSI for CIX CD8180 PCIe root
+Subject: [PATCH 11/73] PCI: Add quirk to disable MSI for CIX CD8180 PCIe root
  ports
 
 CIX CD8180 PCIe root ports (used in Sky1/Orion SoCs) advertise MSI-X

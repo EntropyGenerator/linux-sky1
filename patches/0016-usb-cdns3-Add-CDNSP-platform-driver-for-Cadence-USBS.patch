@@ -1,7 +1,7 @@
 From 4f8e6c06c40887da1ca3da5a8ff58543bcd6fe4b Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sun, 30 Nov 2025 22:06:41 +0800
-Subject: [PATCH 16/72] usb: cdns3: Add CDNSP platform driver for Cadence
+Subject: [PATCH 16/73] usb: cdns3: Add CDNSP platform driver for Cadence
  USBSSP controllers
 
 Add platform driver (cdnsp-plat.c) for Cadence USBSSP dual-role

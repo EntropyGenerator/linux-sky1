@@ -1,7 +1,7 @@
 From 7c04c64a6f928d3a3955118b75c70806fa2471ab Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sat, 6 Dec 2025 20:45:39 +0800
-Subject: [PATCH 36/72] rpmsg: char: Add Cix DSP audio services
+Subject: [PATCH 36/73] rpmsg: char: Add Cix DSP audio services
 
 Add 'audio-decoder' and 'audio-encoder' to the id_table.
 This allows the rpmsg_char driver to bind to the Cix HiFi5 DSP

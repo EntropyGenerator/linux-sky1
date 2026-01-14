@@ -2,6 +2,13 @@
 
 All notable changes to the Sky1 kernel patch set.
 
+## [6.18.4-2] - 2026-01-14
+
+### Fixed
+- DTS: Disable IOMMU for display controllers (fixes ACE errors during compositor transitions)
+- LPU Address Cache Engine caches IOVA→PA translations independently from SMMU TLB
+- When IOVAs are recycled during GDM→KWin handoffs, ACE has stale entries causing MERR/FERR
+
 ## [6.18.4-1] - 2026-01-10
 
 ### Changed

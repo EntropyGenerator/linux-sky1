@@ -1,7 +1,7 @@
 From a8d816fb49d5e72b716f3c1451727cf42ead851c Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Thu, 4 Dec 2025 15:14:52 +0800
-Subject: [PATCH 22/72] dma/clk/reset/sound: Add CIX Sky1 audio subsystem
+Subject: [PATCH 22/73] dma/clk/reset/sound: Add CIX Sky1 audio subsystem
  support
 
 Add support for the CIX Sky1 audio subsystem including:

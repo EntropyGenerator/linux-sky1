@@ -1,7 +1,7 @@
 From afcc062809c40acc341df591d5cf728f62fda45b Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sat, 3 Jan 2026 19:52:25 +1100
-Subject: [PATCH 71/72] Input: gpio_keys - use DTS interrupt trigger type when
+Subject: [PATCH 71/73] Input: gpio_keys - use DTS interrupt trigger type when
  explicit IRQ specified
 
 When a gpio-keys button has an explicit interrupt specified via

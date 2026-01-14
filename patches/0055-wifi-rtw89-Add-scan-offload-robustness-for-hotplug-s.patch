@@ -1,7 +1,7 @@
 From 5de7cd44f9f708ce363fbdf4f25e1ce4cfaa7d48 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Mon, 15 Dec 2025 09:17:37 +0800
-Subject: [PATCH 55/72] wifi: rtw89: Add scan offload robustness for hotplug
+Subject: [PATCH 55/73] wifi: rtw89: Add scan offload robustness for hotplug
  scenarios
 
 During rapid driver rebind (PCIe hotplug), userspace may trigger

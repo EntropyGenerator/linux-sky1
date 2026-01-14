@@ -1,7 +1,7 @@
 From 7bfc713e9d8324aaa6b21dd265c4c21d9e462e34 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Fri, 5 Dec 2025 09:43:48 +0800
-Subject: [PATCH 28/72] dma: arm-dma350: Fix IRQ clearing and use minimal
+Subject: [PATCH 28/73] dma: arm-dma350: Fix IRQ clearing and use minimal
  cyclic command format
 
 Fix two issues in the DMA-350 driver:

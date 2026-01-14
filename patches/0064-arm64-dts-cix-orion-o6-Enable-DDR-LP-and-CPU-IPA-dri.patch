@@ -1,7 +1,7 @@
 From c056ffe13cab6fce32d27af682bf13c510d94058 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sat, 27 Dec 2025 23:28:52 +1100
-Subject: [PATCH 64/72] arm64: dts: cix: orion-o6: Enable DDR LP and CPU IPA
+Subject: [PATCH 64/73] arm64: dts: cix: orion-o6: Enable DDR LP and CPU IPA
  drivers
 
 Enable the DDR low power control driver and CPU IPA power monitoring

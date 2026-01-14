@@ -1,7 +1,7 @@
 From 91ab9a607100bb9497ab36fc87436eb37e95ae9c Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sat, 6 Dec 2025 19:16:03 +0800
-Subject: [PATCH 33/72] dma-buf: heaps: Add DSP heap driver for CIX Sky1
+Subject: [PATCH 33/73] dma-buf: heaps: Add DSP heap driver for CIX Sky1
 
 Add a DMA-BUF heap driver for the CIX Sky1 HiFi5 DSP. This driver
 provides a simple shared memory buffer backed by a reserved memory

@@ -1,7 +1,7 @@
 From 7e0d849c9a0f5cf03c3c1f9288caba1fea3c88d6 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sun, 30 Nov 2025 00:51:17 +0800
-Subject: [PATCH 09/72] pci: cadence: sky1: Fail probe gracefully when PCIe
+Subject: [PATCH 09/73] pci: cadence: sky1: Fail probe gracefully when PCIe
  link is down
 
 Mainline's cdns_pcie_host_link_setup() returns 0 even when the PCIe

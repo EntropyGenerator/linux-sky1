@@ -1,7 +1,7 @@
 From aa121cb88c97d682dbd5a8859881b6536e01166b Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sat, 27 Dec 2025 23:27:20 +1100
-Subject: [PATCH 62/72] soc: cix: Add DDR low power control driver
+Subject: [PATCH 62/73] soc: cix: Add DDR low power control driver
 
 Add driver for controlling DDR self-refresh and power-down states on CIX
 Sky1 SoC. The driver uses SMC calls to TF-A firmware (SIP 0xc2000010) to

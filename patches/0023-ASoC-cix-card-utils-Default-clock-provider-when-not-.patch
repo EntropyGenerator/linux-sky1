@@ -1,7 +1,7 @@
 From b9b0feaec216cb98012e13da56b2c13b75f14bd6 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Thu, 4 Dec 2025 15:43:18 +0800
-Subject: [PATCH 23/72] ASoC: cix: card-utils: Default clock provider when not
+Subject: [PATCH 23/73] ASoC: cix: card-utils: Default clock provider when not
  specified in DT
 
 When no frame-master/bitclock-master is specified in the device tree,

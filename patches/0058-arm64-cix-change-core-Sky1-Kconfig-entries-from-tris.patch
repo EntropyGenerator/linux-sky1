@@ -1,7 +1,7 @@
 From 285aa2bb6bbc370ff71b9fd89fb7eed7726725b8 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Fri, 19 Dec 2025 22:51:33 +1100
-Subject: [PATCH 58/72] arm64: cix: change core Sky1 Kconfig entries from
+Subject: [PATCH 58/73] arm64: cix: change core Sky1 Kconfig entries from
  tristate to bool
 
 Core SoC infrastructure drivers must be built-in and cannot be modules:

@@ -68,3 +68,6 @@
 0068-soc-cix-Fix-DDR-LP-and-bus-DVFS-initialization.patch
 0069-arm64-dts-cix-Add-Radxa-Orion-O6N-device-tree.patch
 0070-arm64-dts-cix-orion-o6n-Remove-regulator-boot-on-fro.patch
+0071-Input-gpio_keys-use-DTS-interrupt-trigger-type-when-.patch
+0072-arm64-dts-cix-orion-o6n-Use-level-low-for-power-butt.patch
+0073-arm64-dts-cix-sky1-Disable-IOMMU-for-display-control.patch

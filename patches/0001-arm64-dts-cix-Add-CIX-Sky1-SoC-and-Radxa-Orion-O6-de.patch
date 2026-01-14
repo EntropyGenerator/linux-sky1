@@ -1,7 +1,7 @@
 From 506262b08a3321ea665d16eb830643e1244b59c6 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sat, 29 Nov 2025 08:33:14 +0800
-Subject: [PATCH 01/72] arm64: dts: cix: Add CIX Sky1 SoC and Radxa Orion O6
+Subject: [PATCH 01/73] arm64: dts: cix: Add CIX Sky1 SoC and Radxa Orion O6
  device tree
 
 Add device tree support for CIX Sky1 SoC and Radxa Orion O6 board,

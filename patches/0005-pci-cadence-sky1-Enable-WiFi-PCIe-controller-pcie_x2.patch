@@ -1,7 +1,7 @@
 From 3a36577e1898646665bfebf0ed2c7c847b2c1636 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sat, 29 Nov 2025 15:33:25 +0800
-Subject: [PATCH 05/72] pci: cadence: sky1: Enable WiFi PCIe controller
+Subject: [PATCH 05/73] pci: cadence: sky1: Enable WiFi PCIe controller
  (pcie_x2_rc)
 
 Remove temporary debug code that restricted PCIe probing to only the

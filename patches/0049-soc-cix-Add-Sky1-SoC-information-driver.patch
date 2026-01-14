@@ -1,7 +1,7 @@
 From 4d35b5ea981c62b612e55a77dd8ce234f4f3d3e2 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Wed, 10 Dec 2025 14:35:30 +0800
-Subject: [PATCH 49/72] soc: cix: Add Sky1 SoC information driver
+Subject: [PATCH 49/73] soc: cix: Add Sky1 SoC information driver
 
 Add SoC information driver for CIX Sky1 that exposes chip and board
 identification via the soc_device framework.

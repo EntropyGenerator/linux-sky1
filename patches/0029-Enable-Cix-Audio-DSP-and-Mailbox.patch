@@ -1,7 +1,7 @@
 From 82a7230938d9fa0d2c1e40c1621e26e5f37b2ed9 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Fri, 5 Dec 2025 13:52:56 +0800
-Subject: [PATCH 29/72] Enable Cix Audio DSP and Mailbox
+Subject: [PATCH 29/73] Enable Cix Audio DSP and Mailbox
 
 Ported 'cix_dsp_rproc' driver from vendor kernel.
 Enabled CIX_MBOX and CIX_DSP_RPROC in Kconfig/Makefile.

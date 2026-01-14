@@ -1,7 +1,7 @@
 From aef100f791e7d57ebd052e1b0f9f6e4af07e273e Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sun, 28 Dec 2025 00:42:51 +1100
-Subject: [PATCH 66/72] soc: cix: Add bus performance state control driver
+Subject: [PATCH 66/73] soc: cix: Add bus performance state control driver
 
 Add driver to control CI700 (memory interconnect) and NI700 (NoC
 interconnect) frequencies via SCMI performance domains.
