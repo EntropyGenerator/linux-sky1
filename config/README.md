@@ -2,6 +2,24 @@
 
 This documents non-default kernel options enabled for CIX Sky1/Radxa Orion O6.
 
+## Comparing Your Config
+
+Use the included script to compare your kernel config against the Sky1 default:
+
+```bash
+# Download and run (no installation needed)
+curl -fsSL https://raw.githubusercontent.com/Sky1-Linux/linux-sky1/main/config/diff-kernel-config.sh | bash
+
+# Or with a specific config file
+curl -fsSL https://raw.githubusercontent.com/Sky1-Linux/linux-sky1/main/config/diff-kernel-config.sh | bash -s /path/to/your/.config
+```
+
+The script will:
+- Compare your config against the Sky1 default
+- Flag any **missing required options** that may cause boot failures
+- Warn about **missing recommended options** for specific hardware features
+- Show all differences between your config and the default
+
 ## Essential Platform Support
 
 These are required for Sky1 hardware to function:

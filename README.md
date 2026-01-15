@@ -12,13 +12,14 @@ This repository contains the Sky1 kernel patch set:
 
 ```
 linux-sky1/
-├── patches/           # Git-formatted kernel patches
+├── patches/                    # Git-formatted kernel patches
 │   ├── 0001-*.patch
 │   └── ...
 ├── config/
-│   ├── config.sky1    # Production kernel config
-│   └── README.md      # Config documentation
-└── CHANGELOG.md       # Patch set version history
+│   ├── config.sky1             # Production kernel config
+│   ├── diff-kernel-config.sh   # Config comparison tool
+│   └── README.md               # Config documentation
+└── CHANGELOG.md                # Patch set version history
 ```
 
 ## Supported Hardware
@@ -83,6 +84,16 @@ echo "deb [signed-by=/usr/share/keyrings/sky1-linux.asc] https://sky1-linux.gith
 sudo apt update
 sudo apt install linux-image-6.18.4-sky1 linux-headers-6.18.4-sky1 sky1-firmware
 ```
+
+## Verifying Your Config
+
+If you're building a custom kernel, verify your config has all required options:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Sky1-Linux/linux-sky1/main/config/diff-kernel-config.sh | bash
+```
+
+This checks for missing required options and shows differences from the Sky1 default.
 
 ## Documentation
 
