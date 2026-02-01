@@ -46,9 +46,9 @@ linux-sky1/
 
 ```bash
 # Download kernel
-wget https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.18.7.tar.xz
-tar xf linux-6.18.7.tar.xz
-cd linux-6.18.7
+wget https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.18.8.tar.xz
+tar xf linux-6.18.8.tar.xz
+cd linux-6.18.8
 
 # Apply patches
 for p in /path/to/linux-sky1/patches/*.patch; do
@@ -68,17 +68,21 @@ make ARCH=arm64 -j$(nproc) Image modules dtbs
 
 ## Patch Categories
 
-| Category | Patches | Description |
-|----------|---------|-------------|
-| Platform | 0001-0002 | DTS, SCMI, mailbox |
-| PCIe | 0003-0011, 0054, 0061 | Cadence controller, ATU, MSI quirks, hotplug, I/O windows |
-| Display | 0012-0013 | linlon-dp, trilin-dpsub, USBDP PHYs |
-| USB | 0014-0017 | CDNSP, RTS5453 Type-C PD |
-| GPU | 0018-0021, 0043, 0051-0053 | Panthor Sky1 support |
-| Audio | 0022-0040 | HDA, DMA-350, DSP |
-| Power | 0062-0064, 0066, 0068 | DDR LP, bus DVFS, CPU IPA |
-| Drivers | 0074-0078 | In-tree VPU (amvx), NPU (armchina-npu), r8126/r8125 Ethernet |
-| Misc | 0041-0042, 0044-0050, 0055-0061, 0065, 0067 | PDC, hwspinlock, eFuse, SoC info, cpufreq, SMMU, SPE, DTS, PCIe I/O, dptx fix, rtw89 fix |
+| # | Patch | Description |
+|---|-------|-------------|
+| 01 | arm64: dts: cix | Sky1 SoC and Radxa Orion O6/O6N device trees |
+| 02 | pci: cadence | PCIe host controller, ATU, MSI, hotplug, I/O windows |
+| 03 | arm64: cix: infrastructure | SCMI, mailbox, pinctrl, clock, reset, hwspinlock, eFuse, SoC info |
+| 04 | usb: phy | CDNSP, RTS5453 Type-C PD, USBDP PHYs |
+| 05 | drm: cix: display | linlon-dp, trilin-dpsub display drivers |
+| 06 | drm/panthor | GPU support for Mali-G720-Immortalis |
+| 07 | sound: audio | HDA, DMA-350, DSP drivers |
+| 08 | net | Realtek RTL8126 5GbE and RTL8125 2.5GbE drivers |
+| 09 | misc: armchina-npu | Zhouyi NPU driver |
+| 10 | media: cix: vpu | Video codec (amvx) driver |
+| 11 | irqchip, iommu, perf | PDC, SMMU boot-active streams, ARM SPE heterogeneous CPU |
+| 12 | arm64: cix: misc | Thermal, PWM, watchdog, DDR LP, bus DVFS, CPU IPA, cpufreq |
+| 13 | scripts | Sky1 kernel development tools |
 
 ## Installing Pre-built Packages
 
@@ -99,7 +103,7 @@ echo "deb [signed-by=/usr/share/keyrings/sky1-linux.asc] https://sky1-linux.gith
 
 # Install kernel
 sudo apt update
-sudo apt install linux-image-6.18.7-sky1 linux-headers-6.18.7-sky1 sky1-firmware
+sudo apt install linux-image-6.18.8-sky1 linux-headers-6.18.8-sky1 sky1-firmware
 ```
 
 ## Verifying Your Config

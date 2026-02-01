@@ -1,0 +1,1437 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Entrpi <entrpi@proton.me>
+Date: Sun, 1 Feb 2026 17:23:39 +1100
+Subject: [PATCH] scripts: Add Sky1 kernel development tools
+
+---
+ README.md                      |  76 ++++++++
+ scripts/build-install.py       | 177 ++++++++++++++++++
+ scripts/build-test.py          | 189 +++++++++++++++++++
+ scripts/kernel-track-status.py | 222 ++++++++++++++++++++++
+ scripts/reconcile-configs.py   | 331 +++++++++++++++++++++++++++++++++
+ scripts/sky1_lib.py            | 149 +++++++++++++++
+ scripts/update-dev-boot.py     | 229 +++++++++++++++++++++++
+ 7 files changed, 1373 insertions(+)
+ create mode 100644 README.md
+ create mode 100755 scripts/build-install.py
+ create mode 100755 scripts/build-test.py
+ create mode 100755 scripts/kernel-track-status.py
+ create mode 100755 scripts/reconcile-configs.py
+ create mode 100755 scripts/sky1_lib.py
+ create mode 100755 scripts/update-dev-boot.py
+
+diff --git a/README.md b/README.md
+new file mode 100644
+index 0000000000000..982ad93c87a71
+--- /dev/null
++++ b/README.md
+@@ -0,0 +1,76 @@
++# Sky1-Linux/linux
++
++Full Linux kernel source with Sky1 SoC patches applied as commits on top of upstream tags.
++
++This is the development repo where patches are written, tested, and rebased. Exported patches are published to [linux-sky1](https://github.com/Sky1-Linux/linux-sky1) for distribution.
++
++## Branches
++
++| Branch | Base | Patches | Purpose |
++|--------|------|---------|---------|
++| `main` | Latest 6.18.x stable tag | 13 | LTS — production kernel |
++| `rc` | Latest 6.19-rcN tag | 12 | RC — pre-release testing |
++| `latest` | Latest 6.19.x stable tag | — | Latest stable (when 6.19 releases) |
++| `next` | Linus's master | — | Bleeding edge development |
++| `original-patches` | v6.18.7 | 78 | Archived — pre-consolidation history |
++| `master` | — | 0 | Mirror of Linus upstream |
++
++Each track branch contains the same Sky1 driver set rebased onto its respective upstream base. The `main` branch has one extra patch (dev scripts) not present in the other tracks.
++
++## Patch structure
++
++Patches are consolidated by subsystem. Each commit covers one functional area:
++
++1. **Device trees** — SoC base + board DTS (O6, O6N)
++2. **PCIe** — Cadence host controller, ATU, MSI, hotplug, I/O windows
++3. **Infrastructure** — SCMI, mailbox, pinctrl, clock, reset, hwspinlock, eFuse, SoC info
++4. **USB / PHY** — CDNSP, Type-C PD (RTS5453), USBDP PHYs
++5. **Display** — linlon-dp, trilin-dpsub
++6. **GPU** — Panthor Mali-G720 support
++7. **Audio** — HDA, DMA-350, DSP
++8. **Networking** — RTL8126 5GbE, RTL8125 2.5GbE
++9. **NPU** — ArmChina Zhouyi (30 TOPS)
++10. **VPU** — Linlon MVE video codec (H.264, HEVC, AV1, VP9)
++11. **IRQ / IOMMU / perf** — PDC, SMMU boot-active streams, ARM SPE
++12. **Misc platform** — Thermal, PWM, watchdog, DDR LP, bus DVFS, cpufreq
++13. **Dev scripts** — build-install, update-dev-boot, kernel-track-status (LTS only)
++
++## Remotes
++
++| Remote | URL | Purpose |
++|--------|-----|---------|
++| `origin` | `git.kernel.org/.../torvalds/linux.git` | Linus's tree (fetch tags, mirror master) |
++| `stable` | `git.kernel.org/.../stable/linux.git` | Stable releases (fetch specific tags) |
++| `sky1` | `github.com/Sky1-Linux/linux.git` | Our fork (push branches here) |
++
++## Workflow
++
++### Rebasing to a new stable tag
++
++```bash
++git fetch stable tag v6.18.Y --no-tags
++git rebase --onto v6.18.Y v6.18.X    # X = previous version
++# resolve conflicts, verify patch count
++git push --force sky1 HEAD:main
++```
++
++### Exporting patches to linux-sky1
++
++```bash
++rm ~/sky1-linux-distro/linux-sky1/patches/*.patch
++git format-patch -o ~/sky1-linux-distro/linux-sky1/patches \
++    --no-signature --zero-commit -M -N v6.18.Y..HEAD
++```
++
++### Building for local testing
++
++```bash
++./scripts/build-install.py        # build + install to EFI
++./scripts/update-dev-boot.py      # regenerate GRUB entries
++```
++
++## Related
++
++- [linux-sky1](https://github.com/Sky1-Linux/linux-sky1) — Exported patches + configs (what users consume)
++- [sky1-linux-build](https://github.com/Sky1-Linux/sky1-linux-build) — Debian package build scripts
++- [Sky1 Linux](https://github.com/Sky1-Linux) — Full project
+diff --git a/scripts/build-install.py b/scripts/build-install.py
+new file mode 100755
+index 0000000000000..8c6f26207d76c
+--- /dev/null
++++ b/scripts/build-install.py
+@@ -0,0 +1,177 @@
++#!/usr/bin/env -S uv run --python 3.14 --script
++# /// script
++# requires-python = ">=3.14"
++# ///
++"""Build and install mainline kernel for Sky1 dev systems.
++
++Usage: ./scripts/build-install.py [clean]
++
++Auto-detects:
++  - Board (from /sys/firmware/devicetree/base/compatible)
++  - Branch (main/latest/rc/next)
++  - Kernel version (from Makefile)
++
++Derives EFI image and DTB filenames accordingly.
++"""
++
++import os
++import subprocess
++import sys
++from pathlib import Path
++
++sys.path.insert(0, str(Path(__file__).resolve().parent))
++import sky1_lib
++
++
++def run(cmd: list[str], **kwargs) -> subprocess.CompletedProcess:
++    """Run a command, checking return code by default."""
++    return subprocess.run(cmd, check=True, **kwargs)
++
++
++def main() -> None:
++    os.chdir(Path(__file__).resolve().parent.parent)
++
++    import argparse
++    parser = argparse.ArgumentParser(description=__doc__,
++                                     formatter_class=argparse.RawDescriptionHelpFormatter)
++    parser.add_argument("action", nargs="?", default=None,
++                        choices=["clean"],
++                        help="'clean' to do a clean build first")
++    args = parser.parse_args()
++
++    board = sky1_lib.detect_board()
++
++    # Detect branch
++    result = sky1_lib.git("rev-parse", "--abbrev-ref", "HEAD")
++    branch = result.stdout.strip()
++    if not branch:
++        print("Error: Not in a git repository")
++        sys.exit(1)
++
++    # Get version from current HEAD
++    ver = sky1_lib.get_kernel_version("HEAD")
++
++    # Derive EFI filenames
++    efi = sky1_lib.get_efi_names(branch, ver.major_minor, board.dtb_prefix)
++
++    efi_dir = Path("/boot/efi")
++    dts_src = Path(f"arch/arm64/boot/dts/cix/{board.dts_base}.dtb")
++    jobs = os.cpu_count() or 4
++
++    print("=== Sky1 Kernel Build ===")
++    print(f"Board:   {board.compat} ({board.dts_base})")
++    print(f"Branch:  {branch}")
++    print(f"Version: {ver.full}")
++    print(f"Image:   {efi_dir / efi.image}")
++    print(f"DTB:     {efi_dir / efi.dtb}")
++    print(f"Jobs:    {jobs}")
++
++    # Check for config drift vs release config
++    config_map = {
++        "main": "config.sky1",
++        "latest": "config.sky1-latest",
++        "rc": "config.sky1-rc",
++        "next": "config.sky1-next",
++    }
++    release_cfg_name = config_map.get(branch)
++    if release_cfg_name:
++        release_cfg = (Path.home() / "sky1-linux-distro" / "linux-sky1"
++                       / "config" / release_cfg_name)
++        local_cfg = Path(".config")
++        if release_cfg.exists() and local_cfg.exists():
++            local_opts = {
++                l.split("=", 1)[0]
++                for l in local_cfg.read_text().splitlines()
++                if l.startswith("CONFIG_")
++            }
++            release_opts = {
++                l.split("=", 1)[0]
++                for l in release_cfg.read_text().splitlines()
++                if l.startswith("CONFIG_")
++            }
++            # Count lines that differ (ignoring toolchain version strings)
++            local_lines = {
++                l for l in local_cfg.read_text().splitlines()
++                if l.startswith("CONFIG_") and not l.startswith("CONFIG_CC_VERSION")
++                and not l.startswith("CONFIG_GCC_VERSION")
++                and not l.startswith("CONFIG_LD_VERSION")
++            }
++            release_lines = {
++                l for l in release_cfg.read_text().splitlines()
++                if l.startswith("CONFIG_") and not l.startswith("CONFIG_CC_VERSION")
++                and not l.startswith("CONFIG_GCC_VERSION")
++                and not l.startswith("CONFIG_LD_VERSION")
++            }
++            diff_count = len(local_lines.symmetric_difference(release_lines))
++            if diff_count:
++                print(f"\n  NOTE: .config differs from {release_cfg_name}"
++                      f" in {diff_count} options")
++                print(f"        Run ./scripts/reconcile-configs.py for details")
++
++    print()
++
++    if args.action == "clean":
++        print(">>> Cleaning build...")
++        run(["make", "clean"])
++        print()
++
++    # Build kernel, modules, and device trees
++    print(">>> Building kernel, modules, and DTBs...")
++    run(["make", f"-j{jobs}", "Image", "modules", "dtbs"])
++
++    print()
++    print(">>> Installing modules...")
++    run(["sudo", "make", "modules_install"])
++
++    print()
++    print(">>> Copying kernel image to EFI...")
++    src_image = Path("arch/arm64/boot/Image")
++    dst_image = efi_dir / efi.image
++    run(["sudo", "cp", str(src_image), str(dst_image)])
++
++    print(">>> Copying DTB to EFI...")
++    dst_dtb = efi_dir / efi.dtb
++    run(["sudo", "cp", str(dts_src), str(dst_dtb)])
++
++    print(">>> Syncing EFI filesystem...")
++    run(["sync"])
++
++    # Verify copies by comparing file sizes
++    src_size = src_image.stat().st_size
++    dst_size = dst_image.stat().st_size
++    if src_size != dst_size:
++        print("ERROR: Kernel image size mismatch!")
++        print(f"  Source: {src_size} bytes")
++        print(f"  Dest:   {dst_size} bytes")
++        sys.exit(1)
++
++    src_size = dts_src.stat().st_size
++    dst_size = dst_dtb.stat().st_size
++    if src_size != dst_size:
++        print("ERROR: DTB file size mismatch!")
++        print(f"  Source: {src_size} bytes")
++        print(f"  Dest:   {dst_size} bytes")
++        sys.exit(1)
++
++    # Get kernel release string
++    result = subprocess.run(
++        ["make", "-s", "kernelrelease"],
++        capture_output=True, text=True, check=True,
++    )
++    kernelrelease = result.stdout.strip()
++
++    print()
++    print("=== Build Complete ===")
++    print(f"Kernel:  {dst_image}")
++    print(f"DTB:     {dst_dtb}")
++    print(f"Modules: /lib/modules/{kernelrelease}")
++    print()
++    run(["ls", "-la", str(dst_image), str(dst_dtb)])
++    print()
++    print("Verified: EFI files match build artifacts.")
++    print("Reboot and select the matching GRUB entry to test.")
++    print("Run ./scripts/update-dev-boot.py if GRUB entries need updating.")
++
++
++if __name__ == "__main__":
++    main()
+diff --git a/scripts/build-test.py b/scripts/build-test.py
+new file mode 100755
+index 0000000000000..dfcd92800d016
+--- /dev/null
++++ b/scripts/build-test.py
+@@ -0,0 +1,189 @@
++#!/usr/bin/env -S uv run --python 3.14 --script
++# /// script
++# requires-python = ">=3.14"
++# ///
++"""Compile-test Sky1 patches against various kernel config targets.
++
++Usage:
++  build-test.py                     # default: allyesconfig
++  build-test.py allyesconfig        # everything =y
++  build-test.py allmodconfig        # everything =m
++  build-test.py defconfig           # ARM64 default
++  build-test.py randconfig          # random config
++  build-test.py all                 # allyesconfig + allmodconfig
++
++These are compile-only smoke tests — the resulting kernels won't boot.
++They catch API mismatches and #ifdef bugs when our code interacts with
++options we don't normally enable.
++
++When to run:
++  - First rebase of a new kernel series (e.g. 6.19-rc1, 6.20-rc1)
++  - Before promotion (rc -> latest)
++Not worth running for point releases or RC bumps within a series.
++"""
++
++import os
++import shutil
++import subprocess
++import sys
++import time
++from pathlib import Path
++
++VALID_TARGETS = ["allyesconfig", "allmodconfig", "defconfig", "randconfig", "all"]
++
++
++def run(cmd: list[str], **kwargs) -> subprocess.CompletedProcess:
++    return subprocess.run(cmd, check=True, **kwargs)
++
++
++def get_branch() -> str:
++    result = subprocess.run(
++        ["git", "rev-parse", "--abbrev-ref", "HEAD"],
++        capture_output=True, text=True, check=True,
++    )
++    return result.stdout.strip()
++
++
++def get_base_info() -> str:
++    """Get base tag/ref info for display."""
++    branch = get_branch()
++    result = subprocess.run(
++        ["git", "describe", "--tags", "--abbrev=0", "HEAD"],
++        capture_output=True, text=True, check=False,
++    )
++    base = result.stdout.strip() if result.returncode == 0 else "unknown"
++    result = subprocess.run(
++        ["git", "rev-list", "--count", f"{base}..HEAD"],
++        capture_output=True, text=True, check=False,
++    )
++    count = result.stdout.strip() if result.returncode == 0 else "?"
++    return f"{branch} ({base} + {count} patches)"
++
++
++def count_config_options(path: Path) -> int:
++    return sum(1 for line in path.read_text().splitlines() if line.startswith("CONFIG_"))
++
++
++def build_target(target: str, warnings: bool, modules_only: bool) -> bool:
++    """Run a single build test. Returns True on success."""
++    jobs = os.cpu_count() or 4
++    config_path = Path(".config")
++
++    print(f"\n>>> Generating {target}...")
++    run(["make", "ARCH=arm64", target])
++
++    option_count = count_config_options(config_path)
++    print(f"    {option_count} config options")
++
++    make_cmd = ["make", "ARCH=arm64", f"-j{jobs}"]
++    if warnings:
++        make_cmd.append("W=1")
++
++    targets = ["modules"] if modules_only else ["Image", "modules"]
++    make_cmd.extend(targets)
++
++    target_desc = " + ".join(targets)
++    print(f">>> Building {target_desc}...")
++
++    start = time.monotonic()
++    result = subprocess.run(make_cmd, capture_output=True, text=True)
++    elapsed = time.monotonic() - start
++    minutes = int(elapsed // 60)
++    seconds = int(elapsed % 60)
++
++    if result.returncode == 0:
++        print(f"  [PASS] {target} build succeeded ({minutes}m {seconds}s)")
++        return True
++    else:
++        print(f"  [FAIL] {target} build failed ({minutes}m {seconds}s)")
++        # Show last error lines
++        stderr_lines = result.stderr.strip().splitlines()
++        error_lines = [l for l in stderr_lines if "error:" in l.lower()]
++        if error_lines:
++            print()
++            for line in error_lines[-10:]:
++                print(f"  {line}")
++        elif stderr_lines:
++            print()
++            for line in stderr_lines[-10:]:
++                print(f"  {line}")
++        return False
++
++
++def main() -> None:
++    import argparse
++    parser = argparse.ArgumentParser(
++        description=__doc__,
++        formatter_class=argparse.RawDescriptionHelpFormatter,
++    )
++    parser.add_argument("target", nargs="?", default="allyesconfig",
++                        choices=VALID_TARGETS,
++                        help="Config target (default: allyesconfig)")
++    parser.add_argument("--warnings", "-W", action="store_true",
++                        help="Enable W=1 for extra compiler warnings")
++    parser.add_argument("--modules-only", action="store_true",
++                        help="Only build modules, skip Image")
++    parser.add_argument("--keep-config", action="store_true",
++                        help="Don't restore .config after test")
++    parser.add_argument("--repeat", "-n", type=int, default=1,
++                        help="Iterations for randconfig (default: 1)")
++    args = parser.parse_args()
++
++    os.chdir(Path(__file__).resolve().parent.parent)
++
++    # Save current config
++    config_path = Path(".config")
++    backup_path = Path(".config.build-test-backup")
++
++    if config_path.exists():
++        shutil.copy2(config_path, backup_path)
++        print(f"Saved .config to {backup_path}")
++    else:
++        print("Warning: no .config found (nothing to restore)")
++
++    branch_info = get_base_info()
++
++    if args.target == "all":
++        targets = ["allyesconfig", "allmodconfig"]
++    elif args.target == "randconfig":
++        targets = ["randconfig"] * args.repeat
++    else:
++        targets = [args.target]
++
++    print(f"\n=== Sky1 Build Test ===")
++    print(f"Branch:  {branch_info}")
++    print(f"Targets: {', '.join(targets)}")
++
++    results: dict[str, bool] = {}
++    for i, target in enumerate(targets):
++        label = f"{target}[{i+1}]" if target == "randconfig" and len(targets) > 1 else target
++        # Clean between targets
++        if i > 0:
++            print(f"\n>>> Cleaning between targets...")
++            run(["make", "ARCH=arm64", "clean"])
++        results[label] = build_target(target, args.warnings, args.modules_only)
++
++    # Restore config
++    if not args.keep_config and backup_path.exists():
++        print(f"\n>>> Restoring .config...")
++        shutil.copy2(backup_path, config_path)
++        backup_path.unlink()
++
++    # Final report
++    print(f"\n=== Results ===")
++    all_passed = True
++    for label, passed in results.items():
++        status = "PASS" if passed else "FAIL"
++        print(f"  {label:20s} [{status}]")
++        if not passed:
++            all_passed = False
++
++    if all_passed:
++        print("\nAll build tests passed.")
++    else:
++        print("\nSome build tests FAILED.")
++        sys.exit(1)
++
++
++if __name__ == "__main__":
++    main()
+diff --git a/scripts/kernel-track-status.py b/scripts/kernel-track-status.py
+new file mode 100755
+index 0000000000000..73528e5786bf5
+--- /dev/null
++++ b/scripts/kernel-track-status.py
+@@ -0,0 +1,222 @@
++#!/usr/bin/env -S uv run --python 3.14 --script
++# /// script
++# requires-python = ">=3.14"
++# ///
++"""Query upstream git repos and compare to local branch state.
++
++Usage: ./scripts/kernel-track-status.py [--fetch] [--json]
++
++Checks:
++  - LTS point releases (stable remote, v6.18.x tags)
++  - Latest stable releases (stable remote)
++  - RC tags (origin remote, v6.X-rcN)
++  - RC graduation (origin, release tag without -rc)
++"""
++
++import os
++import re
++import sys
++from pathlib import Path
++
++sys.path.insert(0, str(Path(__file__).resolve().parent))
++import sky1_lib
++
++# Colors (disabled if not a terminal)
++if sys.stdout.isatty():
++    RED, YELLOW, GREEN, CYAN, NC = (
++        "\033[0;31m", "\033[0;33m", "\033[0;32m", "\033[0;36m", "\033[0m",
++    )
++else:
++    RED = YELLOW = GREEN = CYAN = NC = ""
++
++
++def version_sort_key(tag: str) -> tuple:
++    """Sort key for version tags like v6.18.7, v6.19-rc7."""
++    s = tag.lstrip("v")
++    parts = re.split(r"[-.]", s)
++    result: list[tuple[int, int]] = []
++    for p in parts:
++        if p.startswith("rc"):
++            # RC versions sort before release
++            result.append((0, int(p[2:])))
++        else:
++            try:
++                result.append((1, int(p)))
++            except ValueError:
++                result.append((0, 0))
++    return tuple(result)
++
++
++def latest_remote_tag(remote: str, pattern: str) -> str | None:
++    """Get latest upstream tag matching a pattern from a remote."""
++    result = sky1_lib.git("ls-remote", "--tags", remote, pattern, check=False)
++    if result.returncode != 0 or not result.stdout.strip():
++        return None
++
++    tags: list[str] = []
++    for line in result.stdout.strip().split("\n"):
++        if "\t" not in line:
++            continue
++        ref = line.split("\t")[1]
++        tag = ref.removeprefix("refs/tags/").removesuffix("^{}")
++        if tag:
++            tags.append(tag)
++
++    if not tags:
++        return None
++
++    return sorted(set(tags), key=version_sort_key)[-1]
++
++
++def main() -> None:
++    os.chdir(Path(__file__).resolve().parent.parent)
++
++    import argparse
++    parser = argparse.ArgumentParser(description=__doc__,
++                                     formatter_class=argparse.RawDescriptionHelpFormatter)
++    parser.add_argument("--fetch", action="store_true",
++                        help="Fetch needed tags before checking")
++    parser.add_argument("--json", action="store_true",
++                        help="Machine-readable JSON output")
++    parser.parse_args()
++
++    print(f"{CYAN}=== Sky1 Kernel Track Status ==={NC}")
++    print()
++
++    actions: list[tuple[str, str]] = []
++
++    # --- LTS track (main branch) ---
++    print(f"{'LTS (main):':<12s}", end="")
++    if sky1_lib.branch_exists("main"):
++        ver = sky1_lib.get_kernel_version("main")
++        local_lts = ver.full
++        lts_mm = ver.major_minor
++        print(f"local={local_lts:<14s}", end="")
++
++        upstream_lts = latest_remote_tag("stable", f"refs/tags/v{lts_mm}.*")
++        if upstream_lts:
++            print(f"upstream={upstream_lts:<14s}", end="")
++            local_sub = local_lts.split(".")[2] if len(local_lts.split(".")) > 2 else "0"
++            upstream_sub = upstream_lts.removeprefix(f"v{lts_mm}.")
++            if local_sub != upstream_sub:
++                print(f"{YELLOW}UPDATE AVAILABLE{NC}")
++                actions.append((
++                    f"Rebase main onto {upstream_lts}",
++                    f"git checkout main && git rebase --onto {upstream_lts} v{local_lts}",
++                ))
++            else:
++                print(f"{GREEN}up to date{NC}")
++        else:
++            print("upstream=unknown")
++    else:
++        print(f"{RED}branch missing{NC}")
++
++    # --- Latest track (latest branch) ---
++    print(f"{'Latest:':<12s}", end="")
++    if sky1_lib.branch_exists("latest"):
++        ver = sky1_lib.get_kernel_version("latest")
++        local_latest = ver.full
++        latest_mm = ver.major_minor
++        print(f"local={local_latest:<14s}", end="")
++
++        upstream_latest = latest_remote_tag("stable", f"refs/tags/v{latest_mm}.*")
++        if upstream_latest:
++            print(f"upstream={upstream_latest:<14s}", end="")
++            local_sub = local_latest.split(".")[2] if len(local_latest.split(".")) > 2 else "0"
++            upstream_sub = upstream_latest.removeprefix(f"v{latest_mm}.")
++            if local_sub != upstream_sub:
++                print(f"{YELLOW}UPDATE AVAILABLE{NC}")
++                actions.append((
++                    f"Rebase latest onto {upstream_latest}",
++                    f"git checkout latest && git rebase --onto {upstream_latest} v{local_latest}",
++                ))
++            else:
++                print(f"{GREEN}up to date{NC}")
++        else:
++            print("upstream=unknown")
++    else:
++        print("not started", end="")
++        # Check if RC has graduated
++        if sky1_lib.branch_exists("rc"):
++            ver = sky1_lib.get_kernel_version("rc")
++            rc_mm = ver.major_minor
++            release_tag = latest_remote_tag("origin", f"refs/tags/v{rc_mm}")
++            if release_tag:
++                stable_tag = latest_remote_tag("stable", f"refs/tags/v{rc_mm}.*")
++                tag = stable_tag or release_tag
++                print(f"   upstream={tag:<10s}", end="")
++                print(f"{YELLOW}NEW RELEASE — promote rc to latest{NC}")
++                actions.append((
++                    f"Promote rc -> latest ({release_tag} released)",
++                    f"git checkout -b latest rc && git rebase --onto {tag} v{ver.full}",
++                ))
++            else:
++                print()
++        else:
++            print()
++
++    # --- RC track (rc branch) ---
++    print(f"{'RC (rc):':<12s}", end="")
++    if sky1_lib.branch_exists("rc"):
++        ver = sky1_lib.get_kernel_version("rc")
++        local_rc = ver.full
++        rc_mm = ver.major_minor
++        print(f"local={local_rc:<14s}", end="")
++
++        # Check if graduated
++        release_tag = latest_remote_tag("origin", f"refs/tags/v{rc_mm}")
++        if release_tag and "-rc" in local_rc:
++            print(f"upstream={release_tag:<14s}", end="")
++            print(f"{YELLOW}GRADUATED — promote to latest{NC}")
++        else:
++            latest_rc = latest_remote_tag("origin", f"refs/tags/v{rc_mm}-rc*")
++            if latest_rc:
++                print(f"upstream={latest_rc:<14s}", end="")
++                if f"v{local_rc}" != latest_rc:
++                    print(f"{YELLOW}NEWER RC AVAILABLE{NC}")
++                    actions.append((
++                        f"Rebase rc onto {latest_rc}",
++                        f"git checkout rc && git rebase --onto {latest_rc} v{local_rc}",
++                    ))
++                else:
++                    print(f"{GREEN}up to date{NC}")
++            else:
++                print("upstream=unknown")
++
++        # Check for next RC cycle
++        next_minor = ver.minor + 1
++        next_mm = f"{ver.major}.{next_minor}"
++        next_rc1 = latest_remote_tag("origin", f"refs/tags/v{next_mm}-rc1")
++        if next_rc1:
++            actions.append((
++                f"New RC cycle available ({next_rc1})",
++                f"git checkout rc && git rebase --onto {next_rc1} v{local_rc}",
++            ))
++    else:
++        print(f"{RED}branch missing{NC}")
++
++    # --- Next track (next branch) ---
++    print(f"{'Next:':<12s}", end="")
++    if sky1_lib.branch_exists("next"):
++        ver = sky1_lib.get_kernel_version("next")
++        print(f"local={ver.full:<14s}", end="")
++        print(f"{GREEN}active{NC}")
++    else:
++        print("not started")
++
++    print()
++
++    if actions:
++        print(f"{CYAN}Recommended actions:{NC}")
++        for i, (desc, cmd) in enumerate(actions):
++            print(f"  {i + 1}. {YELLOW}{desc}{NC}")
++            print(f"     {cmd}")
++        print()
++        print("After any rebase, run:  ./scripts/update-dev-boot.py")
++        print("Then build and test:    ./scripts/build-install.py")
++    else:
++        print(f"{GREEN}All tracks up to date.{NC}")
++
++
++if __name__ == "__main__":
++    main()
+diff --git a/scripts/reconcile-configs.py b/scripts/reconcile-configs.py
+new file mode 100755
+index 0000000000000..eb0b035fecd1f
+--- /dev/null
++++ b/scripts/reconcile-configs.py
+@@ -0,0 +1,331 @@
++#!/usr/bin/env -S uv run --python 3.14 --script
++# /// script
++# requires-python = ">=3.14"
++# ///
++"""Reconcile kernel configs across Sky1 build tracks.
++
++Modes:
++  reconcile-configs.py              Compare all track configs, check policy
++  reconcile-configs.py --fix        Auto-fix policy violations in-place
++  reconcile-configs.py --verbose    Show all Sky1-specific options
++  reconcile-configs.py --review OLD NEW   Review config changes after olddefconfig
++"""
++
++import argparse
++import configparser
++import re
++import sys
++from collections import defaultdict
++from datetime import datetime
++from pathlib import Path
++
++LINUX_SKY1 = Path.home() / "sky1-linux-distro" / "linux-sky1"
++CONFIG_DIR = LINUX_SKY1 / "config"
++POLICY_FILE = CONFIG_DIR / "config-policy.ini"
++
++TRACKS = {
++    "LTS": "config.sky1",
++    "Latest": "config.sky1-latest",
++    "RC": "config.sky1-rc",
++    "Next": "config.sky1-next",
++}
++
++# Options to ignore when comparing across tracks (version/toolchain-specific)
++IGNORE_PATTERNS = [
++    r"^CONFIG_CC_VERSION_TEXT=",
++    r"^CONFIG_GCC_VERSION=",
++    r"^CONFIG_LD_VERSION=",
++    r"^CONFIG_CLANG_VERSION=",
++    r"^CONFIG_AS_VERSION=",
++    r"^CONFIG_PAHOLE_VERSION=",
++    r"^CONFIG_RUSTC_VERSION=",
++    r"^CONFIG_BINDGEN_VERSION=",
++    r"^CONFIG_KERNEL_VERSION_GENERATION=",
++]
++
++# Subsystem prefixes for categorizing new options in --review mode
++SUBSYSTEM_PREFIXES = {
++    "DRM_": "Display/GPU",
++    "SND_": "Audio",
++    "NET_": "Network",
++    "NFT_": "Network/Netfilter",
++    "NF_": "Network/Netfilter",
++    "CRYPTO_": "Crypto",
++    "SECURITY_": "Security",
++    "USB_": "USB",
++    "PHY_": "PHY",
++    "PCI_": "PCI",
++    "ARM64_": "ARM64",
++    "ARCH_": "Architecture",
++    "CIX_": "Sky1",
++    "SKY1_": "Sky1",
++    "LINLON": "Sky1",
++    "TRILIN": "Sky1",
++    "PANTHOR": "Sky1",
++    "ARMCHINA": "Sky1",
++    "CDNSP_SKY1": "Sky1",
++}
++
++
++def parse_config(path: Path) -> dict[str, str]:
++    """Parse a kernel .config file into {CONFIG_FOO: value} dict."""
++    opts: dict[str, str] = {}
++    for line in path.read_text().splitlines():
++        if line.startswith("CONFIG_"):
++            key, _, val = line.partition("=")
++            opts[key] = val
++        elif line.startswith("# CONFIG_") and line.endswith(" is not set"):
++            key = line.split()[1]
++            opts[key] = "n"
++    return opts
++
++
++def parse_policy() -> dict[str, str]:
++    """Parse config-policy.ini into {CONFIG_FOO: value} dict."""
++    if not POLICY_FILE.exists():
++        print(f"Warning: policy file not found: {POLICY_FILE}")
++        return {}
++
++    cp = configparser.ConfigParser()
++    cp.read(POLICY_FILE)
++
++    policy: dict[str, str] = {}
++    for section in cp.sections():
++        for key, val in cp.items(section):
++            policy[f"CONFIG_{key.upper()}"] = val
++    return policy
++
++
++def is_ignored(line: str) -> bool:
++    return any(re.match(pat, line) for pat in IGNORE_PATTERNS)
++
++
++def categorize_option(opt: str) -> str:
++    """Categorize a config option by subsystem prefix."""
++    name = opt.removeprefix("CONFIG_")
++    for prefix, category in SUBSYSTEM_PREFIXES.items():
++        if name.startswith(prefix):
++            return category
++    return "Other"
++
++
++def is_sky1_option(opt: str) -> bool:
++    name = opt.removeprefix("CONFIG_")
++    sky1_markers = [
++        "CIX", "SKY1", "LINLON", "TRILIN", "PANTHOR",
++        "ARMCHINA", "CDNSP_SKY1",
++    ]
++    return any(m in name for m in sky1_markers)
++
++
++def cmd_reconcile(fix: bool = False, verbose: bool = False) -> int:
++    """Compare all track configs and check policy."""
++    print("=== Sky1 Config Reconciliation ===\n")
++
++    # Load configs
++    configs: dict[str, dict[str, str]] = {}
++    for label, filename in TRACKS.items():
++        path = CONFIG_DIR / filename
++        if path.exists():
++            configs[label] = parse_config(path)
++            count = sum(1 for v in configs[label].values() if v != "n")
++            print(f"  {label:8s} {filename:25s} ({count} enabled options)")
++        else:
++            print(f"  {label:8s} {filename:25s} (not found, skipping)")
++
++    if len(configs) < 2:
++        print("\nNeed at least 2 configs to compare.")
++        return 0
++
++    print()
++
++    policy = parse_policy()
++    violations: list[str] = []
++    fixed = 0
++
++    # Check policy
++    if policy:
++        print("--- Policy Check ---")
++        for opt, required_val in sorted(policy.items()):
++            for label, cfg in configs.items():
++                actual = cfg.get(opt)
++                if actual is None:
++                    violations.append(f"  {TRACKS[label]:25s} {opt}  MISSING  (policy: {required_val})")
++                elif actual != required_val:
++                    violations.append(f"  {TRACKS[label]:25s} {opt}={actual}  (policy: {required_val})")
++
++        if violations:
++            for v in violations:
++                print(v)
++            print()
++            if fix:
++                for opt, required_val in sorted(policy.items()):
++                    for label, cfg in configs.items():
++                        actual = cfg.get(opt)
++                        if actual is not None and actual != required_val:
++                            path = CONFIG_DIR / TRACKS[label]
++                            text = path.read_text()
++                            old = f"{opt}={actual}"
++                            new = f"{opt}={required_val}"
++                            if old in text:
++                                text = text.replace(old, new)
++                                path.write_text(text)
++                                print(f"  Fixed: {TRACKS[label]}: {old} -> {new}")
++                                fixed += 1
++                if fixed:
++                    print(f"\n  {fixed} violation(s) fixed.\n")
++        else:
++            print("  All options match policy.\n")
++
++    # Compare Sky1-specific options across tracks
++    sky1_opts: set[str] = set()
++    for cfg in configs.values():
++        sky1_opts.update(k for k in cfg if is_sky1_option(k))
++
++    divergent: list[str] = []
++    for opt in sorted(sky1_opts):
++        vals = {}
++        for label, cfg in configs.items():
++            vals[label] = cfg.get(opt, "-")
++
++        unique = set(vals.values())
++        if len(unique) > 1 or verbose:
++            parts = "  ".join(f"{l}={v}" for l, v in vals.items())
++            marker = " ***" if len(unique) > 1 else ""
++            divergent.append(f"  {opt:45s} {parts}{marker}")
++
++    header = "Sky1-Specific Options (all)" if verbose else "Sky1-Specific Divergence"
++    print(f"--- {header} ---")
++    if divergent:
++        for d in divergent:
++            print(d)
++    else:
++        print("  All Sky1-specific options are consistent across tracks.")
++    print()
++
++    # Summary
++    div_count = sum(1 for d in divergent if "***" in d)
++    print("--- Summary ---")
++    print(f"  {len(violations)} policy violation(s)")
++    print(f"  {div_count} divergent Sky1-specific option(s)")
++    print(f"  {len(sky1_opts)} total Sky1-specific options checked")
++
++    return 1 if violations and not fix else 0
++
++
++def cmd_review(old_path: Path, new_path: Path) -> int:
++    """Review config changes between two configs (e.g. before/after olddefconfig)."""
++    if not old_path.exists():
++        print(f"Error: {old_path} not found")
++        return 1
++    if not new_path.exists():
++        print(f"Error: {new_path} not found")
++        return 1
++
++    old = parse_config(old_path)
++    new = parse_config(new_path)
++
++    print(f"=== Config Review: {old_path.name} -> {new_path.name} ===\n")
++    print(f"  Old: {sum(1 for v in old.values() if v != 'n')} enabled options")
++    print(f"  New: {sum(1 for v in new.values() if v != 'n')} enabled options")
++    print()
++
++    # New options
++    added = {k: v for k, v in new.items() if k not in old and not is_ignored(f"{k}={v}")}
++    # Removed options
++    removed = {k: v for k, v in old.items() if k not in new and not is_ignored(f"{k}={v}")}
++    # Changed options
++    changed = {
++        k: (old[k], new[k])
++        for k in old
++        if k in new and old[k] != new[k] and not is_ignored(f"{k}={old[k]}")
++    }
++
++    # Categorize new options
++    if added:
++        by_category: dict[str, list[tuple[str, str]]] = defaultdict(list)
++        for opt, val in sorted(added.items()):
++            cat = categorize_option(opt)
++            by_category[cat].append((opt, val))
++
++        print(f"--- NEW options ({len(added)}) ---")
++        # Show Sky1-relevant first
++        for cat in ["Sky1", "Display/GPU", "Audio", "USB", "PCI", "PHY", "Network"]:
++            if cat in by_category:
++                print(f"\n  [{cat}]")
++                for opt, val in by_category.pop(cat):
++                    print(f"    {opt}={val}")
++
++        # Then other categories
++        for cat in sorted(by_category):
++            items = by_category[cat]
++            if len(items) <= 10:
++                print(f"\n  [{cat}]")
++                for opt, val in items:
++                    print(f"    {opt}={val}")
++            else:
++                print(f"\n  [{cat}] ({len(items)} options, showing first 5)")
++                for opt, val in items[:5]:
++                    print(f"    {opt}={val}")
++                print(f"    ... ({len(items) - 5} more)")
++        print()
++
++    # Removed options
++    if removed:
++        was_enabled = [(k, v) for k, v in removed.items() if v in ("y", "m")]
++        was_disabled = [(k, v) for k, v in removed.items() if v == "n"]
++
++        print(f"--- REMOVED options ({len(removed)}) ---")
++        if was_enabled:
++            print(f"\n  Previously ENABLED (review!):")
++            for opt, val in sorted(was_enabled):
++                print(f"    {opt} (was: {val})")
++        if was_disabled:
++            print(f"\n  Previously disabled ({len(was_disabled)} options, no action needed)")
++        print()
++
++    # Changed values
++    if changed:
++        print(f"--- CHANGED values ({len(changed)}) ---")
++        for opt, (old_val, new_val) in sorted(changed.items()):
++            sky1_flag = " [Sky1]" if is_sky1_option(opt) else ""
++            print(f"  {opt}: {old_val} -> {new_val}{sky1_flag}")
++        print()
++
++    # Summary
++    print("--- Summary ---")
++    print(f"  {len(added)} new options")
++    print(f"  {len(removed)} removed options")
++    print(f"  {len(changed)} changed values")
++
++    # Save review to file
++    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
++    review_file = Path.home() / "docs" / f"config-review-{timestamp}.txt"
++    # Only save if there are meaningful changes
++    if added or removed or changed:
++        print(f"\n  Review saved to: {review_file}")
++
++    return 0
++
++
++def main() -> None:
++    parser = argparse.ArgumentParser(
++        description=__doc__,
++        formatter_class=argparse.RawDescriptionHelpFormatter,
++    )
++    parser.add_argument("--fix", action="store_true",
++                        help="Auto-fix policy violations in-place")
++    parser.add_argument("--verbose", "-v", action="store_true",
++                        help="Show all Sky1-specific options, not just divergent")
++    parser.add_argument("--review", nargs=2, metavar=("OLD", "NEW"),
++                        help="Review config changes between two files")
++    args = parser.parse_args()
++
++    if args.review:
++        sys.exit(cmd_review(Path(args.review[0]), Path(args.review[1])))
++    else:
++        sys.exit(cmd_reconcile(fix=args.fix, verbose=args.verbose))
++
++
++if __name__ == "__main__":
++    main()
+diff --git a/scripts/sky1_lib.py b/scripts/sky1_lib.py
+new file mode 100755
+index 0000000000000..9fc021ec97c7d
+--- /dev/null
++++ b/scripts/sky1_lib.py
+@@ -0,0 +1,149 @@
++"""Shared library for Sky1 kernel build scripts.
++
++Board detection, kernel version parsing, EFI name derivation,
++and git helpers used by update-dev-boot.py, kernel-track-status.py,
++and build-install.py.
++"""
++
++from __future__ import annotations
++
++import re
++import subprocess
++from dataclasses import dataclass
++from pathlib import Path
++
++# Board configurations: DT compatible string → DTS basename / DTB EFI prefix
++BOARD_DTS: dict[str, str] = {
++    "radxa,orion-o6": "sky1-orion-o6",
++    "radxa,orion-o6n": "sky1-orion-o6n",
++}
++
++BOARD_DTB_PREFIX: dict[str, str] = {
++    "radxa,orion-o6": "SKY1-ORION-O6",
++    "radxa,orion-o6n": "SKY1-ORION-O6N",
++}
++
++# Track configuration
++BRANCHES = ["main", "latest", "rc", "next"]
++
++TRACK_LABELS: dict[str, str] = {
++    "main": "LTS",
++    "latest": "",
++    "rc": "RC",
++    "next": "next",
++}
++
++
++@dataclass
++class Board:
++    compat: str
++    dts_base: str
++    dtb_prefix: str
++
++
++@dataclass
++class KernelVersion:
++    major: int
++    minor: int
++    sublevel: int
++    extra: str
++
++    @property
++    def major_minor(self) -> str:
++        return f"{self.major}.{self.minor}"
++
++    @property
++    def full(self) -> str:
++        # Match upstream tag format: 6.19-rc7 (no .0 sublevel for pre-release)
++        # vs 6.18.7 (include sublevel for stable)
++        if self.sublevel == 0 and self.extra:
++            return f"{self.major}.{self.minor}{self.extra}"
++        return f"{self.major}.{self.minor}.{self.sublevel}{self.extra}"
++
++
++@dataclass
++class EFINames:
++    image: str
++    dtb: str
++
++
++def detect_board() -> Board:
++    """Detect current board from /sys/firmware/devicetree/base/compatible."""
++    compat_path = Path("/sys/firmware/devicetree/base/compatible")
++    if not compat_path.exists():
++        raise RuntimeError("Cannot read /sys/firmware/devicetree/base/compatible")
++
++    compat = compat_path.read_bytes().split(b"\x00")[0].decode()
++    if compat not in BOARD_DTS:
++        known = ", ".join(BOARD_DTS.keys())
++        raise RuntimeError(f"Unknown board '{compat}'. Known boards: {known}")
++
++    return Board(
++        compat=compat,
++        dts_base=BOARD_DTS[compat],
++        dtb_prefix=BOARD_DTB_PREFIX[compat],
++    )
++
++
++def get_kernel_version(ref: str) -> KernelVersion:
++    """Get kernel version from a git ref's Makefile without checkout."""
++    result = git("show", f"{ref}:Makefile", check=False)
++    if result.returncode != 0:
++        raise RuntimeError(f"Cannot read Makefile from ref '{ref}'")
++
++    version = patchlevel = sublevel = ""
++    extraversion = ""
++    for line in result.stdout.split("\n")[:10]:
++        if m := re.match(r"^VERSION\s*=\s*(\d+)", line):
++            version = m.group(1)
++        elif m := re.match(r"^PATCHLEVEL\s*=\s*(\d+)", line):
++            patchlevel = m.group(1)
++        elif m := re.match(r"^SUBLEVEL\s*=\s*(\d+)", line):
++            sublevel = m.group(1)
++        elif m := re.match(r"^EXTRAVERSION\s*=\s*(.*)", line):
++            extraversion = m.group(1).strip()
++
++    return KernelVersion(
++        major=int(version),
++        minor=int(patchlevel),
++        sublevel=int(sublevel) if sublevel else 0,
++        extra=extraversion,
++    )
++
++
++def get_efi_names(branch: str, major_minor: str, dtb_prefix: str) -> EFINames:
++    """Derive EFI filenames from branch name and kernel version."""
++    match branch:
++        case "main" | "latest":
++            return EFINames(
++                image=f"IMAGE-{major_minor}-sky1",
++                dtb=f"{dtb_prefix}-{major_minor}-sky1.DTB",
++            )
++        case "rc":
++            return EFINames(
++                image=f"IMAGE-{major_minor}-sky1-rc",
++                dtb=f"{dtb_prefix}-{major_minor}-sky1-rc.DTB",
++            )
++        case "next":
++            return EFINames(
++                image="IMAGE-next-sky1",
++                dtb=f"{dtb_prefix}-next-sky1.DTB",
++            )
++        case _:
++            raise ValueError(f"Unknown branch '{branch}'")
++
++
++def git(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
++    """Run a git command and return the result."""
++    return subprocess.run(
++        ["git", *args],
++        capture_output=True,
++        text=True,
++        check=check,
++    )
++
++
++def branch_exists(branch: str) -> bool:
++    """Check if a git branch exists locally."""
++    result = git("rev-parse", "--verify", branch, check=False)
++    return result.returncode == 0
+diff --git a/scripts/update-dev-boot.py b/scripts/update-dev-boot.py
+new file mode 100755
+index 0000000000000..86a8bf841ab1d
+--- /dev/null
++++ b/scripts/update-dev-boot.py
+@@ -0,0 +1,229 @@
++#!/usr/bin/env -S uv run --python 3.14 --script
++# /// script
++# requires-python = ">=3.14"
++# ///
++"""Auto-generate GRUB dev entries from local kernel branches.
++
++Usage: ./scripts/update-dev-boot.py [-n] [--force]
++
++Discovers kernel versions from main/latest/rc/next branches,
++detects the current board, and regenerates the dev entries section
++of grub.cfg between ### BEGIN/END SKY1-DEV-ENTRIES ### markers.
++
++Content outside the markers is never touched.
++"""
++
++import argparse
++import hashlib
++import os
++import re
++import subprocess
++import sys
++import tempfile
++from datetime import datetime
++from pathlib import Path
++
++sys.path.insert(0, str(Path(__file__).resolve().parent))
++import sky1_lib
++
++GRUB_CFG = Path("/boot/efi/GRUB/grub.cfg")
++BEGIN_MARKER = "### BEGIN SKY1-DEV-ENTRIES"
++END_MARKER = "### END SKY1-DEV-ENTRIES ###"
++ROOT_PARTUUID = "c0fae6e2-4dbb-4cc1-8a8b-532904dbf5c8"
++
++# Edit boot parameters here — backslashes and formatting are preserved exactly.
++ENTRY_TEMPLATE = """\
++menuentry '{title}' {{
++    devicetree /{dtb}
++    linux /{image} \\
++        loglevel=7 \\
++        console=tty0 \\
++        console=ttyAMA2,115200 \\
++        efi=noruntime \\
++        earlycon=efifb \\
++        earlycon=pl011,0x040d0000 \\
++        acpi=off \\
++        clk_ignore_unused \\
++        linlon_dp.enable_fb=1 \\
++        linlon_dp.enable_render=0 \\
++        fbcon=map:01111111 \\
++        keep_bootcon \\
++        panic=30 \\
++        root=PARTUUID={partuuid} rootwait rw
++}}"""
++
++
++def emit_entry(title: str, dtb: str, image: str) -> str:
++    """Generate a single GRUB menuentry."""
++    return ENTRY_TEMPLATE.format(
++        title=title,
++        dtb=dtb,
++        image=image,
++        partuuid=ROOT_PARTUUID,
++    )
++
++
++def generate_entries(board: sky1_lib.Board) -> str:
++    """Generate all dev entries for existing branches."""
++    entries: list[str] = []
++    entry_num = 0
++
++    for branch in sky1_lib.BRANCHES:
++        if not sky1_lib.branch_exists(branch):
++            continue
++
++        ver = sky1_lib.get_kernel_version(branch)
++        efi = sky1_lib.get_efi_names(branch, ver.major_minor, board.dtb_prefix)
++
++        label = sky1_lib.TRACK_LABELS[branch]
++        if branch == "next":
++            title = f"{entry_num} Sky1 next dev (NVMe)"
++        elif label:
++            title = f"{entry_num} Sky1 {ver.major_minor} {label} dev (NVMe)"
++        else:
++            title = f"{entry_num} Sky1 {ver.major_minor} dev (NVMe)"
++
++        entries.append(emit_entry(title, efi.dtb, efi.image))
++        entry_num += 1
++
++    return "\n\n".join(entries)
++
++
++def content_hash(content: str) -> str:
++    """Compute first 16 hex chars of SHA-256 hash."""
++    return hashlib.sha256(content.encode()).hexdigest()[:16]
++
++
++def main() -> None:
++    os.chdir(Path(__file__).resolve().parent.parent)
++
++    parser = argparse.ArgumentParser(description=__doc__,
++                                     formatter_class=argparse.RawDescriptionHelpFormatter)
++    parser.add_argument("-n", "--dry-run", action="store_true",
++                        help="Print what would be generated, don't write")
++    parser.add_argument("--force", action="store_true",
++                        help="Override hash validation (allow overwriting manual edits)")
++    args = parser.parse_args()
++
++    board = sky1_lib.detect_board()
++    new_content = generate_entries(board)
++
++    if not new_content:
++        print("Error: No kernel branches found (main/latest/rc/next)")
++        sys.exit(1)
++
++    new_hash = content_hash(new_content)
++
++    print("=== Sky1 Dev Boot Entries ===")
++    print(f"Board: {board.compat}")
++    print(f"Hash:  {new_hash}")
++    print()
++
++    # Show what will be generated
++    for branch in sky1_lib.BRANCHES:
++        if sky1_lib.branch_exists(branch):
++            ver = sky1_lib.get_kernel_version(branch)
++            efi = sky1_lib.get_efi_names(branch, ver.major_minor, board.dtb_prefix)
++            print(f"  {branch:<8s} {ver.full:<16s} -> {efi.image} / {efi.dtb}")
++    print()
++
++    if args.dry_run:
++        print("--- Generated entries (dry-run) ---")
++        print(new_content)
++        return
++
++    if not GRUB_CFG.exists():
++        print(f"Error: {GRUB_CFG} not found")
++        sys.exit(1)
++
++    cfg_text = GRUB_CFG.read_text()
++
++    # Check if markers exist
++    has_markers = BEGIN_MARKER in cfg_text
++    if has_markers:
++        # Extract current content between markers
++        lines = cfg_text.split("\n")
++        in_section = False
++        current_lines: list[str] = []
++        old_hash: str | None = None
++
++        for line in lines:
++            if line.startswith(BEGIN_MARKER):
++                in_section = True
++                m = re.search(r"[a-f0-9]{16}", line)
++                old_hash = m.group(0) if m else None
++                continue
++            if line.startswith(END_MARKER):
++                in_section = False
++                continue
++            if in_section:
++                current_lines.append(line)
++
++        current_content = "\n".join(current_lines)
++        current_hash = content_hash(current_content)
++
++        if old_hash and old_hash != current_hash and not args.force:
++            print("Error: Dev entries were manually edited since last update.")
++            print(f"  Expected hash: {old_hash}")
++            print(f"  Current hash:  {current_hash}")
++            print()
++            print(f"Use --force to override, or edit {GRUB_CFG} manually.")
++            sys.exit(1)
++
++        if current_hash == new_hash and old_hash == new_hash:
++            print(f"GRUB entries are up to date (hash: {new_hash}). No changes needed.")
++            return
++
++    # Create timestamped backup
++    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
++    backup = GRUB_CFG.with_name(f"{GRUB_CFG.name}.backup-{timestamp}")
++    subprocess.run(["sudo", "cp", str(GRUB_CFG), str(backup)], check=True)
++    print(f"Backup: {backup}")
++
++    # Build new marker section
++    marker_section = f"{BEGIN_MARKER} {new_hash} ###\n{new_content}\n{END_MARKER}"
++
++    if has_markers:
++        # Replace existing marker section
++        lines = cfg_text.split("\n")
++        new_lines: list[str] = []
++        in_section = False
++        for line in lines:
++            if line.startswith(BEGIN_MARKER):
++                in_section = True
++                new_lines.append(marker_section)
++                continue
++            if line.startswith(END_MARKER):
++                in_section = False
++                continue
++            if not in_section:
++                new_lines.append(line)
++        new_cfg = "\n".join(new_lines)
++        action = "Updated"
++    else:
++        # No markers — insert after last 'set' line in preamble
++        lines = cfg_text.split("\n")
++        last_set = -1
++        for i, line in enumerate(lines):
++            if line.startswith("set "):
++                last_set = i
++        if last_set >= 0:
++            new_lines = lines[: last_set + 1] + ["", marker_section] + lines[last_set + 1 :]
++        else:
++            new_lines = [marker_section, ""] + lines
++        new_cfg = "\n".join(new_lines)
++        action = "Inserted"
++
++    # Write via temp file + sudo cp (EFI partition requires root)
++    with tempfile.NamedTemporaryFile(mode="w", suffix=".cfg", delete=False) as f:
++        f.write(new_cfg)
++        tmpfile = f.name
++    subprocess.run(["sudo", "cp", tmpfile, str(GRUB_CFG)], check=True)
++    Path(tmpfile).unlink()
++
++    print(f"{action} dev entries in {GRUB_CFG}")
++    print("Done. Default boot entry is 0 (LTS).")
++
++
++if __name__ == "__main__":
++    main()

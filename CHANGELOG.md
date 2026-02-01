@@ -2,6 +2,28 @@
 
 All notable changes to the Sky1 kernel patch set.
 
+## [6.18.8-1] - 2026-02-01
+
+### Changed
+- Rebased to Linux 6.18.8 stable
+- Consolidated patch set from 78 granular patches to 13 subsystem-grouped patches
+- Previous 78-patch history preserved in `original-patches` branch
+
+### Patch structure
+- 0001: Device trees (SoC + O6/O6N boards)
+- 0002: PCIe host controller
+- 0003: Infrastructure drivers (SCMI, mailbox, pinctrl, clock, reset, hwspinlock, eFuse, SoC info)
+- 0004: USB and PHY drivers
+- 0005: Display drivers (linlon-dp, trilin-dpsub)
+- 0006: GPU (Panthor Mali-G720)
+- 0007: Audio (HDA, DMA-350, DSP)
+- 0008: Networking (RTL8126 5GbE, RTL8125 2.5GbE)
+- 0009: NPU (armchina Zhouyi)
+- 0010: VPU (amvx video codec)
+- 0011: IRQ, IOMMU, perf (PDC, SMMU, ARM SPE)
+- 0012: Misc platform (thermal, PWM, watchdog, DDR LP, bus DVFS, CPU IPA, cpufreq)
+- 0013: Dev scripts
+
 ## [6.18.7-2] - 2026-01-30
 
 ### Added

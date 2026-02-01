@@ -1,0 +1,455 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Entrpi <entrpi@proton.me>
+Date: Sun, 1 Feb 2026 17:23:38 +1100
+Subject: [PATCH] irqchip: iommu: perf: Add CIX Sky1 support
+
+---
+ drivers/iommu/arm/arm-smmu-v3/arm-smmu-v3.c |  40 +++
+ drivers/irqchip/Kconfig                     |   8 +
+ drivers/irqchip/Makefile                    |   3 +-
+ drivers/irqchip/irq-gic-v3.c                |   5 +
+ drivers/irqchip/irq-sky1-pdc.c              | 271 ++++++++++++++++++++
+ drivers/perf/arm_spe_pmu.c                  |  17 ++
+ 6 files changed, 343 insertions(+), 1 deletion(-)
+ create mode 100644 drivers/irqchip/irq-sky1-pdc.c
+
+diff --git a/drivers/iommu/arm/arm-smmu-v3/arm-smmu-v3.c b/drivers/iommu/arm/arm-smmu-v3/arm-smmu-v3.c
+index 9780f40ba3e65..73ac157b481dd 100644
+--- a/drivers/iommu/arm/arm-smmu-v3/arm-smmu-v3.c
++++ b/drivers/iommu/arm/arm-smmu-v3/arm-smmu-v3.c
+@@ -4652,6 +4652,43 @@ static void __iomem *arm_smmu_ioremap(struct device *dev, resource_size_t start,
+ 	return devm_ioremap_resource(dev, &res);
+ }
+ 
++/*
++ * Install bypass STEs for stream IDs specified in device tree.
++ * This handles devices that are already active at boot (e.g., display
++ * controllers left running by bootloader) before the kernel driver
++ * has attached them to the IOMMU.
++ */
++static void arm_smmu_dt_install_bypass_ste(struct arm_smmu_device *smmu)
++{
++	struct device_node *np = smmu->dev->of_node;
++	int count, i;
++	u32 sid;
++
++	if (!np)
++		return;
++
++	count = of_property_count_u32_elems(np, "arm,boot-active-sids");
++	if (count <= 0)
++		return;
++
++	for (i = 0; i < count; i++) {
++		if (of_property_read_u32_index(np, "arm,boot-active-sids",
++					       i, &sid))
++			continue;
++
++		if (arm_smmu_init_sid_strtab(smmu, sid)) {
++			dev_err(smmu->dev,
++				"boot-active SID(0x%x) bypass failed\n", sid);
++			continue;
++		}
++
++		arm_smmu_make_bypass_ste(smmu,
++			arm_smmu_get_step_for_sid(smmu, sid));
++		dev_dbg(smmu->dev,
++			"installed bypass STE for boot-active SID 0x%x\n", sid);
++	}
++}
++
+ static void arm_smmu_rmr_install_bypass_ste(struct arm_smmu_device *smmu)
+ {
+ 	struct list_head rmr_list;
+@@ -4818,6 +4855,9 @@ static int arm_smmu_device_probe(struct platform_device *pdev)
+ 	/* Check for RMRs and install bypass STEs if any */
+ 	arm_smmu_rmr_install_bypass_ste(smmu);
+ 
++	/* Install bypass STEs for boot-active devices from DT */
++	arm_smmu_dt_install_bypass_ste(smmu);
++
+ 	/* Reset the device */
+ 	ret = arm_smmu_device_reset(smmu);
+ 	if (ret)
+diff --git a/drivers/irqchip/Kconfig b/drivers/irqchip/Kconfig
+index a61c6dc63c29c..dd1432f7cb553 100644
+--- a/drivers/irqchip/Kconfig
++++ b/drivers/irqchip/Kconfig
+@@ -413,6 +413,14 @@ config IMX_GPCV2
+ 	help
+ 	  Enables the wakeup IRQs for IMX platforms with GPCv2 block
+ 
++config SKY1_PDC
++	bool
++	depends on ARM_GIC
++	default y
++	select IRQ_DOMAIN
++	help
++	  Enables the wakeup IRQs for SKY1 platforms with PDC block
++
+ config IRQ_MXS
+ 	def_bool y if MACH_ASM9260 || ARCH_MXS
+ 	select IRQ_DOMAIN
+diff --git a/drivers/irqchip/Makefile b/drivers/irqchip/Makefile
+index 3de083f5484cc..b2b07a891c350 100644
+--- a/drivers/irqchip/Makefile
++++ b/drivers/irqchip/Makefile
+@@ -86,7 +86,8 @@ obj-$(CONFIG_MVEBU_GICP)		+= irq-mvebu-gicp.o
+ obj-$(CONFIG_MVEBU_ICU)			+= irq-mvebu-icu.o
+ obj-$(CONFIG_MVEBU_ODMI)		+= irq-mvebu-odmi.o
+ obj-$(CONFIG_MVEBU_PIC)			+= irq-mvebu-pic.o
+-obj-$(CONFIG_MVEBU_SEI)			+= irq-mvebu-sei.o
++obj-$(CONFIG_MVEBU_SEI)		+= irq-mvebu-sei.o
++obj-$(CONFIG_SKY1_PDC)			+= irq-sky1-pdc.o
+ obj-$(CONFIG_LS_EXTIRQ)			+= irq-ls-extirq.o
+ obj-$(CONFIG_LS_SCFG_MSI)		+= irq-ls-scfg-msi.o
+ obj-$(CONFIG_ARCH_ASPEED)		+= irq-aspeed-vic.o irq-aspeed-i2c-ic.o irq-aspeed-scu-ic.o
+diff --git a/drivers/irqchip/irq-gic-v3.c b/drivers/irqchip/irq-gic-v3.c
+index 3de351e66ee84..47f74a9daaa4b 100644
+--- a/drivers/irqchip/irq-gic-v3.c
++++ b/drivers/irqchip/irq-gic-v3.c
+@@ -2314,6 +2314,7 @@ static int __init gic_of_init(struct device_node *node, struct device_node *pare
+ 	u64 redist_stride;
+ 	u32 nr_redist_regions;
+ 	int err, i;
++	bool single_redist = false;
+ 
+ 	dist_base = gic_of_iomap(node, 0, "GICD", &res);
+ 	if (IS_ERR(dist_base)) {
+@@ -2339,6 +2340,9 @@ static int __init gic_of_init(struct device_node *node, struct device_node *pare
+ 		goto out_unmap_dist;
+ 	}
+ 
++	if (of_property_read_bool(node, "single-redist"))
++		single_redist = true;
++
+ 	for (i = 0; i < nr_redist_regions; i++) {
+ 		rdist_regs[i].redist_base = gic_of_iomap(node, 1 + i, "GICR", &res);
+ 		if (IS_ERR(rdist_regs[i].redist_base)) {
+@@ -2347,6 +2351,7 @@ static int __init gic_of_init(struct device_node *node, struct device_node *pare
+ 			goto out_unmap_rdist;
+ 		}
+ 		rdist_regs[i].phys_base = res.start;
++		rdist_regs[i].single_redist = single_redist;
+ 	}
+ 
+ 	if (of_property_read_u64(node, "redistributor-stride", &redist_stride))
+diff --git a/drivers/irqchip/irq-sky1-pdc.c b/drivers/irqchip/irq-sky1-pdc.c
+new file mode 100644
+index 0000000000000..044aff2015c0f
+--- /dev/null
++++ b/drivers/irqchip/irq-sky1-pdc.c
+@@ -0,0 +1,271 @@
++// SPDX-License-Identifier: GPL-2.0-only
++
++#include <linux/of_address.h>
++#include <linux/of_irq.h>
++#include <linux/slab.h>
++#include <linux/irqchip.h>
++#include <linux/syscore_ops.h>
++#include <linux/arm-smccc.h>
++
++#define SKY1_SIP_PDC                     0xC2000009
++#define SKY1_SIP_CONFIG_PDC_SET_WAKE     0x02
++
++#define PDC_MAX_IRQS            1000
++
++struct irq_domain *cix_domain;
++
++struct pdcv1_irqchip_data {
++	struct raw_spinlock     rlock;
++	void __iomem            *pdc_base;
++};
++
++static int pdcv1_wakeup_source_save(void)
++{
++	return 0;
++}
++
++static void pdcv1_wakeup_source_restore(void)
++{
++	return;
++}
++
++static struct syscore_ops sky1_pdc_syscore_ops = {
++	.suspend        = pdcv1_wakeup_source_save,
++	.resume         = pdcv1_wakeup_source_restore,
++};
++
++static int sky1_pdc_irq_set_wake(struct irq_data *d, unsigned int on)
++{
++	struct pdcv1_irqchip_data *cd = d->chip_data;
++	struct arm_smccc_res res;
++	unsigned long flags;
++
++	raw_spin_lock_irqsave(&cd->rlock, flags);
++	arm_smccc_smc(SKY1_SIP_PDC, SKY1_SIP_CONFIG_PDC_SET_WAKE,
++		d->hwirq - 32, on, 0, 0, 0, 0, &res);
++	raw_spin_unlock_irqrestore(&cd->rlock, flags);
++
++	return 0;
++}
++
++static struct irq_chip pdcv1_irqchip_data_chip = {
++	.name                   = "PDCv1",
++	.irq_eoi                = irq_chip_eoi_parent,
++	.irq_mask               = irq_chip_mask_parent,
++	.irq_unmask             = irq_chip_unmask_parent,
++	.irq_set_wake           = sky1_pdc_irq_set_wake,
++	.irq_retrigger          = irq_chip_retrigger_hierarchy,
++	.irq_set_type           = irq_chip_set_type_parent,
++#ifdef CONFIG_SMP
++	.irq_set_affinity       = irq_chip_set_affinity_parent,
++#endif
++};
++
++static int sky1_pdc_domain_translate(struct irq_domain *d,
++				      struct irq_fwspec *fwspec,
++				      unsigned long *hwirq,
++				      unsigned int *type)
++{
++	if (is_of_node(fwspec->fwnode)) {
++		/* Accept both 3-cell and 4-cell GIC format */
++		if (fwspec->param_count < 3 || fwspec->param_count > 4)
++			return -EINVAL;
++
++		/* No PPI should point to this domain (param[0] must be GIC_SPI=0) */
++		if (fwspec->param[0] != 0)
++			return -EINVAL;
++
++		*hwirq = fwspec->param[1] + 32;
++		*type = fwspec->param[2];
++		return 0;
++	} else if (is_acpi_device_node(fwspec->fwnode)) {
++		if(fwspec->param_count != 2)
++			return -EINVAL;
++
++		if (fwspec->param[0] < 32) {
++			pr_err(FW_BUG "Illegal GSI%d translation request\n",
++			       fwspec->param[0]);
++			return -EINVAL;
++		}
++		*hwirq = fwspec->param[0];
++		*type = fwspec->param[1];
++
++		WARN_ON(*type == IRQ_TYPE_NONE);
++		return 0;
++	}
++
++	return -EINVAL;
++}
++
++static int sky1_pdc_domain_alloc(struct irq_domain *domain,
++				  unsigned int irq, unsigned int nr_irqs,
++				  void *data)
++{
++	struct irq_fwspec *fwspec = data;
++	struct irq_fwspec parent_fwspec;
++	irq_hw_number_t hwirq;
++	unsigned int type;
++	int err;
++	int i;
++
++	err = sky1_pdc_domain_translate(domain, fwspec, &hwirq, &type);
++	if (err)
++		return err;
++
++	if (hwirq >= PDC_MAX_IRQS)
++		return -EINVAL;
++
++	for (i = 0; i < nr_irqs; i++) {
++		irq_domain_set_hwirq_and_chip(domain, irq + i, hwirq + i,
++				&pdcv1_irqchip_data_chip, domain->host_data);
++	}
++
++	parent_fwspec = *fwspec;
++	parent_fwspec.fwnode = domain->parent->fwnode;
++
++	return irq_domain_alloc_irqs_parent(domain, irq, nr_irqs,
++					    &parent_fwspec);
++}
++
++static const struct irq_domain_ops pdcv1_irqchip_data_domain_ops = {
++	.translate      = sky1_pdc_domain_translate,
++	.alloc          = sky1_pdc_domain_alloc,
++	.free           = irq_domain_free_irqs_common,
++};
++
++static const struct of_device_id pdcv1_of_match[] = {
++	{ .compatible = "cix,sky1-pdc",  .data = (const void *) 2 },
++	{ /* END */ }
++};
++
++static int __init sky1_pdc_irqchip_init(struct device_node *node,
++			       struct device_node *parent)
++{
++	struct irq_domain *parent_domain, *domain;
++	struct pdcv1_irqchip_data *cd;
++	const struct of_device_id *id;
++
++	pr_info("sky1_pdc: init called for %pOF, parent=%pOF\n", node, parent);
++
++	if (!parent) {
++		pr_err("%pOF: no parent, giving up\n", node);
++		return -ENODEV;
++	}
++
++	id = of_match_node(pdcv1_of_match, node);
++	if (!id) {
++		pr_err("%pOF: unknown compatibility string\n", node);
++		return -ENODEV;
++	}
++
++	parent_domain = irq_find_host(parent);
++	if (!parent_domain) {
++		pr_err("%pOF: unable to get parent domain\n", node);
++		return -ENXIO;
++	}
++
++	cd = kzalloc(sizeof(struct pdcv1_irqchip_data), GFP_KERNEL);
++	if (!cd) {
++		pr_err("%pOF: kzalloc failed!\n", node);
++		return -ENOMEM;
++	}
++
++	raw_spin_lock_init(&cd->rlock);
++
++	cd->pdc_base = of_iomap(node, 0);
++	if (!cd->pdc_base) {
++		pr_err("%pOF: unable to map pdc registers\n", node);
++		kfree(cd);
++		return -ENOMEM;
++	}
++
++	domain = irq_domain_create_hierarchy(parent_domain, 0, PDC_MAX_IRQS,
++					of_fwnode_handle(node), &pdcv1_irqchip_data_domain_ops, cd);
++	if (!domain) {
++		iounmap(cd->pdc_base);
++		kfree(cd);
++		return -ENOMEM;
++	}
++	irq_set_default_domain(domain);
++
++	cix_domain = domain;
++	pr_info("sky1_pdc: domain created successfully for %pOF\n", node);
++
++	register_syscore_ops(&sky1_pdc_syscore_ops);
++
++	/*
++	 * Clear the OF_POPULATED flag set in of_irq_init so that
++	 * later the pdc power domain driver will not be skipped.
++	 */
++	of_node_clear_flag(node, OF_POPULATED);
++
++	return 0;
++}
++
++#ifdef CONFIG_ACPI
++static int __init sky1_acpi_pdc_irqchip_init(struct platform_device *pdev)
++{
++	struct irq_domain *domain;
++	struct pdcv1_irqchip_data *cd;
++
++	cd = kzalloc(sizeof(struct pdcv1_irqchip_data), GFP_KERNEL);
++	if (!cd) {
++		pr_err("%pACPI: kzalloc failed!\n", pdev);
++		return -ENOMEM;
++	}
++
++	raw_spin_lock_init(&cd->rlock);
++	struct resource *res_dp = platform_get_resource(pdev, IORESOURCE_MEM, 0);
++	cd->pdc_base = devm_ioremap_resource(&pdev->dev, res_dp);
++	if (!cd->pdc_base) {
++		pr_err("%pACPI: unable to map pdc registers\n", pdev);
++		kfree(cd);
++		return -ENOMEM;
++	}
++
++	domain = acpi_irq_create_hierarchy(0, PDC_MAX_IRQS, pdev->dev.fwnode,
++					   &pdcv1_irqchip_data_domain_ops, cd);
++
++	if (!domain) {
++		iounmap(cd->pdc_base);
++		kfree(cd);
++		return -ENOMEM;
++	}
++
++	irq_set_default_domain(domain);
++	cix_domain = domain;
++
++	register_syscore_ops(&sky1_pdc_syscore_ops);
++
++	return 0;
++}
++
++static const struct acpi_device_id pdcv1_acpi_match[] = {
++	{ .id = "CIXHA019", .driver_data = 0 },
++	{ /* END */ },
++};
++
++static int pdc_probe(struct platform_device *p_dev)
++{
++	return sky1_acpi_pdc_irqchip_init(p_dev);
++}
++
++static struct platform_driver pdc_platform_driver = {
++	.probe = pdc_probe,
++	.driver = { .name = "sky1-pdc",
++		    .owner = THIS_MODULE,
++		    .acpi_match_table = ACPI_PTR(pdcv1_acpi_match) },
++};
++
++static int __init sky1_pdc_init(void) {
++	return platform_driver_register(&pdc_platform_driver);
++}
++
++core_initcall(sky1_pdc_init);
++#endif
++
++IRQCHIP_DECLARE(sky1_pdc, "cix,sky1-pdc", sky1_pdc_irqchip_init);
++
++MODULE_AUTHOR("Copyright 2024 Cix Technology Group Co., Ltd.");
++MODULE_DESCRIPTION("Cix Sky1 irq pdc driver");
++MODULE_LICENSE("GPL v2");
+diff --git a/drivers/perf/arm_spe_pmu.c b/drivers/perf/arm_spe_pmu.c
+index fa50645feddad..fade9b93f615f 100644
+--- a/drivers/perf/arm_spe_pmu.c
++++ b/drivers/perf/arm_spe_pmu.c
+@@ -1191,6 +1191,15 @@ static void __arm_spe_pmu_dev_probe(void *info)
+ 	spe_pmu->features |= SPE_PMU_FEAT_DEV_PROBED;
+ }
+ 
++/* Check if current CPU supports SPE (for heterogeneous big.LITTLE systems) */
++static bool arm_spe_pmu_cpu_supported(void)
++{
++	u64 dfr0 = read_sysreg(id_aa64dfr0_el1);
++	int pmsver = cpuid_feature_extract_unsigned_field(dfr0,
++					ID_AA64DFR0_EL1_PMSVer_SHIFT);
++	return pmsver != 0;
++}
++
+ static void __arm_spe_pmu_reset_local(void)
+ {
+ 	/*
+@@ -1212,6 +1221,10 @@ static void __arm_spe_pmu_setup_one(void *info)
+ {
+ 	struct arm_spe_pmu *spe_pmu = info;
+ 
++	/* Skip CPUs that don't support SPE (e.g., A520 in big.LITTLE) */
++	if (!arm_spe_pmu_cpu_supported())
++		return;
++
+ 	__arm_spe_pmu_reset_local();
+ 	enable_percpu_irq(spe_pmu->irq, IRQ_TYPE_NONE);
+ }
+@@ -1220,6 +1233,10 @@ static void __arm_spe_pmu_stop_one(void *info)
+ {
+ 	struct arm_spe_pmu *spe_pmu = info;
+ 
++	/* Skip CPUs that don't support SPE */
++	if (!arm_spe_pmu_cpu_supported())
++		return;
++
+ 	disable_percpu_irq(spe_pmu->irq);
+ 	__arm_spe_pmu_reset_local();
+ }
