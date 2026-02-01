@@ -1,0 +1,183 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Entrpi <entrpi@proton.me>
+Date: Mon, 2 Feb 2026 01:30:11 +1100
+Subject: [PATCH] drm/panthor: Fix SCMI perf domain DVFS to use existing
+ virtual device
+
+panthor_devfreq_scmi_init() was calling dev_pm_domain_attach_by_name()
+to create a virtual device for the SCMI "perf" power domain. This failed
+with a sysfs duplicate error because panthor_pm_domain_init() already
+creates that exact virtual device (genpd:1:15000000.gpu).
+
+The result was that GPU DVFS fell through to the DT OPP table path,
+which only changes frequency via clk_set_rate() without coordinating
+voltage through the SCMI performance domain.
+
+Fix by:
+1. Moving panthor_pm_domain_init() before panthor_devfreq_init() so the
+   virtual devices exist when devfreq initializes
+2. Rewriting panthor_devfreq_scmi_init() to look up the existing "perf"
+   domain virtual device from ptdev->pm_domain_devs[] instead of trying
+   to create a new one
+3. Removing the cleanup function and device link management since the
+   virtual device lifecycle is owned by panthor_pm_domain_init/fini
+
+With this fix, dev_pm_opp_set_rate() on the virtual device routes
+through the SCMI perf domain's set_performance_state callback, allowing
+the firmware to manage both frequency and voltage for each OPP level.
+---
+ drivers/gpu/drm/panthor/panthor_devfreq.c | 69 +++++++----------------
+ drivers/gpu/drm/panthor/panthor_device.c  |  6 +-
+ 2 files changed, 22 insertions(+), 53 deletions(-)
+
+diff --git a/drivers/gpu/drm/panthor/panthor_devfreq.c b/drivers/gpu/drm/panthor/panthor_devfreq.c
+index 5880a94dac593..3aff5c60b0505 100644
+--- a/drivers/gpu/drm/panthor/panthor_devfreq.c
++++ b/drivers/gpu/drm/panthor/panthor_devfreq.c
+@@ -4,8 +4,8 @@
+ #include <linux/clk.h>
+ #include <linux/devfreq.h>
+ #include <linux/devfreq_cooling.h>
++#include <linux/of.h>
+ #include <linux/platform_device.h>
+-#include <linux/pm_domain.h>
+ #include <linux/pm_opp.h>
+ 
+ #include <drm/drm_managed.h>
+@@ -29,13 +29,12 @@ struct panthor_devfreq {
+ 	 *
+ 	 * On platforms with a named "perf" power domain (e.g. SCMI DVFS),
+ 	 * frequency changes must go through this virtual device rather than
+-	 * the main GPU device. NULL if not using SCMI perf domain.
++	 * the main GPU device, so the OPP framework routes through the SCMI
++	 * performance state (which manages both frequency and voltage).
++	 * NULL if not using SCMI perf domain.
+ 	 */
+ 	struct device *opp_dev;
+ 
+-	/** @opp_dl: Device link to the SCMI perf domain virtual device. */
+-	struct device_link *opp_dl;
+-
+ 	/** @busy_time: Busy time. */
+ 	ktime_t busy_time;
+ 
+@@ -140,32 +139,17 @@ static struct devfreq_dev_profile panthor_devfreq_profile = {
+ 	.get_dev_status = panthor_devfreq_get_dev_status,
+ };
+ 
+-static void panthor_devfreq_scmi_cleanup(struct drm_device *ddev, void *data)
+-{
+-	struct panthor_devfreq *pdevfreq = data;
+-
+-	dev_pm_opp_remove_table(ddev->dev);
+-
+-	if (pdevfreq->opp_dl) {
+-		device_link_del(pdevfreq->opp_dl);
+-		pdevfreq->opp_dl = NULL;
+-	}
+-
+-	if (pdevfreq->opp_dev) {
+-		dev_pm_domain_detach(pdevfreq->opp_dev, true);
+-		pdevfreq->opp_dev = NULL;
+-	}
+-}
+-
+ /**
+  * panthor_devfreq_scmi_init() - Try to set up DVFS via SCMI perf domain.
+  * @ptdev: Panthor device
+  * @pdevfreq: Panthor devfreq state
+  *
+  * On platforms with multiple power domains (e.g. Sky1 with pd_gpu + perf),
+- * the SCMI perf domain is not auto-attached by the platform bus. Explicitly
+- * attach to the named "perf" domain, read the firmware-provided OPP table,
+- * and copy it to the main device for devfreq use.
++ * panthor_pm_domain_init() has already created virtual devices for each domain.
++ * Find the "perf" domain's virtual device, read the firmware-provided OPP
++ * table from it, and copy OPPs to the main device for devfreq use. Frequency
++ * changes will be routed through the virtual device so the SCMI firmware can
++ * manage both frequency and voltage.
+  *
+  * Return: number of OPPs added, 0 if no perf domain found, negative on error.
+  */
+@@ -174,30 +158,24 @@ static int panthor_devfreq_scmi_init(struct panthor_device *ptdev,
+ {
+ 	struct device *dev = ptdev->base.dev;
+ 	struct device *opp_dev;
+-	struct device_link *opp_dl;
+ 	struct dev_pm_opp *opp;
+ 	unsigned long freq;
+-	int count, i, ret;
++	int index, count, i, ret;
+ 
+-	opp_dev = dev_pm_domain_attach_by_name(dev, "perf");
+-	if (IS_ERR_OR_NULL(opp_dev))
++	/* Find "perf" power domain index from DT */
++	index = of_property_match_string(dev->of_node,
++					 "power-domain-names", "perf");
++	if (index < 0 || index >= ARRAY_SIZE(ptdev->pm_domain_devs))
+ 		return 0;
+ 
+-	opp_dl = device_link_add(dev, opp_dev,
+-				 DL_FLAG_RPM_ACTIVE |
+-				 DL_FLAG_PM_RUNTIME |
+-				 DL_FLAG_STATELESS);
+-	if (!opp_dl) {
+-		dev_pm_domain_detach(opp_dev, true);
++	opp_dev = ptdev->pm_domain_devs[index];
++	if (!opp_dev)
+ 		return 0;
+-	}
+ 
++	/* SCMI attach_dev callback already populated OPPs on the virtual device */
+ 	count = dev_pm_opp_get_opp_count(opp_dev);
+-	if (count <= 0) {
+-		device_link_del(opp_dl);
+-		dev_pm_domain_detach(opp_dev, true);
++	if (count <= 0)
+ 		return 0;
+-	}
+ 
+ 	/* Copy OPPs from the perf domain virtual device to the main device */
+ 	for (i = 0, freq = 0; ; i++, freq++) {
+@@ -214,19 +192,10 @@ static int panthor_devfreq_scmi_init(struct panthor_device *ptdev,
+ 		}
+ 	}
+ 
+-	if (i == 0) {
+-		device_link_del(opp_dl);
+-		dev_pm_domain_detach(opp_dev, true);
++	if (i == 0)
+ 		return 0;
+-	}
+ 
+ 	pdevfreq->opp_dev = opp_dev;
+-	pdevfreq->opp_dl = opp_dl;
+-
+-	ret = drmm_add_action_or_reset(&ptdev->base,
+-				       panthor_devfreq_scmi_cleanup, pdevfreq);
+-	if (ret)
+-		return ret;
+ 
+ 	drm_info(&ptdev->base,
+ 		 "GPU DVFS: %d OPPs from SCMI perf domain\n", i);
+diff --git a/drivers/gpu/drm/panthor/panthor_device.c b/drivers/gpu/drm/panthor/panthor_device.c
+index e3b212c5ecef6..b1cd4bf7a1c5b 100644
+--- a/drivers/gpu/drm/panthor/panthor_device.c
++++ b/drivers/gpu/drm/panthor/panthor_device.c
+@@ -329,13 +329,13 @@ int panthor_device_init(struct panthor_device *ptdev)
+ 	if (ret)
+ 		return ret;
+ 
+-	ret = panthor_devfreq_init(ptdev);
++	ret = panthor_pm_domain_init(ptdev);
+ 	if (ret)
+ 		return ret;
+ 
+-	ret = panthor_pm_domain_init(ptdev);
++	ret = panthor_devfreq_init(ptdev);
+ 	if (ret)
+-		return ret;
++		goto err_release_pm_domains;
+ 
+ 	ret = panthor_resets_init(ptdev);
+ 	if (ret)
