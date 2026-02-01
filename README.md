@@ -4,19 +4,30 @@ Linux kernel patches and configuration for CIX Sky1 SoC (Radxa Orion O6 and comp
 
 ## Overview
 
-This repository contains the Sky1 kernel patch set:
-- **78 patches** on top of Linux 6.18.x for CIX Sky1 SoC support
-- **Kernel configuration** for arm64
+This repository contains the Sky1 kernel patch set and configuration for 4 kernel tracks:
+
+| Track | Patches | Config | Base | APT Component |
+|-------|---------|--------|------|---------------|
+| LTS | `patches/` | `config.sky1` | v6.18.x | `main` |
+| Latest | `patches-latest/` | `config.sky1-latest` | v6.19.x | `latest` |
+| RC | `patches-rc/` | `config.sky1-rc` | v6.X-rcN | `rc` |
+| Next | `patches-next/` | `config.sky1-next` | origin/master | `next` |
 
 ## Repository Structure
 
 ```
 linux-sky1/
-├── patches/                    # Git-formatted kernel patches
+├── patches/                    # LTS track (6.18.x)
 │   ├── 0001-*.patch
 │   └── ...
+├── patches-latest/             # Latest stable track (6.19.x)
+├── patches-rc/                 # RC track (pre-release)
+├── patches-next/               # Next track (origin/master)
 ├── config/
-│   ├── config.sky1             # Production kernel config
+│   ├── config.sky1             # LTS config
+│   ├── config.sky1-latest      # Latest config
+│   ├── config.sky1-rc          # RC config
+│   ├── config.sky1-next        # Next config
 │   ├── diff-kernel-config.sh   # Config comparison tool
 │   └── README.md               # Config documentation
 └── CHANGELOG.md                # Patch set version history
@@ -77,9 +88,14 @@ Pre-built kernel packages are available from the Sky1 Linux apt repository:
 # Add repository key
 wget -qO- https://sky1-linux.github.io/apt/key.gpg | sudo tee /usr/share/keyrings/sky1-linux.asc > /dev/null
 
-# Add repository
+# Add repository (LTS only — default)
 echo "deb [signed-by=/usr/share/keyrings/sky1-linux.asc] https://sky1-linux.github.io/apt sid main" | \
     sudo tee /etc/apt/sources.list.d/sky1-linux.list
+
+# Or add additional tracks:
+#   sid main latest          — LTS + Latest stable
+#   sid main latest rc       — LTS + Latest + RC testing
+#   sid main latest rc next  — All tracks (bleeding edge)
 
 # Install kernel
 sudo apt update

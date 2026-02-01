@@ -2,9 +2,23 @@
 
 This documents non-default kernel options enabled for CIX Sky1/Radxa Orion O6.
 
-## Comparing Your Config
+## Config Files
 
-Use the included script to compare your kernel config against the Sky1 default:
+Four track-specific configs are maintained, one per kernel build track:
+
+| File | Track | Kernel |
+|------|-------|--------|
+| `config.sky1` | LTS | v6.18.x (stable) |
+| `config.sky1-latest` | Latest | v6.19.x (newest stable) |
+| `config.sky1-rc` | RC | v6.X-rcN (release candidates) |
+| `config.sky1-next` | Next | origin/master (bleeding edge) |
+
+All configs share the same Sky1-specific options. Differences are limited to
+upstream kernel version changes (new options, changed defaults).
+
+## Config Management Tools
+
+### Compare your config against Sky1 default
 
 ```bash
 # Download and run (no installation needed)
@@ -19,6 +33,26 @@ The script will:
 - Flag any **missing required options** that may cause boot failures
 - Warn about **missing recommended options** for specific hardware features
 - Show all differences between your config and the default
+
+### Cross-track reconciliation (developers)
+
+```bash
+# Check all track configs for policy violations and divergence
+~/mainline-linux/scripts/reconcile-configs.py
+
+# Auto-fix policy violations
+~/mainline-linux/scripts/reconcile-configs.py --fix
+
+# Review config changes after rebasing to a new kernel version
+~/mainline-linux/scripts/reconcile-configs.py --review .config.pre-rebase .config
+```
+
+### Config policy
+
+`config-policy.ini` defines options that must be consistent across all track
+configs. This includes all Sky1-specific driver options and core infrastructure.
+Board-specific options (e.g. R8126 for O6, R8125 for O6N) are excluded since
+they vary by hardware.
 
 ## Essential Platform Support
 
@@ -95,6 +129,11 @@ No vendor-specific thermal drivers are needed.
 | `HWSPINLOCK_SKY1` | bool | Hardware spinlocks |
 | `NVMEM_SKY1` | bool | eFuse/OTP access |
 | `CIX_SKY1_SOCINFO` | bool | SoC info (sysfs) |
+| `RESET_SKY1_AUDSS` | bool | Audio subsystem reset controller |
+| `SKY1_PDC` | bool | Power Domain Controller |
+| `CIX_BUS_PERF` | bool | Bus frequency scaling (CI700/NI700) |
+| `CIX_CPU_IPA` | bool | CPU Intelligent Power Allocation |
+| `CIX_DDR_LP` | bool | DDR low-power management |
 
 ## Video Processing (optional)
 
