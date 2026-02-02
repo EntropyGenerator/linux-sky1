@@ -20,8 +20,6 @@ When dev_pm_opp_set_rate() is called on this virtual device, the OPP
 framework routes through _set_opp_level() which calls
 dev_pm_domain_set_performance_state(), allowing the SCMI firmware to
 manage both frequency and voltage together.
-
-Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>
 ---
  drivers/gpu/drm/panthor/panthor_devfreq.c | 69 +++++-----------
  drivers/gpu/drm/panthor/panthor_device.c  | 98 ++++++++++++++++++-----
