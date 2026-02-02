@@ -1,0 +1,107 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Entrpi <entrpi@proton.me>
+Date: Mon, 2 Feb 2026 23:58:18 +1100
+Subject: [PATCH] arm64: dts: cix: Fix WiFi RFKill GPIO on Orion O6 and O6N
+
+GPIO019 was incorrectly assigned to the bluetooth node as BT,reset-gpios.
+It is actually the WLAN radio disable pin (WL_RADIO_DISABLE_L). Move it
+from the bluetooth node to a new rfkill-gpio device so the WiFi radio
+can be toggled via the rfkill interface.
+
+On O6, GPIO019 drives WL_RADIO_DISABLE_L directly (active-high). On O6N,
+GPIO019 goes through an SFI mux and N-channel MOSFET that inverts the
+logic (active-low).
+
+Add the wlan_radio_gpio pinctrl to the PCIe x2 RC node so the pad is
+muxed when the WiFi controller initializes.
+---
+ arch/arm64/boot/dts/cix/sky1-orion-o6.dts  | 14 +++++++++-----
+ arch/arm64/boot/dts/cix/sky1-orion-o6n.dts | 16 +++++++++++-----
+ 2 files changed, 20 insertions(+), 10 deletions(-)
+
+diff --git a/arch/arm64/boot/dts/cix/sky1-orion-o6.dts b/arch/arm64/boot/dts/cix/sky1-orion-o6.dts
+index 5cab6a509e500..7ad52ff49798a 100644
+--- a/arch/arm64/boot/dts/cix/sky1-orion-o6.dts
++++ b/arch/arm64/boot/dts/cix/sky1-orion-o6.dts
+@@ -194,12 +194,16 @@ panel_edp0: panel_edp0 {
+ 
+ 	wireless_bluetooth: wireless-bluetooth {
+ 		compatible = "bluetooth-platdata";
+-		pinctrl-names = "default";
+-		pinctrl-0 = <&bt_reset_gpio>;
+-		BT,reset-gpios = <&s5_gpio0 19 GPIO_ACTIVE_HIGH>;
+ 		status = "okay";
+ 	};
+ 
++	wlan_rfkill: wlan-rfkill {
++		compatible = "rfkill-gpio";
++		label = "wlan-rfkill";
++		radio-type = "wlan";
++		shutdown-gpios = <&s5_gpio0 19 GPIO_ACTIVE_HIGH>;
++	};
++
+ 	vgfx_power: vgfx-power {
+ 		compatible = "regulator-fixed";
+ 		regulator-name = "vgfx_power";
+@@ -328,7 +332,7 @@ CIX_PAD_SFI_GPIO2_FUNC_GPIO017 (PULL_UP|DS_LEVEL4) /* GPIO0-17 */
+ 		>;
+ 	};
+ 
+-	bt_reset_gpio: bt_reset_gpio {
++	wlan_radio_gpio: wlan_radio_gpio {
+ 		sky1,pins = <
+ 			CIX_PAD_GPIO019_FUNC_GPIO019 (PULL_UP|ST|DS_LEVEL7) /* GPIO0-19 */
+ 		>;
+@@ -2113,7 +2117,7 @@ &pcie_x4_rc {
+ /* M.2 E-Key (WiFi) */
+ &pcie_x2_rc {
+ 	pinctrl-names = "default";
+-	pinctrl-0 = <&pinctrl_pcie_x2_rc>;
++	pinctrl-0 = <&pinctrl_pcie_x2_rc>, <&wlan_radio_gpio>;
+ 	reset-gpios = <&s5_gpio0 4 GPIO_ACTIVE_HIGH>;
+ 	vcc-pcie-supply = <&vdd_3v3_pcie>;
+ 	status = "okay";
+diff --git a/arch/arm64/boot/dts/cix/sky1-orion-o6n.dts b/arch/arm64/boot/dts/cix/sky1-orion-o6n.dts
+index b1453dbcec64e..c8f61d311fdcb 100644
+--- a/arch/arm64/boot/dts/cix/sky1-orion-o6n.dts
++++ b/arch/arm64/boot/dts/cix/sky1-orion-o6n.dts
+@@ -196,12 +196,18 @@ panel_edp0: panel_edp0 {
+ 	wireless_bluetooth: wireless-bluetooth {
+ 		compatible = "bluetooth-platdata";
+ 		pinctrl-names = "default";
+-		pinctrl-0 = <&bt_reset_gpio>, <&bt_radio_gpio>;
+-		BT,reset-gpio = <&s5_gpio2 4 GPIO_ACTIVE_LOW>;
+-		BT,wake-gpio   = <&s5_gpio2 5 GPIO_ACTIVE_LOW>;
++		pinctrl-0 = <&bt_radio_gpio>;
++		BT,wake-gpio = <&s5_gpio2 5 GPIO_ACTIVE_LOW>;
+ 		status = "okay";
+ 	};
+ 
++	wlan_rfkill: wlan-rfkill {
++		compatible = "rfkill-gpio";
++		label = "wlan-rfkill";
++		radio-type = "wlan";
++		shutdown-gpios = <&s5_gpio2 4 GPIO_ACTIVE_LOW>;
++	};
++
+ 	em05_modem_power: em05-modem-power-regulator {
+ 		compatible = "regulator-fixed";
+ 		regulator-name = "em05_modem_power";
+@@ -405,7 +411,7 @@ CIX_PAD_GPIO018_FUNC_GPIO018 (PULL_UP|DS_LEVEL4) /* GPIO0-01 */
+ 		>;
+ 	};
+ 
+-	bt_reset_gpio: bt_reset_gpio {
++	wlan_radio_gpio: wlan_radio_gpio {
+ 		sky1,pins = <
+ 			CIX_PAD_GPIO019_FUNC_SFI_GPIO4 (PULL_UP|DS_LEVEL4) /* GPIO0-19 */
+ 		>;
+@@ -2260,7 +2266,7 @@ &pcie_x4_rc {
+ /* M.2 E-Key (WiFi) */
+ &pcie_x2_rc {
+ 	pinctrl-names = "default";
+-	pinctrl-0 = <&pinctrl_pcie_x2_rc>;
++	pinctrl-0 = <&pinctrl_pcie_x2_rc>, <&wlan_radio_gpio>;
+ 	reset-gpios = <&s5_gpio0 4 GPIO_ACTIVE_HIGH>;
+ 	vcc-pcie-supply = <&vdd_3v3_pcie>;
+ 	status = "okay";
