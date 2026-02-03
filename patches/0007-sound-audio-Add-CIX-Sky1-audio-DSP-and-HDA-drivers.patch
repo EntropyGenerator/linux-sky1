@@ -1,7 +1,7 @@
-From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From ab3e32bb6ebae9058789419475f15402fe022f3f Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sun, 1 Feb 2026 17:23:37 +1100
-Subject: [PATCH] sound: audio: Add CIX Sky1 audio, DSP, and HDA drivers
+Subject: [PATCH 07/24] sound: audio: Add CIX Sky1 audio, DSP, and HDA drivers
 
 ---
  drivers/dma-buf/heaps/Kconfig            |    9 +
@@ -8475,3 +8475,6 @@ index 0000000000000..a2e226cccf749
 +MODULE_IMPORT_NS("SND_SOC_SOF_XTENSA");
 +MODULE_AUTHOR("Joakim Zhang <joakim.zhang@cixtech.com>");
 +MODULE_LICENSE("Dual BSD/GPL");
+-- 
+2.51.0
+

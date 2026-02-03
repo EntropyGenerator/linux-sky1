@@ -1,7 +1,7 @@
-From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From 7bda6d79b398c0d995730b5ad3f789d1d69feb91 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sun, 1 Feb 2026 17:23:37 +1100
-Subject: [PATCH] net: Add CIX Sky1 networking drivers
+Subject: [PATCH 08/24] net: Add CIX Sky1 networking drivers
 
 ---
  drivers/net/ethernet/cadence/macb_main.c      |     1 +
@@ -53647,3 +53647,6 @@ index cf58121eb541d..63f3ad2a38aab 100644
  void __rtw89_enter_ps_mode(struct rtw89_dev *rtwdev)
  {
  	if (!rtwdev->ps_mode)
+-- 
+2.51.0
+

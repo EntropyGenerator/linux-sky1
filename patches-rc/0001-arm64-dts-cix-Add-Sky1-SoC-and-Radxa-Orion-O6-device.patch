@@ -1,7 +1,8 @@
-From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From 9f76a103a8e82efbd8244d0405bddda6dd87197d Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sun, 1 Feb 2026 00:31:25 +1100
-Subject: [PATCH] arm64: dts: cix: Add Sky1 SoC and Radxa Orion O6 device tree
+Subject: [PATCH 01/24] arm64: dts: cix: Add Sky1 SoC and Radxa Orion O6 device
+ tree
 
 Add complete device tree for CIX Sky1 SoC (sky1.dtsi) and Radxa Orion O6
 board (sky1-orion-o6.dts, sky1-orion-o6n.dts). Includes dt-binding headers
@@ -11199,3 +11200,6 @@ index 0000000000000..a13e68c3daa8a
 +#define REG_SENSOR_DEV_COUNT	32
 +
 +#endif
+-- 
+2.51.0
+

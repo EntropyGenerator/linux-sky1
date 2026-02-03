@@ -1,7 +1,7 @@
-From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From 0500b80dacc97ff74f23602f400040c32fab56a2 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Mon, 2 Feb 2026 01:30:11 +1100
-Subject: [PATCH] drm/panthor: Fix SCMI perf domain DVFS to use existing
+Subject: [PATCH 17/24] drm/panthor: Fix SCMI perf domain DVFS to use existing
  virtual device
 
 panthor_devfreq_scmi_init() was calling dev_pm_domain_attach_by_name()
@@ -181,3 +181,6 @@ index e3b212c5ecef6..b1cd4bf7a1c5b 100644
  
  	ret = panthor_resets_init(ptdev);
  	if (ret)
+-- 
+2.51.0
+

@@ -1,7 +1,7 @@
-From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From 5691ee0ebb28c5ce9f01402e6c3e5c045bcfce6c Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Tue, 3 Feb 2026 13:04:17 +1100
-Subject: [PATCH] drm/cix: Fix compiler warnings in DPTX display driver
+Subject: [PATCH 21/24] drm/cix: Fix compiler warnings in DPTX display driver
 
 Fix all compiler warnings in the Trilinear DPTX module:
 
@@ -212,3 +212,6 @@ index bdf3acf588168..84319eee3c23d 100644
  	{ 0x08A4, 0x0003, 0x0027, 0x0000 }, // swing level == 0
  	{ 0x08A4, 0x0003, 0x0023, 0x0009 },
  	{ 0x08A4, 0x0003, 0x001E, 0x0010 },
+-- 
+2.51.0
+

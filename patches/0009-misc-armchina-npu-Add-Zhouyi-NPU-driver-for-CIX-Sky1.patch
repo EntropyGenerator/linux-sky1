@@ -1,7 +1,7 @@
-From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From 7effac6b2226b1c9a050ca11df2d4617a54238a5 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sun, 1 Feb 2026 17:23:37 +1100
-Subject: [PATCH] misc: armchina-npu: Add Zhouyi NPU driver for CIX Sky1
+Subject: [PATCH 09/24] misc: armchina-npu: Add Zhouyi NPU driver for CIX Sky1
 
 ---
  drivers/misc/Kconfig                          |    1 +
@@ -12228,3 +12228,6 @@ index 0000000000000..83ac0102f5311
 +int get_qos(u32 exec_flag);
 +
 +#endif /* __AIPU_ZHOUYI_H__ */
+-- 
+2.51.0
+

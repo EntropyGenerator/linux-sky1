@@ -1,7 +1,7 @@
-From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From 900e854bee61076fdc11ff0c875aa0982e3baef8 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sun, 1 Feb 2026 00:39:45 +1100
-Subject: [PATCH] arm64: cix: Add Sky1 infrastructure drivers
+Subject: [PATCH 03/24] arm64: cix: Add Sky1 infrastructure drivers
 
 Add pinctrl, GPIO, reset controllers, clock (AUDSS), PWM, watchdog,
 hwspinlock, NVMEM, SoC info, DDR low-power, and bus performance drivers
@@ -5066,3 +5066,6 @@ index 0000000000000..6e7dd9a7f036d
 +MODULE_AUTHOR("Cix Technology Group Co., Ltd.");
 +MODULE_DESCRIPTION("CIX Sky1 SoC information driver");
 +MODULE_LICENSE("GPL");
+-- 
+2.51.0
+

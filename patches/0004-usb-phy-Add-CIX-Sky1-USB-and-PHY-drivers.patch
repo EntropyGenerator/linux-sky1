@@ -1,7 +1,7 @@
-From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From 317d4ee34f08cb5b65ea8ee86954ab3dba26f8a2 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sun, 1 Feb 2026 17:23:36 +1100
-Subject: [PATCH] usb: phy: Add CIX Sky1 USB and PHY drivers
+Subject: [PATCH 04/24] usb: phy: Add CIX Sky1 USB and PHY drivers
 
 ---
  drivers/phy/Kconfig             |    1 +
@@ -5323,3 +5323,6 @@ index 0000000000000..f71b7a632b6c4
 +MODULE_AUTHOR("Chao Zeng <Chao.Zeng@cixtech.com>");
 +MODULE_DESCRIPTION("Realtek RTS5453 USB Type-C PD Controller Driver");
 +MODULE_LICENSE("GPL");
+-- 
+2.51.0
+

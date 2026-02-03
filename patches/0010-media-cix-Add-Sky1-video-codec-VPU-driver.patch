@@ -1,7 +1,7 @@
-From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From 94f0dfd0d2fe7876318a6175c750a9dd21e5d398 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sun, 1 Feb 2026 17:23:38 +1100
-Subject: [PATCH] media: cix: Add Sky1 video codec (VPU) driver
+Subject: [PATCH 10/24] media: cix: Add Sky1 video codec (VPU) driver
 
 ---
  drivers/media/platform/Kconfig                |    1 +
@@ -39925,3 +39925,6 @@ index 0000000000000..3713621b65274
 +void mvx_seq_hash_stop(void *v);
 +
 +#endif /* _MVX_SEQ_H_ */
+-- 
+2.51.0
+

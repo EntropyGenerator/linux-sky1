@@ -1,7 +1,7 @@
-From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From 8432bb5fc8c47ace2709e95b99eca2c33645c4af Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sun, 1 Feb 2026 00:40:28 +1100
-Subject: [PATCH] usb: phy: Add CIX Sky1 USB and PHY drivers
+Subject: [PATCH 04/24] usb: phy: Add CIX Sky1 USB and PHY drivers
 
 Add CDNSP Sky1 glue driver with 10-port support, CDNSP platform driver,
 RTS5453 USB-PD Type-C controller, and CIX PHY drivers (USB2, USB3,
@@ -5326,3 +5326,6 @@ index 0000000000000..f71b7a632b6c4
 +MODULE_AUTHOR("Chao Zeng <Chao.Zeng@cixtech.com>");
 +MODULE_DESCRIPTION("Realtek RTS5453 USB Type-C PD Controller Driver");
 +MODULE_LICENSE("GPL");
+-- 
+2.51.0
+

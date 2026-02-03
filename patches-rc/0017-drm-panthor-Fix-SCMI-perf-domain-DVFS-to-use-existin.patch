@@ -1,7 +1,7 @@
-From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From 1f72890a3d0960a048ec4181c5de729933f2d793 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Mon, 2 Feb 2026 01:42:30 +1100
-Subject: [PATCH] drm/panthor: Fix SCMI perf domain DVFS to use existing
+Subject: [PATCH 17/24] drm/panthor: Fix SCMI perf domain DVFS to use existing
  virtual device
 
 The previous SCMI DVFS code used dev_pm_domain_attach_by_name() to
@@ -329,3 +329,6 @@ index 22aca55e58ea0..cfdef628e0d39 100644
  	/** @gpu_reset: Reset control for GPU (optional, Sky1). */
  	struct reset_control *gpu_reset;
  
+-- 
+2.51.0
+

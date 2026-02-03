@@ -1,7 +1,7 @@
-From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From 818a963ca511af17a008206621c0b9c804508519 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Tue, 3 Feb 2026 00:16:14 +1100
-Subject: [PATCH] arm64: dts: cix: Add Orange Pi 6 Plus device tree
+Subject: [PATCH 20/24] arm64: dts: cix: Add Orange Pi 6 Plus device tree
 
 Add board DTS for the Orange Pi 6 Plus (CIX Sky1 SoC), adapted from
 community contribution (PR #1 by Entrpi). Uses the shared sky1.dtsi
@@ -2317,3 +2317,6 @@ index b4cc5c43bce08..a199d58f8f36f 100644
  				status = "disabled";
  			};
  		};
+-- 
+2.51.0
+

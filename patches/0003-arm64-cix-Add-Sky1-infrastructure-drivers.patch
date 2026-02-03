@@ -1,7 +1,7 @@
-From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From 7a8353622db84986961a523e424aeeabddebabee Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sun, 1 Feb 2026 17:23:35 +1100
-Subject: [PATCH] arm64: cix: Add Sky1 infrastructure drivers
+Subject: [PATCH 03/24] arm64: cix: Add Sky1 infrastructure drivers
 
 ---
  drivers/clk/Kconfig                           |   1 +
@@ -6572,3 +6572,6 @@ index 0000000000000..a13e68c3daa8a
 +#define REG_SENSOR_DEV_COUNT	32
 +
 +#endif
+-- 
+2.51.0
+

@@ -1,7 +1,7 @@
-From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From 5aa36d0b0e3063fa131ce15a2f4c94ab90bde059 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sun, 1 Feb 2026 00:41:04 +1100
-Subject: [PATCH] drm: cix: Add Sky1 display drivers
+Subject: [PATCH 05/24] drm: cix: Add Sky1 display drivers
 
 Add Linlon Display Processor (DPU), Trilinear DisplayPort TX, HDCP,
 eDP panel support, and virtual display connector for CIX Sky1 SoC.
@@ -28081,3 +28081,6 @@ index 0000000000000..82b9efdcd42cb
 +
 +	return 0;
 +}
+-- 
+2.51.0
+

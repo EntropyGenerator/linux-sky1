@@ -1,7 +1,7 @@
-From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From 9a23c88893311314f8c44c42f65e06c7a0d5adde Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sun, 1 Feb 2026 17:23:36 +1100
-Subject: [PATCH] drm: cix: Add Sky1 display drivers
+Subject: [PATCH 05/24] drm: cix: Add Sky1 display drivers
 
 ---
  drivers/gpu/drm/Kconfig                       |    2 +
@@ -28071,3 +28071,6 @@ index 0000000000000..27d369aba482c
 +
 +	return 0;
 +}
+-- 
+2.51.0
+

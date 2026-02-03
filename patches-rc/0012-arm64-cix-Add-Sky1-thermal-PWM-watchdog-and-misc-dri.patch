@@ -1,7 +1,8 @@
-From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From 69e3193028f34cf70fe89da700975a727ee0f108 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sun, 1 Feb 2026 01:24:42 +1100
-Subject: [PATCH] arm64: cix: Add Sky1 thermal, PWM, watchdog, and misc drivers
+Subject: [PATCH 12/24] arm64: cix: Add Sky1 thermal, PWM, watchdog, and misc
+ drivers
 
 Add Sky1 PWM controller driver, watchdog timer driver, and CPU IPA
 thermal driver. Add topology_update_freq_ref() so schedutil sees
@@ -1249,3 +1250,6 @@ index 0000000000000..8237cf03c0991
 +echo
 +echo "Verified: EFI files match build artifacts."
 +echo "Ready to reboot. Use menu entry 3 (dev) for latest build."
+-- 
+2.51.0
+

@@ -1,7 +1,7 @@
-From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From e0828bac92084039466272a5857e8523ffcd027c Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sun, 1 Feb 2026 00:38:00 +1100
-Subject: [PATCH] pci: cadence: Add CIX Sky1 PCIe host controller driver
+Subject: [PATCH 02/24] pci: cadence: Add CIX Sky1 PCIe host controller driver
 
 Add full-featured PCIe host controller for CIX Sky1 SoC including
 multi-instance support with shared PHY coordination, AER error handling,
@@ -5965,3 +5965,6 @@ index 280cd50d693bd..146d8dc7ecc42 100644
  /*
   * Some versions of the MCP55 bridge from Nvidia have a legacy IRQ routing
   * config register.  This register controls the routing of legacy
+-- 
+2.51.0
+

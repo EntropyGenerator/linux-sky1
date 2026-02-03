@@ -1,7 +1,7 @@
-From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From 656e3dba70964e06fa95c4553e86831358d50e27 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sun, 1 Feb 2026 01:19:16 +1100
-Subject: [PATCH] misc: armchina-npu: Add Zhouyi NPU driver for CIX Sky1
+Subject: [PATCH 09/24] misc: armchina-npu: Add Zhouyi NPU driver for CIX Sky1
 
 Add ARM China Zhouyi AI accelerator (NPU) driver. Supports the Z2/Z3
 neural processing unit found in the CIX CD8180 SoC for machine learning
@@ -12231,3 +12231,6 @@ index 0000000000000..83ac0102f5311
 +int get_qos(u32 exec_flag);
 +
 +#endif /* __AIPU_ZHOUYI_H__ */
+-- 
+2.51.0
+
