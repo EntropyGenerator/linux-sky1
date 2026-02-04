@@ -1,0 +1,31 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Entrpi <entrpi@proton.me>
+Date: Wed, 4 Feb 2026 20:13:10 +1100
+Subject: [PATCH] arm64: dts: cix: Add msi-parent to PCIe SMMU for MSI-based
+ events
+
+The MMU-700 reports IDR0.MSI=1, supporting MSI-based delivery of
+event queue, command queue sync, and global error interrupts.
+Without msi-parent, the driver falls back to wired IRQs and prints:
+
+  "msi_domain absent - falling back to wired irqs"
+
+Add msi-parent pointing to the PCIe ITS, which is the only ITS on
+the SoC. This enables MSI-based interrupt delivery for lower latency
+SMMU event and fault reporting.
+---
+ arch/arm64/boot/dts/cix/sky1.dtsi | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/arch/arm64/boot/dts/cix/sky1.dtsi b/arch/arm64/boot/dts/cix/sky1.dtsi
+index bcffb970f492a..8f4f18d1a185f 100644
+--- a/arch/arm64/boot/dts/cix/sky1.dtsi
++++ b/arch/arm64/boot/dts/cix/sky1.dtsi
+@@ -667,6 +667,7 @@ smmu_pciehub: iommu@b010000 {
+ 			<GIC_SPI 76 IRQ_TYPE_EDGE_RISING 0>,
+ 			<GIC_SPI 80 IRQ_TYPE_EDGE_RISING 0>;
+ 		interrupt-names = "eventq", "priq", "cmdq-sync", "gerror";
++		msi-parent = <&its_pcie>;
+ 		dma-coherent;
+ 		/* Pre-install bypass STEs for PCIe root port and common device SIDs
+ 		 * to prevent F_TRANSL_FORBIDDEN events during early boot before

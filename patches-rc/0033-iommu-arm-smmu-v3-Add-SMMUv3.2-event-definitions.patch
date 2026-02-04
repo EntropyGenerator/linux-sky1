@@ -1,0 +1,58 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Entrpi <entrpi@proton.me>
+Date: Wed, 4 Feb 2026 19:40:29 +1100
+Subject: [PATCH] iommu/arm-smmu-v3: Add SMMUv3.2 event definitions
+
+Add missing event IDs from the ARM SMMUv3.2 specification:
+
+- EVT_ID_BAD_ATS_TREQ (0x05): C_BAD_ATS_TREQ
+- EVT_ID_TRANSL_FORBIDDEN (0x07): F_TRANSL_FORBIDDEN
+
+F_TRANSL_FORBIDDEN is generated when a transaction hits an STE with
+Config=0b000 (abort). Previously logged as "UNKNOWN" which provided
+no diagnostic value. This event is commonly seen during PCIe device
+initialization before IOMMU domains are attached.
+
+The CIX Sky1 SoC uses ARM MMU-700 implementing SMMUv3.2+ features
+(BBML2, BTM, E2H, NESTING) and generates these events.
+---
+ drivers/iommu/arm/arm-smmu-v3/arm-smmu-v3.c | 3 +++
+ drivers/iommu/arm/arm-smmu-v3/arm-smmu-v3.h | 2 ++
+ 2 files changed, 5 insertions(+)
+
+diff --git a/drivers/iommu/arm/arm-smmu-v3/arm-smmu-v3.c b/drivers/iommu/arm/arm-smmu-v3/arm-smmu-v3.c
+index 693d237892e98..95b85a2ced6b9 100644
+--- a/drivers/iommu/arm/arm-smmu-v3/arm-smmu-v3.c
++++ b/drivers/iommu/arm/arm-smmu-v3/arm-smmu-v3.c
+@@ -88,7 +88,9 @@ static const char * const event_str[] = {
+ 	[EVT_ID_BAD_STREAMID_CONFIG] = "C_BAD_STREAMID",
+ 	[EVT_ID_STE_FETCH_FAULT] = "F_STE_FETCH",
+ 	[EVT_ID_BAD_STE_CONFIG] = "C_BAD_STE",
++	[EVT_ID_BAD_ATS_TREQ] = "C_BAD_ATS_TREQ",
+ 	[EVT_ID_STREAM_DISABLED_FAULT] = "F_STREAM_DISABLED",
++	[EVT_ID_TRANSL_FORBIDDEN] = "F_TRANSL_FORBIDDEN",
+ 	[EVT_ID_BAD_SUBSTREAMID_CONFIG] = "C_BAD_SUBSTREAMID",
+ 	[EVT_ID_CD_FETCH_FAULT] = "F_CD_FETCH",
+ 	[EVT_ID_BAD_CD_CONFIG] = "C_BAD_CD",
+@@ -1825,6 +1827,7 @@ static int arm_smmu_handle_event(struct arm_smmu_device *smmu, u64 *evt,
+ 	switch (event->id) {
+ 	case EVT_ID_BAD_STE_CONFIG:
+ 	case EVT_ID_STREAM_DISABLED_FAULT:
++	case EVT_ID_TRANSL_FORBIDDEN:
+ 	case EVT_ID_BAD_SUBSTREAMID_CONFIG:
+ 	case EVT_ID_BAD_CD_CONFIG:
+ 	case EVT_ID_TRANSLATION_FAULT:
+diff --git a/drivers/iommu/arm/arm-smmu-v3/arm-smmu-v3.h b/drivers/iommu/arm/arm-smmu-v3/arm-smmu-v3.h
+index ae23aacc38402..42bca64aab331 100644
+--- a/drivers/iommu/arm/arm-smmu-v3/arm-smmu-v3.h
++++ b/drivers/iommu/arm/arm-smmu-v3/arm-smmu-v3.h
+@@ -458,7 +458,9 @@ static inline unsigned int arm_smmu_cdtab_l2_idx(unsigned int ssid)
+ #define EVT_ID_BAD_STREAMID_CONFIG	0x02
+ #define EVT_ID_STE_FETCH_FAULT		0x03
+ #define EVT_ID_BAD_STE_CONFIG		0x04
++#define EVT_ID_BAD_ATS_TREQ		0x05
+ #define EVT_ID_STREAM_DISABLED_FAULT	0x06
++#define EVT_ID_TRANSL_FORBIDDEN		0x07
+ #define EVT_ID_BAD_SUBSTREAMID_CONFIG	0x08
+ #define EVT_ID_CD_FETCH_FAULT		0x09
+ #define EVT_ID_BAD_CD_CONFIG		0x0a
