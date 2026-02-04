@@ -1,0 +1,41 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Entrpi <entrpi@proton.me>
+Date: Wed, 4 Feb 2026 20:08:02 +1100
+Subject: [PATCH] arm64: dts: cix: Add boot-active-sids to PCIe SMMU for bypass
+
+When smmu_pciehub is enabled, the driver initializes all stream table
+entries to abort mode. PCIe devices that issue DMA before their IOMMU
+domain is attached generate F_TRANSL_FORBIDDEN (0x07) and
+F_TRANSLATION (0x10) events, flooding the kernel log.
+
+Add arm,boot-active-sids with the base and common device SIDs for
+all five PCIe root ports. This pre-installs bypass STEs for these
+streams during SMMU initialization, preventing the event spam.
+The bypass entries are replaced with proper translation entries when
+device drivers probe and IOMMU domains are attached.
+
+SID mapping (from TRM Chapter 7):
+  X1_0: 0x0000/0x0100  X1_1: 0x3000/0x3100  X2: 0x6000/0x6100
+  X4:   0x9000/0x9100   X8:  0xc000/0xc100
+---
+ arch/arm64/boot/dts/cix/sky1.dtsi | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/cix/sky1.dtsi b/arch/arm64/boot/dts/cix/sky1.dtsi
+index 0a84662f1d0c6..bb5677e0ea137 100644
+--- a/arch/arm64/boot/dts/cix/sky1.dtsi
++++ b/arch/arm64/boot/dts/cix/sky1.dtsi
+@@ -668,6 +668,13 @@ smmu_pciehub: iommu@b010000 {
+ 			<GIC_SPI 80 IRQ_TYPE_EDGE_RISING 0>;
+ 		interrupt-names = "eventq", "priq", "cmdq-sync", "gerror";
+ 		dma-coherent;
++		/* Pre-install bypass STEs for PCIe root port and common device SIDs
++		 * to prevent F_TRANSL_FORBIDDEN events during early boot before
++		 * IOMMU domains are attached by device drivers.
++		 */
++		arm,boot-active-sids = <0x0000 0x0100 0x3000 0x3100
++					0x6000 0x6100 0x9000 0x9100
++					0xc000 0xc100>;
+ 		status = "disabled";
+ 	};
+ 

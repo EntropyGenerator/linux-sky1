@@ -1,0 +1,194 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Entrpi <entrpi@proton.me>
+Date: Wed, 4 Feb 2026 16:51:55 +1100
+Subject: [PATCH] arm64: dts: cix: Fix O6N power tree, convert USB-C PD to
+ TCPCI
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Correct several issues in the Orion O6N device tree discovered from
+schematic review:
+
+Power tree fixes:
+- Remove vdd_3v3_nvme regulator — the top M.2 M-Key (NVMe) runs on
+  +3.3V_RUN which is always on, no GPIO control needed
+- Fix vgfx_poweren_gpio: was using GPIO018 pad (wrong), correct pad
+  is GPIO001 (MKEY_EN) which controls the bottom M.2 slot power
+- Remove stale nvme_pwren_gpio pinctrl (GPIO012 is PD2_EINTL, not
+  NVMe power enable)
+- Remove vcc-pcie-supply from pcie_x4_rc (always-on power)
+
+USB-C PD controller:
+- Convert cs32g05 node from "realtek,rts5453h" to generic "tcpci"
+  binding — the chip is a ChipSea CS32G051, not a Realtek part
+- Add proper connector child node with "usb-c-connector" compatible
+  and ports for USB role switch and PHY lane switch
+- Document GPIO connections (PD_RESET, PD_EINTL, PD2_EINTL)
+- Remove reset-gpios (generic TCPCI driver doesn't support it)
+
+GPIO wiring:
+- Rename pinctrl_usb7 to pinctrl_mkey_wake (GPIO031 is M-Key wake,
+  not USB overcurrent)
+- Add wake-gpios to pcie_x8_rc for M.2 wake support (s5_gpio0 20)
+- Update PCIe slot comments to reflect actual hardware topology
+---
+ arch/arm64/boot/dts/cix/sky1-orion-o6n.dts | 81 ++++++++++------------
+ 1 file changed, 35 insertions(+), 46 deletions(-)
+
+diff --git a/arch/arm64/boot/dts/cix/sky1-orion-o6n.dts b/arch/arm64/boot/dts/cix/sky1-orion-o6n.dts
+index 6515de495200b..e1324230b1843 100644
+--- a/arch/arm64/boot/dts/cix/sky1-orion-o6n.dts
++++ b/arch/arm64/boot/dts/cix/sky1-orion-o6n.dts
+@@ -268,19 +268,6 @@ vdd_3v3_wlan: regulator-vdd-3v3-wlan {
+ 		off-on-delay-us = <15000>;
+ 	};
+ 
+-	vdd_3v3_nvme: regulator-vdd-3v3-nvme {
+-		compatible = "regulator-fixed";
+-		regulator-name = "vdd_3v3_nvme";
+-		pinctrl-names = "default";
+-		pinctrl-0 = <&nvme_pwren_gpio>;
+-		regulator-min-microvolt = <3300000>;
+-		regulator-max-microvolt = <3300000>;
+-		gpio = <&s5_gpio0 11 GPIO_ACTIVE_HIGH>;
+-		regulator-pull-down;
+-		enable-active-high;
+-		off-on-delay-us = <15000>;
+-	};
+-
+ 	gbe1_power_3v3: gbe1-power-3v3 {
+ 		compatible = "regulator-fixed";
+ 		regulator-name = "gbe1_power_3v3";
+@@ -420,15 +407,9 @@ CIX_PAD_GPIO013_FUNC_GPIO013  (PULL_UP|DS_LEVEL4) /* GPIO013 - S5_gpio0 12 */
+ 		>;
+ 	};
+ 
+-	nvme_pwren_gpio: nvme_pwren_gpio {
+-		sky1,pins = <
+-			CIX_PAD_GPIO012_FUNC_GPIO012  (PULL_UP|DS_LEVEL4) /* GPIO012 - S5_gpio0 11 */
+-		>;
+-	};
+-
+ 	vgfx_poweren_gpio: vgfx_poweren_gpio {
+ 		sky1,pins = <
+-			CIX_PAD_GPIO018_FUNC_GPIO018 (PULL_UP|DS_LEVEL4) /* GPIO018 - S5_gpio0 0 */
++			CIX_PAD_GPIO001_FUNC_GPIO001 (PULL_UP|DS_LEVEL4) /* GPIO001 - S5_gpio0 0 - MKEY_EN */
+ 		>;
+ 	};
+ 
+@@ -554,9 +535,9 @@ pinctrl_usb6: pinctrl_usb6_oc_grp {
+ 			CIX_PAD_GPIO030_FUNC_GPIO030   (PULL_UP|DS_LEVEL4)
+ 		>;
+ 	};
+-	pinctrl_usb7: pinctrl_usb7_oc_grp {
++	pinctrl_mkey_wake: pinctrl_mkey_wake {
+ 		sky1,pins = <
+-			CIX_PAD_GPIO031_FUNC_GPIO031 (PULL_UP|DS_LEVEL4)
++			CIX_PAD_GPIO031_FUNC_GPIO031 (PULL_UP|DS_LEVEL4) /* GPIO031 - s5_gpio0 20 - MKEY_WAKE */
+ 		>;
+ 	};
+ 	pinctrl_usb8: pinctrl_usb8_oc_grp {
+@@ -650,7 +631,7 @@ CIX_PAD_GPIO009_FUNC_GPIO009 (PULL_UP|DS_LEVEL4) /* GPIO009 - S5_gpio0 8 */
+ 
+ 	usbc0_gpio: usbc0_gpio {
+ 		sky1,pins = <
+-			CIX_PAD_GPIO007_FUNC_GPIO007 (PULL_UP|DS_LEVEL4) /* GPIO007 - S5_gpio0 6 */
++			CIX_PAD_GPIO007_FUNC_GPIO007 (PULL_UP|DS_LEVEL4) /* GPIO007 - S5_gpio0 6 - PD_RESET */
+ 		>;
+ 	};
+ };
+@@ -1937,38 +1918,46 @@ &i2c5 {
+ 	pinctrl-names = "default";
+ 	pinctrl-0 = <&pinctrl_fch_i2c5>;
+ 
+-	cs32g05:cs32g05@51 {
+-		compatible = "realtek,rts5453h";
+-		pinctrl-names = "default","pd-reset";
++	/*
++	 * ChipSea CS32G051 USB PD3.1 controller via generic TCPCI.
++	 * GPIO connections:
++	 *   GPIO007 (s5_gpio0 6) = PD_RESET → nRST (active-low reset)
++	 *   GPIO009 (s5_gpio0 8) = PD_EINTL (CK0/PB9 interrupt)
++	 *   GPIO012 (s5_gpio0 11) = PD2_EINTL (SMBUS1_INT/PA4 interrupt)
++	 */
++	cs32g05: tcpci@51 {
++		compatible = "tcpci";
++		pinctrl-names = "default";
+ 		pinctrl-0 = <&usbc0_int>;
+ 		interrupt-parent = <&s5_gpio0>;
+ 		interrupts = <8 IRQ_TYPE_LEVEL_LOW>;
+-		reset-gpios = <&s5_gpio0 6 GPIO_ACTIVE_LOW>;
+-		pinctrl-1 = <&usbc0_gpio>;
+-		id = <2>;
+-		reg = <0x51 >;
++		reg = <0x51>;
+ 		status = "okay";
+ 
+-		usbc_con0 {
++		connector {
++			compatible = "usb-c-connector";
+ 			data-role = "host";
+ 			power-role = "source";
+ 			try-power-role = "source";
+-			#address-cells = <1>;
+-			#size-cells = <0>;
+ 
+-			port@0 {
+-				reg = <0>;
++			ports {
++				#address-cells = <1>;
++				#size-cells = <0>;
+ 
+-				usbc0_role_sw: endpoint {
+-					remote-endpoint = <&cdnsp_0_role_switch>;
++				port@0 {
++					reg = <0>;
++
++					usbc0_role_sw: endpoint {
++						remote-endpoint = <&cdnsp_0_role_switch>;
++					};
+ 				};
+-			};
+ 
+-			port@1 {
+-				reg = <1>;
++				port@1 {
++					reg = <1>;
+ 
+-				usbc0_phy_sw: endpoint {
+-					remote-endpoint = <&usbdpphy0_lane_switch>;
++					usbc0_phy_sw: endpoint {
++						remote-endpoint = <&usbdpphy0_lane_switch>;
++					};
+ 				};
+ 			};
+ 		};
+@@ -2213,23 +2202,23 @@ &smmu_mmhub {
+ 	arm,boot-active-sids = <0x06 0x07 0x09 0x0a>;
+ };
+ 
+-/* PCIe X16 Slot */
++/* M.2 M-Key (bottom) — SSD slot with switchable power */
+ &pcie_x8_rc {
+ 	plat-evk;
+ 	pinctrl-names = "default";
+-	pinctrl-0 = <&pinctrl_pcie_x8_rc>;
++	pinctrl-0 = <&pinctrl_pcie_x8_rc>, <&pinctrl_mkey_wake>;
+ 	reset-gpios = <&s5_gpio0 1 GPIO_ACTIVE_HIGH>;
++	wake-gpios = <&s5_gpio0 20 GPIO_ACTIVE_LOW>;
+ 	vcc-pcie-supply = <&vgfx_power>;
+ 	status = "okay";
+ };
+ 
+-/* M.2 M-Key (NVMe) */
++/* M.2 M-Key NVMe — power is +3.3V_RUN (always on), no GPIO control */
+ &pcie_x4_rc {
+ 	plat-evk;
+ 	pinctrl-names = "default";
+ 	pinctrl-0 = <&pinctrl_pcie_x4_rc>;
+ 	reset-gpios = <&s5_gpio0 3 GPIO_ACTIVE_HIGH>;
+-	vcc-pcie-supply = <&vdd_3v3_nvme>;
+ 	status = "okay";
+ };
+ 

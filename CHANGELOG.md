@@ -2,6 +2,21 @@
 
 All notable changes to the Sky1 kernel patch set.
 
+## [6.18.8-4] - 2026-02-04
+
+### Added
+- iommu/arm-smmu-v3: Add SMMUv3.2 event definitions (F_TRANSL_FORBIDDEN, C_BAD_ATS_TREQ)
+- DTS: dma-coherent on all SMMU nodes (enables coherent page table walks)
+- DTS: msi-parent on PCIe SMMU (enables MSI-based event delivery)
+- DTS: arm,boot-active-sids on PCIe SMMU (bypass STEs for PCIe root port SIDs)
+
+### Fixed
+- DTS: O6N DP PHY set to pure DisplayPort mode (usbc_phy3 default_conf)
+- DTS: O6 USB overcurrent and NVMe wake GPIO mappings
+- DTS: O6N power tree and USB-C PD conversion to TCPCI
+- SMMU event 0x07 (F_TRANSL_FORBIDDEN) no longer prints as "UNKNOWN"
+- PCIe SMMU event spam when smmu_pciehub is enabled
+
 ## [6.18.8-1] - 2026-02-01
 
 ### Changed
