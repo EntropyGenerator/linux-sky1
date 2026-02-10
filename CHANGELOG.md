@@ -2,6 +2,89 @@
 
 All notable changes to the Sky1 kernel patch set.
 
+## [6.19-1] - 2026-02-11
+
+### Added
+- **New track**: Latest stable (v6.19.x) — first release
+- reset: Restore reset_control_lookup table API (removed upstream in 6.19, needed for ACPI reset consumers)
+
+### Notes
+- Linux 6.19 released, RC track promoted to Latest
+- All 108 LTS patches carried forward, plus reset API restoration (109 total)
+- RC track dormant until v7.0-rc1
+
+## [6.18.9-1] - 2026-02-11
+
+### Changed
+- Rebased to Linux 6.18.9 stable (108 patches, up from 42 in 6.18.8-4)
+
+### Added — ACPI Boot Support
+- firmware: arm_scmi: Full ACPI boot support — shared memory discovery, mailbox channel validation, transport driver macro, protocol auto-enumeration
+- mailbox: cix-mailbox: ACPI build support, fwnode channel lookup, register offset cleanup
+- clk: ACPI clock infrastructure — CLKT table parsing, clkdev registration, SCMI clock global lookup
+- clk: sky1-audss: ACPI regmap fallback, CLKA table parsing for audio clock consumers
+- soc: cix: ACPI resource lookup driver (CIXA1019) — RSTL reset, RSNL resource naming, DLKL device links
+- pmdomain: fwnode-based genpd provider for ACPI power domain consumers
+- pmdomain: SCMI power and perf domain registration under ACPI
+- drm/panthor: ACPI support for GPU power-on (raw SMC SCMI call) and DVFS with 6 OPP levels
+- drm/panthor: ACPI device table (CIXH5000) with positional IRQ lookup
+- drm/cix/linlon-dp: ACPI probe logging cleanup and NULL match guard
+- PCI: sky1: MCFG quirk for initial ACPI ECAM support
+- PCI: sky1: Vendor scan handler (block PNP0A08, probe CIXH2020 with full init sequence)
+- PCI: sky1: ACPI probe with RSTL reset, regulator support, fw_devlink bypass
+- misc: armchina-npu: ACPI DVFS via fwnode genpd provider (OPP 72MHz–1GHz)
+- remoteproc: cix_dsp_rproc: ACPI boot support (syscon, clock, reset, memremap fallbacks)
+- audio: HDMI/DisplayPort audio output under ACPI (I2S5-I2S9, DMA-350, sky1-card CIXH6070)
+- xhci: plat: Auto-detect USB3 LPM from HCSPARAMS3 for ACPI controllers
+- usb: cdns3: Harden cdnsp-sky1 probe for ACPI, skip destructive reinit, serialize drd_init
+- gpio: cadence: ACPI device IDs (CIXH1002, CIXH1003), edge IRQ, PM, wake support
+- mfd: syscon: ACPI platform driver (CIXHA018)
+- pstore: ramoops: device_property API for ACPI support
+- sound: hda: cix-ipbloq: ACPI DMA range map and reserved memory support
+- ACPI: property: Restore string-path traversal for graph references
+- treewide: ACPI device IDs for 14 CIX Sky1 peripherals (I2C, I3C, SPI, DMA, network, display, audio)
+- scripts: sky1_lib: DMI board detection fallback for ACPI boot
+
+### Added — New Drivers
+- hwmon: CIX Sky1 fan controller driver (CIXHA024) — PWM speed control, tachometer RPM
+- clocksource: CIX Sky1 GPT timer driver (CIXH1007) — 64-bit clocksource + clock event device
+
+### Added — Features
+- PCI: cadence: sky1: ASPM control (per-controller L0s/L1 via max-aspm-support), TLP filter for LTR/PTM, wake GPIO wakeup source
+- PCI: ASPM quirks for Phison E13T and Kingston NVMe drives (link instability)
+- iommu/arm-smmu-v3: PCIe ATS override for Sky1 DTI translated TLPs
+- net: realtek: r8125/r8126: Wake-on-LAN magic packet, Receive Side Scaling
+- net: realtek: r8125/r8126: IRQ affinity hint for performance cores on big.LITTLE
+- usb: Runtime PM by default for Sky1 USB controllers (OTG only, host stays D0)
+- thermal: cix: IPA power integration for cpufreq_cooling (real-time power data)
+- cpufreq: cppc: Skip redundant frequency updates for slow PCC mailboxes
+- rtc: hym8563: Second-level wake-up precision via timer function
+- drm: cix: dptx: PSR improvements (fast training, 2ppc disable, idle patterns)
+- drm: cix: dptx: Freezable workqueue for HPD events during suspend
+- arm64: dts: cix: Thermal zone rename to tz-* pattern, add switch_on trip at 60C
+
+### Fixed
+- clk: sky1-acpi: Use CLKT consumer reference for clkdev (wrong clock causing SError)
+- PCI: cadence: sky1: Skip regulator lookup under ACPI (spurious dummy warnings)
+- PCI: Silence I/O BAR assignment failures when no I/O windows exist
+- Bluetooth: btrtl: NULL pointer dereference on USB disconnect during init
+- phy: cix-usbdp: Skip PHY reset under ACPI (stale GOP state killing active USB)
+- phy: cix-usbdp: Guard syscon regmap for ACPI boot (NULL pointer crash)
+- drm: cix: dptx: Suspend/resume deadlock (mutex held during cancel_delayed_work_sync)
+- drm: cix: dptx: Hotplug state machine on repeated resets (HDMI signal loss)
+- drm: cix: dptx: Skip compute_config on non-modeset commits (fbcon feedback loop)
+- drm: cix: linlon-dp: Handle vblank event on flip timeout (reduced from 60 to 3 frames)
+- gpio: cadence: IRQ storm fix (missing flow handlers, pre-registration IRQ disable, ack callback)
+- usb: cdns3: Runtime PM only for OTG ports (host-only stayed in D3, no hotplug)
+- net: realtek: r8125/r8126: Missing RSS object files in Makefile
+- mailbox: cix-mailbox: Remove debug prints, use_shmem offset hack
+- pwm: sky1: Remove clock auto-enable and probe reset (UEFI backlight interference)
+- ASoC: CIX Phecda HDA fixup, I2S FIFO drain, 192KHz mclk_fs, trigger ordering
+- drivers: Fix 6 ACPI boot failures (GPT timer clocks, HDA reserved mem, SCMI genpd, PWM backlight, ramoops, regulator-fixed)
+- treewide: Debug cleanup for Sky1 peripherals (DMA-350 remote device SError, audss prints)
+- scripts: kernel-track-status: Handle major version bumps (6.19→7.0)
+- update-dev-boot: Handle .rN revision suffix in kernel names
+
 ## [6.18.8-4] - 2026-02-04
 
 ### Added
