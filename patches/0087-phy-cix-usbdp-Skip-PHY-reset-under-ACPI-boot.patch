@@ -1,0 +1,93 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Entrpi <entrpi@proton.me>
+Date: Sat, 7 Feb 2026 22:50:12 +1100
+Subject: [PATCH] phy: cix-usbdp: Skip PHY reset under ACPI boot
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Under ACPI, firmware has already configured all USB-DP combo PHYs and
+xHCI controllers are active via PNP0D10 platform devices.  The GOP
+status check at 0x83E05000 reflects UEFI-time state that is stale by
+the time Linux drivers probe — ports showing USB_ROLE_NONE may
+already have active USB connections through the xHCI layer.
+
+Skip the PHY reset entirely under ACPI to avoid killing active USB
+connections.  The GOP-based reset logic remains for DT boot where
+PHY initialization ordering is controlled by the device tree.
+---
+ drivers/phy/cix/phy-cix-usbdp.c | 56 ++++++++++++++++++++-------------
+ 1 file changed, 35 insertions(+), 21 deletions(-)
+
+diff --git a/drivers/phy/cix/phy-cix-usbdp.c b/drivers/phy/cix/phy-cix-usbdp.c
+index 548b2b856f769..9b1eb5afe3a6a 100644
+--- a/drivers/phy/cix/phy-cix-usbdp.c
++++ b/drivers/phy/cix/phy-cix-usbdp.c
+@@ -1458,32 +1458,46 @@ static int cix_udphy_probe(struct platform_device *pdev)
+ 	if (!device_property_read_u8(dev, "default_conf", &udphy->next_mode))
+ 		dev_info(dev, "phy init default mode %02x\n", udphy->next_mode);
+ 
+-	/* It is only for GOP, dp+usb3.0 hub should not reset the phy and skip the
+-	 * initialization from usb and dp driver, dp only device should not reset the phy.
++	/*
++	 * Determine whether to reset the PHY during probe.
++	 *
++	 * Under ACPI, firmware has already configured all PHYs and the
++	 * xHCI controllers are active via PNP0D10 platform devices.
++	 * Resetting PHYs would kill active USB connections.  Skip the
++	 * GOP status check entirely — it reflects UEFI-time state that
++	 * is stale by the time Linux drivers probe.
++	 *
++	 * Under DT, the GOP status tells us which PHYs are in use by
++	 * the UEFI graphics output (dp+usb3 hub should not be reset,
++	 * dp-only should not be reset).
+ 	 */
+ 	udphy->phy_reset = true;
+ 	udphy->phy_init_skip_count = 0;
+ 
+-	g_status = ioremap(GOP_STATUS_ADDRESS, GOP_STATUS_SIZE);
+-	if (g_status) {
+-		gop_value = readb(&g_status->phy_status[id]);
+-		switch(gop_value){
+-		case USB_ROLE_HOST:
+-			udphy->phy_reset = false;
+-			udphy->phy_init_skip_count = 2;
+-			break;
+-		case USB_ROLE_HOST_20:
+-			udphy->phy_reset = false;
+-			udphy->phy_init_skip_count = 0;
+-			break;
+-		case USB_ROLE_NONE:
+-		case USB_ROLE_DEVICE:
+-		default:
+-			udphy->phy_reset = true;
+-			udphy->phy_init_skip_count = 0;
+-			break;
++	if (ACPI_COMPANION(dev)) {
++		udphy->phy_reset = false;
++	} else {
++		g_status = ioremap(GOP_STATUS_ADDRESS, GOP_STATUS_SIZE);
++		if (g_status) {
++			gop_value = readb(&g_status->phy_status[id]);
++			switch (gop_value) {
++			case USB_ROLE_HOST:
++				udphy->phy_reset = false;
++				udphy->phy_init_skip_count = 2;
++				break;
++			case USB_ROLE_HOST_20:
++				udphy->phy_reset = false;
++				udphy->phy_init_skip_count = 0;
++				break;
++			case USB_ROLE_NONE:
++			case USB_ROLE_DEVICE:
++			default:
++				udphy->phy_reset = true;
++				udphy->phy_init_skip_count = 0;
++				break;
++			}
++			iounmap(g_status);
+ 		}
+-		iounmap(g_status);
+ 	}
+ 
+ 	dev_info(dev, "get phy-status:[%d]%d\n", id, gop_value);

@@ -1,0 +1,74 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Entrpi <entrpi@proton.me>
+Date: Sat, 7 Feb 2026 18:16:08 +1100
+Subject: [PATCH] mailbox: Add ACPI fwnode support for channel lookup
+
+Under ACPI, provider devices lack #mbox-cells properties, so skip the
+nargs_prop lookup and auto-detect integer arguments following each
+reference in the package.
+
+For cix-mailbox, switch to devm_ioremap() instead of
+devm_ioremap_resource() because SCMI shared memory regions (CIXHA005)
+overlap the base of mailbox MMIO regions, causing -EBUSY under ACPI.
+---
+ drivers/mailbox/cix-mailbox.c | 18 +++++++++++++++---
+ drivers/mailbox/mailbox.c     | 17 +++++++++++++++--
+ 2 files changed, 30 insertions(+), 5 deletions(-)
+
+diff --git a/drivers/mailbox/cix-mailbox.c b/drivers/mailbox/cix-mailbox.c
+index 4725288c87571..683c5bde1951f 100644
+--- a/drivers/mailbox/cix-mailbox.c
++++ b/drivers/mailbox/cix-mailbox.c
+@@ -562,9 +562,21 @@ static int cix_mbox_probe(struct platform_device *pdev)
+ 
+ 	priv->dev = dev;
+ 
+-	priv->base = devm_platform_ioremap_resource(pdev, 0);
+-	if (IS_ERR(priv->base))
+-		return PTR_ERR(priv->base);
++	{
++		/*
++		 * Use devm_ioremap() instead of devm_ioremap_resource()
++		 * because SCMI shared memory regions (CIXHA005) overlap the
++		 * base of mailbox MMIO regions, causing -EBUSY under ACPI.
++		 */
++		struct resource *res;
++
++		res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
++		if (!res)
++			return -EINVAL;
++		priv->base = devm_ioremap(dev, res->start, resource_size(res));
++		if (!priv->base)
++			return -ENOMEM;
++	}
+ 
+ 	priv->irq = platform_get_irq(pdev, 0);
+ 	if (priv->irq < 0)
+diff --git a/drivers/mailbox/mailbox.c b/drivers/mailbox/mailbox.c
+index 2acc6ec229a45..d7467307b9c9a 100644
+--- a/drivers/mailbox/mailbox.c
++++ b/drivers/mailbox/mailbox.c
+@@ -405,8 +405,21 @@ struct mbox_chan *mbox_request_channel(struct mbox_client *cl, int index)
+ 		return ERR_PTR(-ENODEV);
+ 	}
+ 
+-	ret = fwnode_property_get_reference_args(fwnode, "mboxes", "#mbox-cells",
+-						 0, index, &fwspec);
++	if (is_of_node(fwnode)) {
++		ret = fwnode_property_get_reference_args(fwnode, "mboxes",
++							"#mbox-cells", 0,
++							index, &fwspec);
++	} else {
++		/*
++		 * ACPI: provider devices don't have a '#mbox-cells' property,
++		 * so skip the nargs_prop lookup and auto-detect integer
++		 * arguments following each reference in the package.
++		 */
++		ret = fwnode_property_get_reference_args(fwnode, "mboxes",
++							NULL,
++							NR_FWNODE_REFERENCE_ARGS,
++							index, &fwspec);
++	}
+ 	if (ret) {
+ 		dev_err(dev, "%s: can't parse \"%s\" property\n", __func__, "mboxes");
+ 		return ERR_PTR(ret);

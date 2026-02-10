@@ -1,0 +1,214 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Entrpi <entrpi@proton.me>
+Date: Tue, 3 Feb 2026 13:04:17 +1100
+Subject: [PATCH] drm/cix: Fix compiler warnings in DPTX display driver
+
+Fix all compiler warnings in the Trilinear DPTX module:
+
+- Make file-local functions static (trilin_dp_train_loop,
+  trilin_dp_panel_hw_cfg, trilin_dp_encoder_atomic_check,
+  tmr_hdcp_init, tmr_hdcp_set_us, tmr_hdcp_enable,
+  tmr_hdcp_interrupt, tmr_hdcp_autoreload)
+- Remove unused variables (pdata in trilin_dptx_cix_bind,
+  phy in trilin_dp_host_init)
+- Drop unchecked return value assignment in
+  trilin_link_rate_update
+- Remove unreachable err_out label and dead cleanup code
+  in trilin_dp_host_init
+- Add missing header includes for function prototypes
+  (cix_hdcp_ioctl.h, hdcp2_tx_tmr.h)
+- Mark unused edp_volt_high_cfg and tmr_hdcp_autoreload
+  as __maybe_unused
+---
+ drivers/gpu/drm/cix/dptx/hdcp/cix_hdcp_ioctl.c |  1 +
+ drivers/gpu/drm/cix/dptx/hdcp/hdcp2_tx_tmr.c   | 11 ++++++-----
+ drivers/gpu/drm/cix/dptx/trilin_dptx.c         | 12 +++---------
+ drivers/gpu/drm/cix/dptx/trilin_dptx_cix.c     | 11 ++---------
+ drivers/gpu/drm/cix/dptx/trilin_drm.c          |  2 +-
+ drivers/gpu/drm/cix/dptx/trilin_edp_phy.c      |  2 +-
+ 6 files changed, 14 insertions(+), 25 deletions(-)
+
+diff --git a/drivers/gpu/drm/cix/dptx/hdcp/cix_hdcp_ioctl.c b/drivers/gpu/drm/cix/dptx/hdcp/cix_hdcp_ioctl.c
+index afc975e083b55..fa7d763744b6d 100644
+--- a/drivers/gpu/drm/cix/dptx/hdcp/cix_hdcp_ioctl.c
++++ b/drivers/gpu/drm/cix/dptx/hdcp/cix_hdcp_ioctl.c
+@@ -10,6 +10,7 @@
+ #include <linux/string.h>
+ #include <linux/errno.h>
+ #include "cix_hdcp.h"
++#include "cix_hdcp_ioctl.h"
+ #include "cix_hdcp_ioctl_cmd.h"
+ #include "hdcp2_tx_tmr.h"
+ #include "hdcp2_tx_state.h"
+diff --git a/drivers/gpu/drm/cix/dptx/hdcp/hdcp2_tx_tmr.c b/drivers/gpu/drm/cix/dptx/hdcp/hdcp2_tx_tmr.c
+index 77e01f153f8b8..2a5d6c3f92bfc 100644
+--- a/drivers/gpu/drm/cix/dptx/hdcp/hdcp2_tx_tmr.c
++++ b/drivers/gpu/drm/cix/dptx/hdcp/hdcp2_tx_tmr.c
+@@ -10,6 +10,7 @@
+ #include <linux/io.h>
+ 
+ #include "cix_hdcp.h"
++#include "hdcp2_tx_tmr.h"
+ 
+ //------------------------------------------------------------------------------
+ //  Time Values:
+@@ -44,7 +45,7 @@
+ //  Returns:
+ //      None
+ //------------------------------------------------------------------------------
+-void tmr_hdcp_init(void *addr)
++static void tmr_hdcp_init(void *addr)
+ {
+ 	writel(0ul, addr);
+ }
+@@ -59,7 +60,7 @@ void tmr_hdcp_init(void *addr)
+ //  Returns:
+ //      None
+ //------------------------------------------------------------------------------
+-void tmr_hdcp_set_us(void *addr, uint32_t tmr_us)
++static void tmr_hdcp_set_us(void *addr, uint32_t tmr_us)
+ {
+ 	uint32_t tmr_val = readl(addr);
+ 
+@@ -78,7 +79,7 @@ void tmr_hdcp_set_us(void *addr, uint32_t tmr_us)
+ //  Returns:
+ //      None
+ //------------------------------------------------------------------------------
+-void tmr_hdcp_enable(void *addr, bool enable)
++static void tmr_hdcp_enable(void *addr, bool enable)
+ {
+ 	uint32_t tmr_val = readl(addr);
+ 
+@@ -101,7 +102,7 @@ void tmr_hdcp_enable(void *addr, bool enable)
+ //  Returns:
+ //      None
+ //------------------------------------------------------------------------------
+-void tmr_hdcp_interrupt(void *addr, bool enable)
++static void tmr_hdcp_interrupt(void *addr, bool enable)
+ {
+ 	uint32_t tmr_val = readl(addr);
+ 
+@@ -124,7 +125,7 @@ void tmr_hdcp_interrupt(void *addr, bool enable)
+ //  Returns:
+ //      None
+ //------------------------------------------------------------------------------
+-void tmr_hdcp_autoreload(void *addr, bool enable)
++static void __maybe_unused tmr_hdcp_autoreload(void *addr, bool enable)
+ {
+ 	uint32_t tmr_val = readl(addr);
+ 
+diff --git a/drivers/gpu/drm/cix/dptx/trilin_dptx.c b/drivers/gpu/drm/cix/dptx/trilin_dptx.c
+index f007dea70d814..dfd5b3dd49cc4 100644
+--- a/drivers/gpu/drm/cix/dptx/trilin_dptx.c
++++ b/drivers/gpu/drm/cix/dptx/trilin_dptx.c
+@@ -114,7 +114,6 @@ static void trilin_link_rate_update(struct trilin_dp *dp, u32 reg)
+ 	union phy_configure_opts opts = { 0 };
+ 	struct trilin_phy_t *phy = &dp->phy;
+ 	u8 lanes, max_lanes = dp->link_config.max_lanes;
+-	int ret;
+ 
+ 	if (IS_ERR_OR_NULL(phy->base)) {
+ 		lanes = max_lanes;
+@@ -130,7 +129,7 @@ static void trilin_link_rate_update(struct trilin_dp *dp, u32 reg)
+ 	opts.dp.set_rate = 1;
+ 
+ 	if (phy->phy_ops)
+-		ret = phy->phy_ops->configure(dp, &opts);
++		phy->phy_ops->configure(dp, &opts);
+ }
+ 
+ /**
+@@ -688,7 +687,7 @@ static int trilin_dp_train(struct trilin_dp *dp)
+  *
+  * Train the link by downshifting the link rate if training is not successful.
+  */
+-int trilin_dp_train_loop(struct trilin_dp *dp)
++static int trilin_dp_train_loop(struct trilin_dp *dp)
+ {
+ 	struct trilin_dp_mode *mode = &dp->mode;
+ 	u8 bw_cur, bw = mode->bw_code;
+@@ -1626,7 +1625,7 @@ int trilin_dp_panel_setup_hdr_sdp(struct trilin_dp *dp,
+ 	return 0;
+ }
+ 
+-void trilin_dp_panel_hw_cfg(struct trilin_dp *dp,
++static void trilin_dp_panel_hw_cfg(struct trilin_dp *dp,
+ 			    struct trilin_dp_panel *dp_panel)
+ {
+ 	struct trilin_connector *conn = dp_panel->connector;
+@@ -2362,7 +2361,6 @@ static int reset_dp_and_reinit(struct trilin_dp *dp)
+ int trilin_dp_host_init(struct trilin_dp *dp)
+ {
+ 	int rc = 0;
+-	struct trilin_phy_t *phy = &dp->phy;
+ 
+ 	DP_DEBUG("enter\n");
+ 	if (dp->state & DP_STATE_INITIALIZED) {
+@@ -2388,10 +2386,6 @@ int trilin_dp_host_init(struct trilin_dp *dp)
+ 	/* log this as it results from user action of cable connection */
+ 	DP_INFO("[OK.]\n");
+ 	return rc;
+-err_out:
+-	if (phy->phy_ops)
+-		phy->phy_ops->exit(dp);
+-	return rc;
+ }
+ 
+ static int trilin_dp_host_init_from_bootloader(struct trilin_dp *dp)
+diff --git a/drivers/gpu/drm/cix/dptx/trilin_dptx_cix.c b/drivers/gpu/drm/cix/dptx/trilin_dptx_cix.c
+index 8cfe75180379e..a2b016610e329 100644
+--- a/drivers/gpu/drm/cix/dptx/trilin_dptx_cix.c
++++ b/drivers/gpu/drm/cix/dptx/trilin_dptx_cix.c
+@@ -122,7 +122,6 @@ static int trilin_dptx_cix_bind(struct device *comp, struct device *master,
+ 	void *np;
+ 	const void *match;
+ 	struct drm_device *drm = master_data;
+-	struct trilin_dptx_pdata *pdata;
+ 	struct trilin_dptx_cix_dev *cix_dptx = dev_get_drvdata(comp);
+ 	struct drm_encoder *encoder;
+ 	struct trilin_dpsub *dpsub;
+@@ -145,16 +144,10 @@ static int trilin_dptx_cix_bind(struct device *comp, struct device *master,
+ 	if (!np)
+ 		return -ENODEV;
+ 
+-	if (has_acpi_companion(comp)) {
++	if (has_acpi_companion(comp))
+ 		match = acpi_device_get_match_data(comp);
+-		pdata = (struct trilin_dptx_pdata *)(((struct acpi_device_id *)
+-							      match)
+-							     ->driver_data);
+-	} else {
++	else
+ 		match = of_match_node(trilin_dptx_dt_ids, np);
+-		pdata = (struct trilin_dptx_pdata
+-				 *)(((struct of_device_id *)match)->data);
+-	}
+ 
+ 	if (unlikely(!match))
+ 		return -ENODEV;
+diff --git a/drivers/gpu/drm/cix/dptx/trilin_drm.c b/drivers/gpu/drm/cix/dptx/trilin_drm.c
+index 0bfc9cf14dac6..217050e337667 100644
+--- a/drivers/gpu/drm/cix/dptx/trilin_drm.c
++++ b/drivers/gpu/drm/cix/dptx/trilin_drm.c
+@@ -977,7 +977,7 @@ int trilin_dp_encoder_compute_config(struct drm_encoder *encoder,
+ 	return 0;
+ }
+ 
+-int trilin_dp_encoder_atomic_check(struct drm_encoder *encoder,
++static int trilin_dp_encoder_atomic_check(struct drm_encoder *encoder,
+ 				  struct drm_crtc_state *crtc_state,
+ 				  struct drm_connector_state *connector_state)
+ {
+diff --git a/drivers/gpu/drm/cix/dptx/trilin_edp_phy.c b/drivers/gpu/drm/cix/dptx/trilin_edp_phy.c
+index bdf3acf588168..84319eee3c23d 100644
+--- a/drivers/gpu/drm/cix/dptx/trilin_edp_phy.c
++++ b/drivers/gpu/drm/cix/dptx/trilin_edp_phy.c
+@@ -656,7 +656,7 @@ static const phy_voltage_conf_t dp_volt_cfg[] = {
+ 	{ 0x08A4, 0x0003, 0x0000, 0x0000 },
+ };
+ 
+-static const phy_voltage_conf_t edp_volt_high_cfg[] = {
++static const __maybe_unused phy_voltage_conf_t edp_volt_high_cfg[] = {
+ 	{ 0x08A4, 0x0003, 0x0027, 0x0000 }, // swing level == 0
+ 	{ 0x08A4, 0x0003, 0x0023, 0x0009 },
+ 	{ 0x08A4, 0x0003, 0x001E, 0x0010 },

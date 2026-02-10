@@ -1,0 +1,120 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Entrpi <entrpi@proton.me>
+Date: Fri, 6 Feb 2026 02:06:16 +1100
+Subject: [PATCH] firmware: arm_scmi: Add ACPI support to transport driver
+ macro
+
+Extend DEFINE_SCMI_TRANSPORT_DRIVER macro to accept an ACPI match table
+parameter, allowing SCMI transports to be enumerated via ACPI in addition
+to device tree.
+
+Add CIXHA006 ACPI device ID to the mailbox transport for CIX Sky1 SoC
+support. Other transports pass NULL for the ACPI table as they don't
+require ACPI enumeration.
+
+This enables SCMI-based clock and cpufreq drivers to work on ACPI-booted
+systems without requiring platform-specific ACPI clock infrastructure.
+---
+ drivers/firmware/arm_scmi/common.h             |  7 +++++--
+ drivers/firmware/arm_scmi/transports/mailbox.c | 13 ++++++++++++-
+ drivers/firmware/arm_scmi/transports/optee.c   |  2 +-
+ drivers/firmware/arm_scmi/transports/smc.c     |  2 +-
+ drivers/firmware/arm_scmi/transports/virtio.c  |  2 +-
+ 5 files changed, 20 insertions(+), 6 deletions(-)
+
+diff --git a/drivers/firmware/arm_scmi/common.h b/drivers/firmware/arm_scmi/common.h
+index 7c35c95fddbaf..d86babb90b4f8 100644
+--- a/drivers/firmware/arm_scmi/common.h
++++ b/drivers/firmware/arm_scmi/common.h
+@@ -9,6 +9,7 @@
+ #ifndef _SCMI_COMMON_H
+ #define _SCMI_COMMON_H
+ 
++#include <linux/acpi.h>
+ #include <linux/bitfield.h>
+ #include <linux/completion.h>
+ #include <linux/device.h>
+@@ -473,7 +474,8 @@ struct scmi_transport {
+ 	struct scmi_transport_core_operations **core_ops;
+ };
+ 
+-#define DEFINE_SCMI_TRANSPORT_DRIVER(__tag, __drv, __desc, __match, __core_ops)\
++#define DEFINE_SCMI_TRANSPORT_DRIVER(__tag, __drv, __desc, __of_match,	       \
++				     __acpi_match, __core_ops)		       \
+ static void __tag##_dev_free(void *data)				       \
+ {									       \
+ 	struct platform_device *spdev = data;				       \
+@@ -517,7 +519,8 @@ err:									       \
+ static struct platform_driver __drv = {					       \
+ 	.driver = {							       \
+ 		   .name = #__tag "_transport",				       \
+-		   .of_match_table = __match,				       \
++		   .of_match_table = __of_match,			       \
++		   .acpi_match_table = ACPI_PTR(__acpi_match),		       \
+ 		   },							       \
+ 	.probe = __tag##_probe,						       \
+ }
+diff --git a/drivers/firmware/arm_scmi/transports/mailbox.c b/drivers/firmware/arm_scmi/transports/mailbox.c
+index ae0f67e6cc45f..ae98644069bdf 100644
+--- a/drivers/firmware/arm_scmi/transports/mailbox.c
++++ b/drivers/firmware/arm_scmi/transports/mailbox.c
+@@ -379,8 +379,19 @@ static const struct of_device_id scmi_of_match[] = {
+ };
+ MODULE_DEVICE_TABLE(of, scmi_of_match);
+ 
++#ifdef CONFIG_ACPI
++static const struct acpi_device_id scmi_acpi_match[] = {
++	{ "CIXHA006", 0 },
++	{ /* Sentinel */ },
++};
++MODULE_DEVICE_TABLE(acpi, scmi_acpi_match);
++#else
++#define scmi_acpi_match NULL
++#endif
++
+ DEFINE_SCMI_TRANSPORT_DRIVER(scmi_mailbox, scmi_mailbox_driver,
+-			     scmi_mailbox_desc, scmi_of_match, core);
++			     scmi_mailbox_desc, scmi_of_match,
++			     scmi_acpi_match, core);
+ module_platform_driver(scmi_mailbox_driver);
+ 
+ MODULE_AUTHOR("Sudeep Holla <sudeep.holla@arm.com>");
+diff --git a/drivers/firmware/arm_scmi/transports/optee.c b/drivers/firmware/arm_scmi/transports/optee.c
+index dc0f46340153a..87f75711b6872 100644
+--- a/drivers/firmware/arm_scmi/transports/optee.c
++++ b/drivers/firmware/arm_scmi/transports/optee.c
+@@ -527,7 +527,7 @@ static const struct of_device_id scmi_of_match[] = {
+ };
+ 
+ DEFINE_SCMI_TRANSPORT_DRIVER(scmi_optee, scmi_optee_driver, scmi_optee_desc,
+-			     scmi_of_match, core);
++			     scmi_of_match, NULL, core);
+ 
+ static int scmi_optee_service_probe(struct device *dev)
+ {
+diff --git a/drivers/firmware/arm_scmi/transports/smc.c b/drivers/firmware/arm_scmi/transports/smc.c
+index b4d5ebbfb6927..cdd3e86d5a174 100644
+--- a/drivers/firmware/arm_scmi/transports/smc.c
++++ b/drivers/firmware/arm_scmi/transports/smc.c
+@@ -314,7 +314,7 @@ static const struct of_device_id scmi_of_match[] = {
+ MODULE_DEVICE_TABLE(of, scmi_of_match);
+ 
+ DEFINE_SCMI_TRANSPORT_DRIVER(scmi_smc, scmi_smc_driver, scmi_smc_desc,
+-			     scmi_of_match, core);
++			     scmi_of_match, NULL, core);
+ module_platform_driver(scmi_smc_driver);
+ 
+ MODULE_AUTHOR("Peng Fan <peng.fan@nxp.com>");
+diff --git a/drivers/firmware/arm_scmi/transports/virtio.c b/drivers/firmware/arm_scmi/transports/virtio.c
+index 326c4a93e44b9..bd806e79ccff6 100644
+--- a/drivers/firmware/arm_scmi/transports/virtio.c
++++ b/drivers/firmware/arm_scmi/transports/virtio.c
+@@ -806,7 +806,7 @@ static const struct of_device_id scmi_of_match[] = {
+ };
+ 
+ DEFINE_SCMI_TRANSPORT_DRIVER(scmi_virtio, scmi_virtio_driver, scmi_virtio_desc,
+-			     scmi_of_match, core);
++			     scmi_of_match, NULL, core);
+ 
+ static int scmi_vio_probe(struct virtio_device *vdev)
+ {

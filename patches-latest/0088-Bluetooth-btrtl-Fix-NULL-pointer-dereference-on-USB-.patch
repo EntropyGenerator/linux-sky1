@@ -1,0 +1,53 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Entrpi <entrpi@proton.me>
+Date: Sat, 7 Feb 2026 22:50:25 +1100
+Subject: [PATCH] Bluetooth: btrtl: Fix NULL pointer dereference on USB
+ disconnect
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+btrtl_initialize uses separate 'ret' and 'rc' variables for error
+returns.  The btrtl_vendor_read_reg16(RTL_SEC_PROJ) call at the end
+stores its result in 'rc', but on failure jumps to err_free which
+returns ERR_PTR(ret).  If a preceding operation (e.g. rtl_read_rom_version)
+succeeded, ret is still 0, so ERR_PTR(0) = NULL is returned.
+
+The caller btrtl_setup_realtek checks IS_ERR(btrtl_dev) which is false
+for NULL, then passes NULL to btrtl_download_firmware causing a NULL
+pointer dereference in the kernel.
+
+This occurs in practice when a USB Bluetooth adapter disconnects
+during initialization (e.g. due to PHY or controller issues) — the
+RTL_SEC_PROJ vendor read fails with -ENODEV but ret holds 0 from the
+successful rom_version read.
+
+Fix by using 'ret' consistently instead of 'rc', and remove the now
+unused 'rc' variable.
+---
+ drivers/bluetooth/btrtl.c | 5 ++---
+ 1 file changed, 2 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/bluetooth/btrtl.c b/drivers/bluetooth/btrtl.c
+index 5603b282f9bc1..7c03c7888b9a2 100644
+--- a/drivers/bluetooth/btrtl.c
++++ b/drivers/bluetooth/btrtl.c
+@@ -1073,7 +1073,6 @@ struct btrtl_device_info *btrtl_initialize(struct hci_dev *hdev,
+ 	u16 hci_rev, lmp_subver;
+ 	u8 hci_ver, lmp_ver, chip_type = 0;
+ 	int ret;
+-	int rc;
+ 	u8 key_id;
+ 	u8 reg_val[2];
+ 
+@@ -1185,8 +1184,8 @@ struct btrtl_device_info *btrtl_initialize(struct hci_dev *hdev,
+ 		goto err_free;
+ 	}
+ 
+-	rc = btrtl_vendor_read_reg16(hdev, RTL_SEC_PROJ, reg_val);
+-	if (rc < 0)
++	ret = btrtl_vendor_read_reg16(hdev, RTL_SEC_PROJ, reg_val);
++	if (ret < 0)
+ 		goto err_free;
+ 
+ 	key_id = reg_val[0];

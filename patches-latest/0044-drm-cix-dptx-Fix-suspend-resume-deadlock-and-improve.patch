@@ -1,0 +1,224 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Entrpi <entrpi@proton.me>
+Date: Thu, 5 Feb 2026 21:48:21 +1100
+Subject: [PATCH] drm: cix: dptx: Fix suspend/resume deadlock and improve PM
+ handling
+
+Fix a potential deadlock in trilin_dp_pm_prepare() where the session_lock
+mutex was held while calling cancel_delayed_work_sync(). If the HPD work
+callback also tries to acquire session_lock, this causes a deadlock.
+
+The fix releases the mutex before cancel_delayed_work_sync() and
+re-acquires it afterward, following the pattern from CIX 6.6.89 kernel.
+
+Additionally, improve the PM handling by:
+
+- Add trilin_dp_pm_resume_early() which uses DRM_MODESET_LOCK_ALL to
+  safely reset connector state during early resume, forcing all
+  connectors to disconnected state for a clean resume
+
+- Update PM ops to use proper .prepare, .resume_early, and .complete
+  callbacks instead of just .suspend/.resume
+
+- Clear DP_STATE_CONNECTED flag during prepare (not just plugin flag)
+
+These changes align with the CIX 6.6.89 kernel's proven suspend/resume
+handling and prevent races during system sleep transitions.
+---
+ drivers/gpu/drm/cix/dptx/trilin_dptx.c     | 80 +++++++++++++++++++++-
+ drivers/gpu/drm/cix/dptx/trilin_dptx.h     |  1 +
+ drivers/gpu/drm/cix/dptx/trilin_dptx_cix.c | 35 +++++++---
+ 3 files changed, 107 insertions(+), 9 deletions(-)
+
+diff --git a/drivers/gpu/drm/cix/dptx/trilin_dptx.c b/drivers/gpu/drm/cix/dptx/trilin_dptx.c
+index dfd5b3dd49cc4..25429b641b84f 100644
+--- a/drivers/gpu/drm/cix/dptx/trilin_dptx.c
++++ b/drivers/gpu/drm/cix/dptx/trilin_dptx.c
+@@ -16,10 +16,14 @@
+ //	along with this program. If not, see <http://www.gnu.org/licenses/>.
+ //------------------------------------------------------------------------------
+ 
++#include <drm/drm_atomic.h>
+ #include <drm/drm_atomic_helper.h>
++#include <drm/drm_atomic_uapi.h>
+ #include <drm/drm_crtc.h>
+ #include <drm/drm_device.h>
++#include <drm/drm_drv.h>
+ #include <drm/drm_edid.h>
++#include <drm/drm_modeset_lock.h>
+ #include <drm/drm_panel.h>
+ #include <drm/drm_managed.h>
+ #include <drm/drm_modes.h>
+@@ -2717,13 +2721,87 @@ static irqreturn_t trilin_dp_irq_handler(int irq, void *data)
+  * Common function for trilin_drm.c and trilin_drm_mst.c
+  */
+ 
++/*
++ * trilin_dp_pm_resume_early - Early resume to force connector state reset
++ *
++ * This function uses DRM_MODESET_LOCK_ALL to safely manipulate the atomic
++ * state during resume. It forces all connectors to disconnected state,
++ * which ensures a clean state for the subsequent complete phase.
++ */
++int trilin_dp_pm_resume_early(struct trilin_dp *dp)
++{
++	struct drm_connector *connector = &dp->connector.base;
++	struct drm_device *dev = connector->dev;
++	struct drm_modeset_acquire_ctx ctx;
++	struct drm_atomic_state *old_state = dev->mode_config.suspend_state;
++	struct drm_atomic_state *new_state = NULL;
++	struct drm_connector_state *conn_state;
++	struct drm_connector *conn;
++	int ret, i;
++
++	DP_INFO("enter");
++
++	if (IS_ERR(old_state)) {
++		DP_ERR("old state err");
++		return PTR_ERR(old_state);
++	}
++
++	if (!old_state) {
++		DP_ERR("old state null");
++		return -EINVAL;
++	}
++
++	/* Force status disconnected with proper modeset locking */
++	DRM_MODESET_LOCK_ALL_BEGIN(dev, ctx, 0, ret);
++	new_state = drm_atomic_helper_duplicate_state(dev, &ctx);
++
++	if (IS_ERR(new_state)) {
++		DP_ERR("state duplication failed");
++		goto unlock;
++	}
++
++	for_each_new_connector_in_state(new_state, conn, conn_state, i) {
++		ret = drm_atomic_set_crtc_for_connector(conn_state, NULL);
++		if (ret) {
++			DP_ERR("set crtc null failed");
++			goto state_put;
++		}
++		conn->status = connector_status_disconnected;
++		drm_connector_update_edid_property(conn, NULL);
++		drm_mode_prune_invalid(dev, &conn->modes, false);
++	}
++
++	drm_atomic_state_put(old_state);
++	dev->mode_config.suspend_state = new_state;
++	new_state = NULL;
++
++state_put:
++	if (new_state)
++		drm_atomic_state_put(new_state);
++unlock:
++	DRM_MODESET_LOCK_ALL_END(dev, ctx, ret);
++	return ret;
++}
++
++/*
++ * trilin_dp_pm_prepare - Prepare for system suspend
++ *
++ * Note: mutex must be released before cancel_delayed_work_sync() to avoid
++ * deadlock. The work callbacks may need session_lock, and waiting for them
++ * to complete while holding the lock would deadlock.
++ */
+ int trilin_dp_pm_prepare(struct trilin_dp *dp)
+ {
+ 	mutex_lock(&dp->session_lock);
+ 	DP_DEBUG("enter");
+ 	trilin_dp_mst_suspend(dp);
++	mutex_unlock(&dp->session_lock);
++
++	/* Release lock before sync - work callbacks may need it */
+ 	cancel_delayed_work_sync(&dp->hpd_irq_work);
+ 	cancel_delayed_work_sync(&dp->hpd_event_work);
++
++	mutex_lock(&dp->session_lock);
+ 	disable_irq(dp->irq);
+ 	dp->state |= DP_STATE_SUSPENDED;
+ 	if (!dp->active_stream_cnt) {
+@@ -2731,7 +2809,7 @@ int trilin_dp_pm_prepare(struct trilin_dp *dp)
+ 		trilin_dp_host_deinit(dp);
+ 	}
+ 	dp->status = connector_status_unknown;
+-	dp->plugin = false;
++	dp->state &= ~DP_STATE_CONNECTED;
+ 	mutex_unlock(&dp->session_lock);
+ 	return 0;
+ }
+diff --git a/drivers/gpu/drm/cix/dptx/trilin_dptx.h b/drivers/gpu/drm/cix/dptx/trilin_dptx.h
+index c14384ada4229..9531232a42583 100644
+--- a/drivers/gpu/drm/cix/dptx/trilin_dptx.h
++++ b/drivers/gpu/drm/cix/dptx/trilin_dptx.h
+@@ -569,6 +569,7 @@ void trilin_dp_connector_debugfs_init(struct drm_connector *connector,
+ 				      struct dentry *root);
+ 
+ int trilin_dp_pm_prepare(struct trilin_dp *dp);
++int trilin_dp_pm_resume_early(struct trilin_dp *dp);
+ int trilin_dp_pm_complete(struct trilin_dp *dp);
+ int trilin_dp_hpd_config_cb(struct trilin_dp *dp);
+ int trilin_dp_deinit_config(struct trilin_dp *dp);
+diff --git a/drivers/gpu/drm/cix/dptx/trilin_dptx_cix.c b/drivers/gpu/drm/cix/dptx/trilin_dptx_cix.c
+index 4eacfdd27060a..57b9c30246dfc 100644
+--- a/drivers/gpu/drm/cix/dptx/trilin_dptx_cix.c
++++ b/drivers/gpu/drm/cix/dptx/trilin_dptx_cix.c
+@@ -339,7 +339,12 @@ static void trilin_dptx_cix_remove(struct platform_device *pdev)
+ #ifdef CONFIG_PM
+ static int trilin_dptx_pm_suspend(struct device *dev)
+ {
+-	/* TODO */
++	dev_info(dev, "%s\n", __func__);
++	return 0;
++}
++
++static int trilin_dptx_pm_prepare(struct device *dev)
++{
+ 	struct trilin_dptx_cix_dev *cix_dptx = dev_get_drvdata(dev);
+ 	struct trilin_dpsub *dpsub = &cix_dptx->dpsub;
+ 	struct trilin_dp *dp = dpsub->dp;
+@@ -349,24 +354,38 @@ static int trilin_dptx_pm_suspend(struct device *dev)
+ 	return 0;
+ }
+ 
+-static int trilin_dptx_pm_resume(struct device *dev)
++static int trilin_dptx_pm_resume_early(struct device *dev)
+ {
+-	/* TODO */
+ 	struct trilin_dptx_cix_dev *cix_dptx = dev_get_drvdata(dev);
+ 	struct trilin_dpsub *dpsub = &cix_dptx->dpsub;
+ 	struct trilin_dp *dp = dpsub->dp;
+ 
+ 	if (dp)
+-		return trilin_dp_pm_complete(dp);
++		return trilin_dp_pm_resume_early(dp);
++	return 0;
++}
++
++static int trilin_dptx_pm_resume(struct device *dev)
++{
++	dev_info(dev, "%s\n", __func__);
+ 	return 0;
+ }
+ 
++static void trilin_dptx_pm_complete(struct device *dev)
++{
++	struct trilin_dptx_cix_dev *cix_dptx = dev_get_drvdata(dev);
++	struct trilin_dpsub *dpsub = &cix_dptx->dpsub;
++	struct trilin_dp *dp = dpsub->dp;
++
++	if (dp)
++		trilin_dp_pm_complete(dp);
++}
++
+ static const struct dev_pm_ops trilin_dptx_pm_ops = {
+ 	SET_SYSTEM_SLEEP_PM_OPS(trilin_dptx_pm_suspend, trilin_dptx_pm_resume)
+-	//SET_RUNTIME_PM_OPS(trilin_dptx_runtime_suspend,
+-	//		trilin_dptx_runtime_resume, NULL)
+-	//.prepare = trilin_dptx_pm_prepare,
+-	//.complete = trilin_dptx_pm_complete,
++	.prepare = trilin_dptx_pm_prepare,
++	.complete = trilin_dptx_pm_complete,
++	.resume_early = trilin_dptx_pm_resume_early,
+ };
+ #endif
+ 

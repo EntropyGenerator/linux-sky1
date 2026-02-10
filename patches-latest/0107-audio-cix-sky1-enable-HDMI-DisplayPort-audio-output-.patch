@@ -1,0 +1,594 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Entrpi <entrpi@proton.me>
+Date: Tue, 10 Feb 2026 21:19:38 +1100
+Subject: [PATCH] audio: cix: sky1: enable HDMI/DisplayPort audio output under
+ ACPI
+
+Wire up the complete HDMI/DP audio pipeline for ACPI boot on Sky1.
+Five I2S multi-channel controllers (I2S5-I2S9) feed audio to five
+DisplayPort transmitters via the audio subsystem DMA-350 engine.
+
+The audio subsystem requires coordinated bring-up of several
+components that have no ACPI _DEP-style ordering:
+
+  clk-sky1-audss: Transition ACPI power resource to D0, powering
+  on the audio subsystem (RCSU PD_CTRL, memory repair).  Register
+  clkdev entries from CLKA table for all audio consumers.
+
+  reset-sky1-audss: Register reset_control_lookup entries so DMA
+  and HDA controllers can find their reset lines without DT
+  phandles.
+
+  arm-dma350: Defer probe until clock and reset controllers are
+  available.  Register as ACPI DMA controller so I2S consumers
+  can resolve FixedDMA resources to DMA channels.
+
+  cdns_i2s_mc: Provide explicit DMA channel names in PCM config
+  so channels are requested via ACPI at PCM creation time (the
+  generic dmaengine-pcm code only pre-allocates for DT devices).
+
+  trilin_dptx: Set no_i2s_capture on HDMI codec registration
+  since DP ports have no Audio Return Channel.
+
+  sky1-card: Add ACPI device table (CIXH6070) for auto-loading.
+  Add cix_card_parse_acpi() to build fixed DAI link topology
+  mapping I2S5-I2S9 to hdmi-audio-codec.0-4 with jack detection.
+
+  DTS: Rename sound card model to "cix_sky1" matching the ALSA
+  UCM2 configuration directory for consistent card naming.
+
+Tested on Radxa Orion O6: all five HDMI/DP outputs appear in
+PipeWire/GNOME with working jack detection for connected displays.
+---
+ .../boot/dts/cix/sky1-orangepi-6-plus.dts     |   2 +-
+ arch/arm64/boot/dts/cix/sky1-orion-o6.dts     |   2 +-
+ arch/arm64/boot/dts/cix/sky1-orion-o6n.dts    |   2 +-
+ drivers/clk/cix/clk-sky1-audss.c              |  18 +++
+ drivers/dma/arm-dma350.c                      |  76 +++++++++---
+ drivers/gpu/drm/cix/dptx/trilin_dptx.c        |  12 +-
+ drivers/reset/reset-sky1-audss.c              |  30 ++++-
+ sound/soc/cix/card-utils.c                    | 109 ++++++++++++++++++
+ sound/soc/cix/card-utils.h                    |   1 +
+ sound/soc/cix/cdns_i2s_mc.c                   |  22 +++-
+ sound/soc/cix/sky1-card.c                     |  16 ++-
+ 11 files changed, 264 insertions(+), 26 deletions(-)
+
+diff --git a/arch/arm64/boot/dts/cix/sky1-orangepi-6-plus.dts b/arch/arm64/boot/dts/cix/sky1-orangepi-6-plus.dts
+index 970b533c7ebd0..e52e49600776f 100644
+--- a/arch/arm64/boot/dts/cix/sky1-orangepi-6-plus.dts
++++ b/arch/arm64/boot/dts/cix/sky1-orangepi-6-plus.dts
+@@ -25,7 +25,7 @@ alc269_codec: alc269_codec {
+ 
+ 	sound: sound {
+ 		compatible = "cix,sky1-sound-card";
+-		model = "cix,sky1";
++		model = "cix_sky1";
+ 		status = "okay";
+ 
+ 		hda: hda {
+diff --git a/arch/arm64/boot/dts/cix/sky1-orion-o6.dts b/arch/arm64/boot/dts/cix/sky1-orion-o6.dts
+index bf58ffe54507d..712e51224ab4f 100644
+--- a/arch/arm64/boot/dts/cix/sky1-orion-o6.dts
++++ b/arch/arm64/boot/dts/cix/sky1-orion-o6.dts
+@@ -26,7 +26,7 @@ dummy_codec: dummy_codec {
+ 
+ 	sound: sound {
+ 		compatible = "cix,sky1-sound-card";
+-		model = "cix,sky1";
++		model = "cix_sky1";
+ 		status = "okay";
+ 
+ 		bt_audio {
+diff --git a/arch/arm64/boot/dts/cix/sky1-orion-o6n.dts b/arch/arm64/boot/dts/cix/sky1-orion-o6n.dts
+index 2da7eaef4b479..e67b0f2f71b8b 100644
+--- a/arch/arm64/boot/dts/cix/sky1-orion-o6n.dts
++++ b/arch/arm64/boot/dts/cix/sky1-orion-o6n.dts
+@@ -27,7 +27,7 @@ dummy_codec: dummy_codec {
+ 
+ 	sound: sound {
+ 		compatible = "cix,sky1-sound-card";
+-		model = "cix,sky1";
++		model = "cix_sky1";
+ 		status = "okay";
+ 
+ 		bt_audio {
+diff --git a/drivers/clk/cix/clk-sky1-audss.c b/drivers/clk/cix/clk-sky1-audss.c
+index 1edaf6a70827a..174058167d562 100644
+--- a/drivers/clk/cix/clk-sky1-audss.c
++++ b/drivers/clk/cix/clk-sky1-audss.c
+@@ -755,6 +755,20 @@ static int sky1_audss_clk_probe(struct platform_device *pdev)
+ 	pm_runtime_set_active(dev);
+ 	pm_runtime_enable(dev);
+ 
++	/*
++	 * Under ACPI, explicitly transition to D0 to invoke the PPRS
++	 * power resource _ON method.  PPRS enables the audio subsystem
++	 * power gates (RCSU PD_CTRL) and triggers memory repair via
++	 * DMRP.  This must happen before any audio subsystem register
++	 * access (CRU, reset controller, DMA, I2S, etc).
++	 */
++	if (has_acpi_companion(dev)) {
++		ret = acpi_device_set_power(ACPI_COMPANION(dev),
++					    ACPI_STATE_D0);
++		if (ret)
++			dev_warn(dev, "ACPI D0 transition failed: %d\n", ret);
++	}
++
+ 	/* Enable parent clocks and set default rates */
+ 	ret = sky1_audss_clks_enable(priv);
+ 	if (ret) {
+@@ -850,6 +864,10 @@ static int sky1_audss_clk_probe(struct platform_device *pdev)
+ 	 * The initial pm_runtime_get_noresume() reference is kept - we
+ 	 * don't call pm_runtime_put_sync() here.
+ 	 */
++	/* Allow DLKL consumers (DMA, I2S, etc.) to enumerate now */
++	if (has_acpi_companion(dev))
++		acpi_dev_clear_dependencies(ACPI_COMPANION(dev));
++
+ 	dev_info(dev, "registered %d clocks\n", AUDSS_MAX_CLKS);
+ 	return 0;
+ 
+diff --git a/drivers/dma/arm-dma350.c b/drivers/dma/arm-dma350.c
+index c8f39f6d589bd..4dcc7868fa534 100644
+--- a/drivers/dma/arm-dma350.c
++++ b/drivers/dma/arm-dma350.c
+@@ -3,6 +3,7 @@
+ // Arm DMA-350 driver
+ 
+ #include <linux/acpi.h>
++#include <linux/acpi_dma.h>
+ #include <linux/bitfield.h>
+ #include <linux/clk.h>
+ #include <linux/delay.h>
+@@ -1030,6 +1031,31 @@ static struct dma_chan *d350_of_xlate(struct of_phandle_args *dma_spec,
+ 	return chan;
+ }
+ 
++static struct dma_chan *d350_acpi_xlate(struct acpi_dma_spec *dma_spec,
++				       struct acpi_dma *adma)
++{
++	struct d350 *dmac = adma->data;
++	struct dma_chan *chan;
++	struct d350_chan *dch;
++	u32 request = dma_spec->slave_id;
++	u32 channel_id = dma_spec->chan_id;
++
++	if (channel_id == 0xFF)
++		chan = dma_get_any_slave_channel(&dmac->dma);
++	else if (channel_id < dmac->nchan)
++		chan = dma_get_slave_channel(&dmac->channels[channel_id].vc.chan);
++	else
++		return NULL;
++
++	if (!chan)
++		return NULL;
++
++	dch = to_d350_chan(chan);
++	dch->req_line = request;
++
++	return chan;
++}
++
+ static struct dma_async_tx_descriptor *d350_prep_slave_sg(
+ 	struct dma_chan *chan, struct scatterlist *sgl, unsigned int sg_len,
+ 	enum dma_transfer_direction dir, unsigned long flags, void *context)
+@@ -1238,22 +1264,29 @@ static int d350_probe(struct platform_device *pdev)
+ 			return dev_err_probe(dev, PTR_ERR(clk), "Failed to get clock\n");
+ 	}
+ 
++	/*
++	 * Under ACPI, the audio clock controller (CIXH6061) provides clocks
++	 * via clkdev and also activates the audio power domain during its
++	 * probe.  If we got no clock, the clock controller hasn't probed
++	 * yet — defer until it registers its clkdev entries.
++	 */
++	if (!clk && has_acpi_companion(dev))
++		return dev_err_probe(dev, -EPROBE_DEFER,
++				     "waiting for audio clock controller\n");
++
+ 	/*
+ 	 * Enable runtime PM to activate power domain. The runtime_resume
+ 	 * callback handles NULL dmac gracefully during this initial call.
+ 	 * We then manually enable the clock since dmac isn't set up yet.
+ 	 */
+-	dev_dbg(dev, "DMA-350 probe: enabling pm_runtime\n");
+ 	pm_runtime_enable(dev);
+ 	ret = pm_runtime_resume_and_get(dev);
+ 	if (ret < 0) {
+ 		pm_runtime_disable(dev);
+ 		return dev_err_probe(dev, ret, "Failed to power on device\n");
+ 	}
+-	dev_dbg(dev, "DMA-350 probe: pm_runtime_resume_and_get returned %d\n", ret);
+ 
+ 	/* Manually enable clock for initial probe (runtime_resume skipped it) */
+-	dev_dbg(dev, "DMA-350 probe: enabling clock %pC\n", clk);
+ 	ret = clk_prepare_enable(clk);
+ 	if (ret) {
+ 		pm_runtime_put(dev);
+@@ -1271,6 +1304,16 @@ static int d350_probe(struct platform_device *pdev)
+ 			dev_err(dev, "Failed to get reset: %d\n", ret);
+ 			goto err_pm_put;
+ 		}
++		/*
++		 * Under ACPI, the audio reset controller (CIXH6062)
++		 * registers lookup entries during its probe.  If we
++		 * got NULL, it hasn't probed yet — defer.
++		 */
++		if (!rst && has_acpi_companion(dev)) {
++			dev_info(dev, "waiting for audio reset controller\n");
++			ret = -EPROBE_DEFER;
++			goto err_pm_put;
++		}
+ 		if (rst) {
+ 			dev_dbg(dev, "DMA-350 probe: deasserting reset\n");
+ 			ret = reset_control_deassert(rst);
+@@ -1283,21 +1326,6 @@ static int d350_probe(struct platform_device *pdev)
+ 		}
+ 	}
+ 
+-	dev_dbg(dev, "DMA-350 probe: about to read IIDR at %p + 0x%x\n",
+-		base, DMAINFO + IIDR);
+-
+-	/*
+-	 * Devices with "arm,remote-ctrl" (e.g. audio subsystem DMA) live in
+-	 * a power domain managed by a remote processor.  Accessing registers
+-	 * before that domain is powered causes an unrecoverable SError on
+-	 * ARM64.  Skip these until their controller is available.
+-	 */
+-	if (device_property_present(dev, "arm,remote-ctrl")) {
+-		dev_dbg(dev, "DMA-350: remote-controlled, skipping probe\n");
+-		ret = -ENODEV;
+-		goto err_pm_put;
+-	}
+-
+ 	reg = readl_relaxed(base + DMAINFO + IIDR);
+ 	r = FIELD_GET(IIDR_VARIANT, reg);
+ 	p = FIELD_GET(IIDR_REVISION, reg);
+@@ -1480,6 +1508,16 @@ static int d350_probe(struct platform_device *pdev)
+ 		}
+ 	}
+ 
++	/* Register for ACPI DMA channel requests */
++	if (has_acpi_companion(dev)) {
++		ret = acpi_dma_controller_register(dev, d350_acpi_xlate, dmac);
++		if (ret) {
++			dev_err(dev, "Failed to register ACPI DMA controller: %d\n", ret);
++			goto err_dma_unregister;
++		}
++		acpi_dev_clear_dependencies(ACPI_COMPANION(dev));
++	}
++
+ 	dev_info(dev, "DMA-350 r%dp%d initialized with %d channels\n",
+ 		 r, p, dmac->nchan);
+ 	return 0;
+@@ -1498,6 +1536,8 @@ static void d350_remove(struct platform_device *pdev)
+ {
+ 	struct d350 *dmac = platform_get_drvdata(pdev);
+ 
++	if (has_acpi_companion(&pdev->dev))
++		acpi_dma_controller_free(&pdev->dev);
+ 	of_dma_controller_free(pdev->dev.of_node);
+ 	dma_async_device_unregister(&dmac->dma);
+ 	of_reserved_mem_device_release(&pdev->dev);
+diff --git a/drivers/gpu/drm/cix/dptx/trilin_dptx.c b/drivers/gpu/drm/cix/dptx/trilin_dptx.c
+index e4668c67bdcf6..ff2049532396f 100644
+--- a/drivers/gpu/drm/cix/dptx/trilin_dptx.c
++++ b/drivers/gpu/drm/cix/dptx/trilin_dptx.c
+@@ -33,6 +33,7 @@
+ #include <drm/drm_debugfs.h>
+ #include <drm/drm_file.h>
+ 
++#include <linux/acpi.h>
+ #include <linux/clk.h>
+ #include <linux/delay.h>
+ #include <linux/device.h>
+@@ -3167,12 +3168,21 @@ static int dptx_register_audio_device(struct trilin_dp *dp)
+ 		.ops = &dptx_audio_codec_ops,
+ 		.spdif = 0,
+ 		.i2s = 1,
++		.no_i2s_capture = 1,
+ 		.max_i2s_channels = 8,
+ 		.data = dp,
+ 	};
++	int id = PLATFORM_DEVID_AUTO;
++	u64 uid;
++
++	/* Use ACPI _UID for deterministic device naming under ACPI */
++	if (ACPI_COMPANION(dp->dev) &&
++	    !acpi_dev_uid_to_integer(ACPI_COMPANION(dp->dev), &uid))
++		id = uid;
++
+ 	dptx_aud->running = false;
+ 	dptx_aud->pdev = platform_device_register_data(
+-		dp->dev, HDMI_CODEC_DRV_NAME, PLATFORM_DEVID_AUTO, &codec_data,
++		dp->dev, HDMI_CODEC_DRV_NAME, id, &codec_data,
+ 		sizeof(codec_data));
+ 
+ 	return PTR_ERR_OR_ZERO(dptx_aud->pdev);
+diff --git a/drivers/reset/reset-sky1-audss.c b/drivers/reset/reset-sky1-audss.c
+index 35d66e16f619e..7d08c711175c7 100644
+--- a/drivers/reset/reset-sky1-audss.c
++++ b/drivers/reset/reset-sky1-audss.c
+@@ -102,6 +102,7 @@ static int sky1_audss_reset_probe(struct platform_device *pdev)
+ 	struct device_node *parent_np;
+ 	struct sky1_audss_reset *rst;
+ 	struct regmap *regmap;
++	int ret;
+ 
+ 	parent_np = of_get_parent(dev->of_node);
+ 	regmap = syscon_node_to_regmap(parent_np);
+@@ -140,7 +141,34 @@ static int sky1_audss_reset_probe(struct platform_device *pdev)
+ 	rst->rcdev.of_node = dev->of_node;
+ 	rst->rcdev.dev = dev;
+ 
+-	return devm_reset_controller_register(dev, &rst->rcdev);
++	ret = devm_reset_controller_register(dev, &rst->rcdev);
++	if (ret)
++		return ret;
++
++	/* Allow DLKL consumers (DMA, I2S, etc.) to enumerate now */
++	if (has_acpi_companion(dev))
++		acpi_dev_clear_dependencies(ACPI_COMPANION(dev));
++
++	/*
++	 * Under ACPI, consumers find reset lines via lookup table
++	 * (equivalent of DT phandle references).  Entries derived
++	 * from vendor DSDT RSTL objects on each consumer device.
++	 */
++	if (has_acpi_companion(dev)) {
++		static struct reset_control_lookup lookups[] = {
++			{ .index = 15, .dev_id = "CIXH1006:00",
++			  .con_id = "dma_reset" },
++			{ .index = 14, .dev_id = "CIXH6020:00",
++			  .con_id = "hda" },
++		};
++		int i;
++
++		for (i = 0; i < ARRAY_SIZE(lookups); i++)
++			lookups[i].provider = dev_name(dev);
++		reset_controller_add_lookup(lookups, ARRAY_SIZE(lookups));
++	}
++
++	return 0;
+ }
+ 
+ static const struct of_device_id sky1_audss_reset_of_match[] = {
+diff --git a/sound/soc/cix/card-utils.c b/sound/soc/cix/card-utils.c
+index 880f3e011aa2e..6cf278eb24195 100644
+--- a/sound/soc/cix/card-utils.c
++++ b/sound/soc/cix/card-utils.c
+@@ -1,6 +1,7 @@
+ // SPDX-License-Identifier: GPL-2.0
+ // Copyright 2024 Cix Technology Group Co., Ltd.
+ 
++#include <linux/acpi.h>
+ #include <linux/clk.h>
+ #include <linux/module.h>
+ #include <linux/mfd/syscon.h>
+@@ -635,6 +636,114 @@ int cix_card_parse_of(struct cix_asoc_card *priv)
+ }
+ EXPORT_SYMBOL(cix_card_parse_of);
+ 
++/*
++ * ACPI HDMI audio topology for Sky1 Orion O6.
++ *
++ * Under ACPI, the DAI link topology is fixed:
++ *   I2S5 (CIXH6011:02) → hdmi-audio-codec.0 (DP0)
++ *   I2S6 (CIXH6011:03) → hdmi-audio-codec.1 (DP1)
++ *   I2S7 (CIXH6011:04) → hdmi-audio-codec.2 (DP2/eDP)
++ *   I2S8 (CIXH6011:05) → hdmi-audio-codec.3 (DP3)
++ *   I2S9 (CIXH6011:06) → hdmi-audio-codec.4 (DP4)
++ */
++#define SKY1_HDMI_LINKS	5
++
++static const struct {
++	const char *i2s_name;	/* ACPI platform device name */
++	int codec_id;		/* hdmi-audio-codec.N */
++	const char *stream;	/* ALSA stream name */
++} sky1_hdmi_topology[SKY1_HDMI_LINKS] = {
++	{ "CIXH6011:02", 0, "HDMI/DP 0" },
++	{ "CIXH6011:03", 1, "HDMI/DP 1" },
++	{ "CIXH6011:04", 2, "HDMI/DP 2" },
++	{ "CIXH6011:05", 3, "HDMI/DP 3" },
++	{ "CIXH6011:06", 4, "HDMI/DP 4" },
++};
++
++int cix_card_parse_acpi(struct cix_asoc_card *priv)
++{
++	struct snd_soc_card *card = priv->card;
++	struct device *dev = card->dev;
++	struct snd_soc_dai_link *links;
++	struct snd_soc_dai_link_component *comps;
++	struct dai_link_info *link_info;
++	int i;
++
++	card->name = "cix_sky1";
++
++	links = devm_kcalloc(dev, SKY1_HDMI_LINKS, sizeof(*links), GFP_KERNEL);
++	if (!links)
++		return -ENOMEM;
++
++	/* 3 components per link: cpu, codec, platform */
++	comps = devm_kcalloc(dev, SKY1_HDMI_LINKS * 3, sizeof(*comps),
++			     GFP_KERNEL);
++	if (!comps)
++		return -ENOMEM;
++
++	link_info = devm_kcalloc(dev, SKY1_HDMI_LINKS, sizeof(*link_info),
++				 GFP_KERNEL);
++	if (!link_info)
++		return -ENOMEM;
++
++	for (i = 0; i < SKY1_HDMI_LINKS; i++) {
++		struct snd_soc_dai_link_component *cpu = &comps[i * 3];
++		struct snd_soc_dai_link_component *codec = &comps[i * 3 + 1];
++		struct snd_soc_dai_link_component *plat = &comps[i * 3 + 2];
++		struct snd_soc_dai_link *link = &links[i];
++
++		/* CPU DAI: I2S MC playback */
++		cpu->name = sky1_hdmi_topology[i].i2s_name;
++		cpu->dai_name = "i2s-mc-aif1";
++
++		/* Codec DAI: hdmi-audio-codec */
++		codec->name = devm_kasprintf(dev, GFP_KERNEL,
++					     "hdmi-audio-codec.%d",
++					     sky1_hdmi_topology[i].codec_id);
++		if (!codec->name)
++			return -ENOMEM;
++		codec->dai_name = "i2s-hifi";
++
++		/* Platform: DMA is co-located with CPU */
++		plat->name = cpu->name;
++
++		link->cpus = cpu;
++		link->num_cpus = 1;
++		link->codecs = codec;
++		link->num_codecs = 1;
++		link->platforms = plat;
++		link->num_platforms = 1;
++
++		link->name = sky1_hdmi_topology[i].stream;
++		link->stream_name = sky1_hdmi_topology[i].stream;
++		link->id = i;
++
++		link->dai_fmt = SND_SOC_DAIFMT_I2S | SND_SOC_DAIFMT_IB_NF |
++				SND_SOC_DAIFMT_CBC_CFC;
++		link->ops = &cix_dailink_ops;
++		link->init = cix_dailink_init;
++		link->trigger_start = SND_SOC_TRIGGER_ORDER_DEFAULT;
++		link->trigger_stop = SND_SOC_TRIGGER_ORDER_LDC;
++
++		/* HDMI/DP output jack detection */
++		link_info[i].jack_pin[JACK_DPOUT].pin =
++			devm_kasprintf(dev, GFP_KERNEL, "HDMI/DP,pcm=%d", i);
++		if (!link_info[i].jack_pin[JACK_DPOUT].pin)
++			return -ENOMEM;
++		link_info[i].jack_pin[JACK_DPOUT].mask = SND_JACK_LINEOUT;
++		link_info[i].jack_det_mask = JACK_MASK_DPOUT;
++	}
++
++	card->dai_link = links;
++	card->num_links = SKY1_HDMI_LINKS;
++	card->suspend_post = cix_card_suspend_post;
++	card->resume_pre = cix_card_resume_pre;
++	priv->link_info = link_info;
++
++	return 0;
++}
++EXPORT_SYMBOL(cix_card_parse_acpi);
++
+ MODULE_DESCRIPTION("Sound Card Utils for Cix Technology");
+ MODULE_AUTHOR("Xing.Wang <xing.wang@cixtech.com>");
+ MODULE_LICENSE("GPL v2");
+diff --git a/sound/soc/cix/card-utils.h b/sound/soc/cix/card-utils.h
+index 2d0be35d24f98..2b0bf8065a739 100644
+--- a/sound/soc/cix/card-utils.h
++++ b/sound/soc/cix/card-utils.h
+@@ -68,5 +68,6 @@ struct cix_asoc_card {
+ };
+ 
+ int cix_card_parse_of(struct cix_asoc_card *priv);
++int cix_card_parse_acpi(struct cix_asoc_card *priv);
+ 
+ #endif
+diff --git a/sound/soc/cix/cdns_i2s_mc.c b/sound/soc/cix/cdns_i2s_mc.c
+index 37f79cbb2a373..29b2aa3dfa546 100644
+--- a/sound/soc/cix/cdns_i2s_mc.c
++++ b/sound/soc/cix/cdns_i2s_mc.c
+@@ -2,6 +2,7 @@
+ // Copyright 2024 Cix Technology Group Co., Ltd.
+ 
+ 
++#include <linux/acpi.h>
+ #include <linux/clk.h>
+ #include <linux/delay.h>
+ #include <linux/module.h>
+@@ -1001,7 +1002,19 @@ static int cdns_i2s_mc_probe(struct platform_device *pdev)
+ 	i2s_mc_priv->capture_dma_data.addr_width = DMA_SLAVE_BUSWIDTH_UNDEFINED;
+ 	i2s_mc_priv->capture_dma_data.maxburst = 4;
+ 
+-	ret = devm_snd_dmaengine_pcm_register(&pdev->dev, NULL, 0);
++	/*
++	 * Under ACPI, snd_dmaengine_pcm_register() skips DMA channel
++	 * pre-allocation (it only pre-allocates for DT devices).  Provide
++	 * explicit channel names so dmaengine_pcm_new() can request them
++	 * at PCM creation time via acpi_dma_request_slave_chan_by_name().
++	 */
++	static const struct snd_dmaengine_pcm_config pcm_config = {
++		.prepare_slave_config = snd_dmaengine_pcm_prepare_slave_config,
++		.chan_names = { [SNDRV_PCM_STREAM_PLAYBACK] = "tx",
++			        [SNDRV_PCM_STREAM_CAPTURE]  = "rx" },
++	};
++
++	ret = devm_snd_dmaengine_pcm_register(&pdev->dev, &pcm_config, 0);
+ 	if (ret) {
+ 		if (ret != -EPROBE_DEFER)
+ 			dev_err(&pdev->dev, "Failed to register dmaengine component:%d\n", ret);
+@@ -1130,6 +1143,12 @@ static const struct of_device_id cdns_i2s_mc_of_match[] = {
+ };
+ MODULE_DEVICE_TABLE(of, cdns_i2s_mc_of_match);
+ 
++static const struct acpi_device_id cdns_i2s_mc_acpi_match[] = {
++	{ "CIXH6011", (kernel_ulong_t)&sky1_devtype_data },
++	{ },
++};
++MODULE_DEVICE_TABLE(acpi, cdns_i2s_mc_acpi_match);
++
+ static struct platform_driver cdns_i2s_mc_driver = {
+ 	.probe = cdns_i2s_mc_probe,
+ 	.remove = cdns_i2s_mc_remove,
+@@ -1137,6 +1156,7 @@ static struct platform_driver cdns_i2s_mc_driver = {
+ 		.name = DRV_NAME,
+ 		.pm = &cdns_i2s_mc_pm_ops,
+ 		.of_match_table = cdns_i2s_mc_of_match,
++		.acpi_match_table = ACPI_PTR(cdns_i2s_mc_acpi_match),
+ 	},
+ };
+ module_platform_driver(cdns_i2s_mc_driver);
+diff --git a/sound/soc/cix/sky1-card.c b/sound/soc/cix/sky1-card.c
+index b5eead0d44d72..a119dae36009b 100644
+--- a/sound/soc/cix/sky1-card.c
++++ b/sound/soc/cix/sky1-card.c
+@@ -1,6 +1,8 @@
+ // SPDX-License-Identifier: GPL-2.0
+ // Copyright 2024 Cix Technology Group Co., Ltd.
+ 
++#include <linux/acpi.h>
++#include <linux/module.h>
+ #include "card-utils.h"
+ 
+ static int cix_asoc_card_probe(struct platform_device *pdev)
+@@ -23,10 +25,13 @@ static int cix_asoc_card_probe(struct platform_device *pdev)
+ 	platform_set_drvdata(pdev, card);
+ 	snd_soc_card_set_drvdata(card, priv);
+ 
+-	ret = cix_card_parse_of(priv);
++	if (dev->of_node)
++		ret = cix_card_parse_of(priv);
++	else
++		ret = cix_card_parse_acpi(priv);
+ 	if (ret) {
+ 		if (ret != -EPROBE_DEFER)
+-			dev_err(dev, "cix_card_parse_of failed (%d)\n", ret);
++			dev_err(dev, "card parse failed (%d)\n", ret);
+ 		return ret;
+ 	}
+ 
+@@ -46,10 +51,17 @@ static const struct of_device_id sky1_of_match[] = {
+ };
+ MODULE_DEVICE_TABLE(of, sky1_of_match);
+ 
++static const struct acpi_device_id sky1_acpi_match[] = {
++	{ "CIXH6070", 0 },
++	{ }
++};
++MODULE_DEVICE_TABLE(acpi, sky1_acpi_match);
++
+ static struct platform_driver sky1_card_pdrv = {
+ 	.driver = {
+ 		.name = "sky1-asoc-card",
+ 		.of_match_table = sky1_of_match,
++		.acpi_match_table = sky1_acpi_match,
+ 		.pm = &snd_soc_pm_ops,
+ 	},
+ 	.probe = cix_asoc_card_probe,

@@ -1,0 +1,47 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Entrpi <entrpi@proton.me>
+Date: Mon, 9 Feb 2026 16:02:05 +1100
+Subject: [PATCH] ACPI: property: restore string-path traversal for graph
+ references
+
+ACPI graph references encode the path to a remote endpoint as:
+Package { DEV, "port@N", "endpoint@N" }
+
+The loop that consumed consecutive string elements as hierarchical _DSD
+data node path components was removed during upstream refactoring, breaking
+fwnode_graph_get_remote_node() for devices that use string-form ACPI graph
+references (e.g., display connectors on Sky1).
+
+Restore the string-consuming loop in acpi_get_ref_args() so that ACPI
+graph traversal correctly resolves port/endpoint references.
+---
+ drivers/acpi/property.c | 16 ++++++++++++++++
+ 1 file changed, 16 insertions(+)
+
+diff --git a/drivers/acpi/property.c b/drivers/acpi/property.c
+index 19737f9e1e16f..c5c95490a03df 100644
+--- a/drivers/acpi/property.c
++++ b/drivers/acpi/property.c
+@@ -873,6 +873,22 @@ static int acpi_get_ref_args(struct fwnode_reference_args *args,
+ 	if (nargs_prop)
+ 		num_args = acpi_fwnode_get_args_count(ref_fwnode, nargs_prop);
+ 
++	/*
++	 * Consume consecutive string elements as hierarchical _DSD data node
++	 * path components.  ACPI graph references encode the path to a remote
++	 * endpoint as: Package { DEV, "port@N", "endpoint@N" }
++	 * Each string names a child data node under the preceding reference.
++	 */
++	for (; *element < end && (*element)->type == ACPI_TYPE_STRING;
++	     (*element)++) {
++		const char *child_name = (*element)->string.pointer;
++
++		ref_fwnode = acpi_fwnode_get_named_child_node(ref_fwnode,
++							      child_name);
++		if (!ref_fwnode)
++			return -EINVAL;
++	}
++
+ 	/*
+ 	 * Assume the following integer elements are all args. Stop counting on
+ 	 * the first reference (possibly represented as a string) or end of the

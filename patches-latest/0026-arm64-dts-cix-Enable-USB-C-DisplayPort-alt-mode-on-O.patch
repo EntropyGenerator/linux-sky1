@@ -1,0 +1,195 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Entrpi <entrpi@proton.me>
+Date: Tue, 3 Feb 2026 19:11:44 +1100
+Subject: [PATCH] arm64: dts: cix: Enable USB-C DisplayPort alt mode on Orion
+ O6
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Enable RTS5453 USB-PD controllers (rts5453@30 and rts5453@31) on i2c1
+for the O6, which were disabled due to a cdns_role_stop race condition
+that is no longer observed on 6.19-rc8.
+
+Restore SMMU stream IDs (iommus properties) for all five display
+controllers (dpu0-dpu4). These were commented out to avoid ACE errors,
+but with smmu_mmhub already enabled in the board DTS with boot-active
+SIDs for DPU1, non-boot DPUs got AXI bus errors when accessing
+framebuffer memory without registered stream IDs.
+
+Clean up dead RTS5453 nodes from O6N DTS — the O6N has a single USB-C
+port handled by CS32G05 on i2c5 (already enabled), not the dual
+RTS5453 layout on the O6.
+
+Together these changes enable the full USB-C DP alt mode signal chain:
+USB-C connector -> RTS5453 PD controller -> USBDP combo PHY -> DPTX ->
+linlondp DPU -> monitor.
+---
+ arch/arm64/boot/dts/cix/sky1-orion-o6.dts  |  4 +-
+ arch/arm64/boot/dts/cix/sky1-orion-o6n.dts | 66 +---------------------
+ arch/arm64/boot/dts/cix/sky1.dtsi          | 25 ++++----
+ 3 files changed, 13 insertions(+), 82 deletions(-)
+
+diff --git a/arch/arm64/boot/dts/cix/sky1-orion-o6.dts b/arch/arm64/boot/dts/cix/sky1-orion-o6.dts
+index aec8305638231..c9692116d1576 100644
+--- a/arch/arm64/boot/dts/cix/sky1-orion-o6.dts
++++ b/arch/arm64/boot/dts/cix/sky1-orion-o6.dts
+@@ -1695,7 +1695,7 @@ rts5453_pd1_port0:rts5453@30 {
+ 		interrupts = <8 IRQ_TYPE_LEVEL_LOW>;
+ 		id = <0>;
+ 		reg = <0x30>;
+-		status = "disabled"; /* Temporarily disabled - race condition with cdns_role_stop */
++		status = "okay";
+ 
+ 		usbc_con0 {
+ 			data-role = "host";
+@@ -1728,7 +1728,7 @@ rts5453_pd1_port1:rts5453@31 {
+ 		interrupts = <8 IRQ_TYPE_LEVEL_LOW>;
+ 		id = <2>;
+ 		reg = <0x31>;
+-		status = "disabled"; /* Temporarily disabled - race condition with cdns_role_stop */
++		status = "okay";
+ 
+ 		usbc_con2 {
+ 			data-role = "host";
+diff --git a/arch/arm64/boot/dts/cix/sky1-orion-o6n.dts b/arch/arm64/boot/dts/cix/sky1-orion-o6n.dts
+index 66eedd8a16845..3f3e88a7a31ab 100644
+--- a/arch/arm64/boot/dts/cix/sky1-orion-o6n.dts
++++ b/arch/arm64/boot/dts/cix/sky1-orion-o6n.dts
+@@ -1766,71 +1766,7 @@ &i2c1 {
+ 	pinctrl-0 = <&pinctrl_fch_i2c1>;
+ 	clock-frequency = <100000>;
+ 
+-	// rts5453_pd1_port0:rts5453@30 {
+-	// 	compatible = "realtek,rts5453h";
+-	// 	interrupt-parent = <&s5_gpio0>;
+-	// 	interrupts = <8 IRQ_TYPE_LEVEL_LOW>;
+-	// 	id = <0>;
+-	// 	reg = <0x30>;
+-	// 	status = "disabled"; /* Temporarily disabled - race condition with cdns_role_stop */
+-
+-	// 	usbc_con0 {
+-	// 		data-role = "host";
+-	// 		power-role = "source";
+-	// 		try-power-role = "source";
+-	// 		#address-cells = <1>;
+-	// 		#size-cells = <0>;
+-
+-	// 		port@0 {
+-	// 			reg = <0>;
+-
+-	// 			usbc0_role_sw: endpoint {
+-	// 				remote-endpoint = <&cdnsp_0_role_switch>;
+-	// 			};
+-	// 		};
+-
+-	// 		port@1 {
+-	// 			reg = <1>;
+-
+-	// 			usbc0_phy_sw: endpoint {
+-	// 				remote-endpoint = <&usbdpphy0_lane_switch>;
+-	// 			};
+-	// 		};
+-	// 	};
+-	// };
+-
+-	// rts5453_pd1_port1:rts5453@31 {
+-	// 	compatible = "realtek,rts5453h";
+-	// 	interrupt-parent = <&s5_gpio0>;
+-	// 	interrupts = <8 IRQ_TYPE_LEVEL_LOW>;
+-	// 	id = <2>;
+-	// 	reg = <0x31>;
+-	// 	status = "disabled"; /* Temporarily disabled - race condition with cdns_role_stop */
+-
+-	// 	usbc_con2 {
+-	// 		data-role = "host";
+-	// 		power-role = "source";
+-	// 		try-power-role = "source";
+-	// 		#address-cells = <1>;
+-	// 		#size-cells = <0>;
+-
+-	// 		port@0 {
+-	// 			reg = <0>;
+-
+-	// 			usbc2_role_sw: endpoint {
+-	// 				remote-endpoint = <&cdnsp_2_role_switch>;
+-	// 			};
+-	// 		};
+-
+-	// 		port@1 {
+-	// 			reg = <1>;
+-
+-	// 			usbc2_phy_sw: endpoint {
+-	// 				remote-endpoint = <&usbdpphy2_lane_switch>;
+-	// 			};
+-	// 		};
+-	// 	};
+-	// };
++	/* O6N has a single USB-C port with PD via CS32G05 on i2c5 */
+ };
+ 
+ &i7_isp {
+diff --git a/arch/arm64/boot/dts/cix/sky1.dtsi b/arch/arm64/boot/dts/cix/sky1.dtsi
+index a199d58f8f36f..9779c6aea9fc7 100644
+--- a/arch/arm64/boot/dts/cix/sky1.dtsi
++++ b/arch/arm64/boot/dts/cix/sky1.dtsi
+@@ -2600,9 +2600,8 @@ dpu0: disp-controller@14010000 {
+ 			compatible = "armchina,linlon-d6";
+ 			reg = <0x0 0x14010000 0x0 0x20000>;
+ 			interrupts = <GIC_SPI 316 IRQ_TYPE_LEVEL_HIGH 0>;
+-			/* IOMMU disabled to avoid ACE errors from stale TLB entries */
+-			/* iommus = <&smmu_mmhub 0>, <&smmu_mmhub 1>,
+-				 <&smmu_mmhub 3>, <&smmu_mmhub 4>; */
++			iommus = <&smmu_mmhub 0>, <&smmu_mmhub 1>,
++				 <&smmu_mmhub 3>, <&smmu_mmhub 4>;
+ 			power-domains = <&smc_devpd SKY1_PD_DPU0>;
+ 			power-domain-names = "dpu_pd";
+ 			clocks = <&scmi_clk CLK_TREE_DPU0_ACLK>;
+@@ -2634,9 +2633,8 @@ dpu1: disp-controller@14080000 {
+ 			compatible = "armchina,linlon-d6";
+ 			reg = <0x0 0x14080000 0x0 0x20000>;
+ 			interrupts = <GIC_SPI 318 IRQ_TYPE_LEVEL_HIGH 0>;
+-			/* IOMMU disabled to avoid ACE errors from stale TLB entries */
+-			/* iommus = <&smmu_mmhub 6>, <&smmu_mmhub 7>,
+-				 <&smmu_mmhub 9>, <&smmu_mmhub 10>; */
++			iommus = <&smmu_mmhub 6>, <&smmu_mmhub 7>,
++				 <&smmu_mmhub 9>, <&smmu_mmhub 10>;
+ 			power-domains = <&smc_devpd SKY1_PD_DPU1>;
+ 			power-domain-names = "dpu_pd";
+ 			clocks = <&scmi_clk CLK_TREE_DPU1_ACLK>;
+@@ -2668,9 +2666,8 @@ dpu2: disp-controller@140f0000 {
+ 			compatible = "armchina,linlon-d6";
+ 			reg = <0x0 0x140f0000 0x0 0x20000>;
+ 			interrupts = <GIC_SPI 320 IRQ_TYPE_LEVEL_HIGH 0>;
+-			/* IOMMU disabled to avoid ACE errors from stale TLB entries */
+-			/* iommus = <&smmu_mmhub 12>, <&smmu_mmhub 13>,
+-				 <&smmu_mmhub 15>, <&smmu_mmhub 16>; */
++			iommus = <&smmu_mmhub 12>, <&smmu_mmhub 13>,
++				 <&smmu_mmhub 15>, <&smmu_mmhub 16>;
+ 			power-domains = <&smc_devpd SKY1_PD_DPU2>;
+ 			power-domain-names = "dpu_pd";
+ 			clocks = <&scmi_clk CLK_TREE_DPU2_ACLK>;
+@@ -2702,9 +2699,8 @@ dpu3: disp-controller@14160000 {
+ 			compatible = "armchina,linlon-d6";
+ 			reg = <0x0 0x14160000 0x0 0x20000>;
+ 			interrupts = <GIC_SPI 322 IRQ_TYPE_LEVEL_HIGH 0>;
+-			/* IOMMU disabled to avoid ACE errors from stale TLB entries */
+-			/* iommus = <&smmu_mmhub 18>, <&smmu_mmhub 19>,
+-				 <&smmu_mmhub 21>, <&smmu_mmhub 22>; */
++			iommus = <&smmu_mmhub 18>, <&smmu_mmhub 19>,
++				 <&smmu_mmhub 21>, <&smmu_mmhub 22>;
+ 			power-domains = <&smc_devpd SKY1_PD_DPU3>;
+ 			power-domain-names = "dpu_pd";
+ 			clocks = <&scmi_clk CLK_TREE_DPU3_ACLK>;
+@@ -2736,9 +2732,8 @@ dpu4: disp-controller@141d0000 {
+ 			compatible = "armchina,linlon-d6";
+ 			reg = <0x0 0x141d0000 0x0 0x20000>;
+ 			interrupts = <GIC_SPI 324 IRQ_TYPE_LEVEL_HIGH 0>;
+-			/* IOMMU disabled to avoid ACE errors from stale TLB entries */
+-			/* iommus = <&smmu_mmhub 24>, <&smmu_mmhub 25>,
+-				 <&smmu_mmhub 27>, <&smmu_mmhub 28>; */
++			iommus = <&smmu_mmhub 24>, <&smmu_mmhub 25>,
++				 <&smmu_mmhub 27>, <&smmu_mmhub 28>;
+ 			power-domains = <&smc_devpd SKY1_PD_DPU4>;
+ 			power-domain-names = "dpu_pd";
+ 			clocks = <&scmi_clk CLK_TREE_DPU4_ACLK>;

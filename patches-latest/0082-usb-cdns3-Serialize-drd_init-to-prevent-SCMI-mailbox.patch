@@ -1,0 +1,52 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Entrpi <entrpi@proton.me>
+Date: Sat, 7 Feb 2026 21:21:17 +1100
+Subject: [PATCH] usb: cdns3: Serialize drd_init to prevent SCMI mailbox
+ flooding
+
+Each USB controller's drd_init disables and re-enables 4 clocks via
+SCMI. With 10 controllers probing in parallel, 80+ SCMI messages
+compete for a single shared mailbox channel, causing timeouts and
+SErrors. Serialize the drd_init calls with a static mutex.
+---
+ drivers/usb/cdns3/cdnsp-sky1.c | 12 ++++++++++++
+ 1 file changed, 12 insertions(+)
+
+diff --git a/drivers/usb/cdns3/cdnsp-sky1.c b/drivers/usb/cdns3/cdnsp-sky1.c
+index 023c1fa937dc1..2649d8af20c2b 100644
+--- a/drivers/usb/cdns3/cdnsp-sky1.c
++++ b/drivers/usb/cdns3/cdnsp-sky1.c
+@@ -12,6 +12,7 @@
+ #include <linux/module.h>
+ #include <linux/kernel.h>
+ #include <linux/interrupt.h>
++#include <linux/mutex.h>
+ #include <linux/platform_device.h>
+ #include <linux/io.h>
+ #include <linux/of_platform.h>
+@@ -28,6 +29,15 @@
+ #include "../host/xhci-plat.h"
+ #include "cdnsp-sky1.h"
+ 
++/*
++ * Serialize drd_init across all instances to avoid overwhelming the
++ * SCMI mailbox channel.  Each controller's drd_init disables and
++ * re-enables 4 clocks via SCMI — with 10 controllers probing in
++ * parallel that's 80+ SCMI messages competing for a single shared
++ * mailbox, causing timeouts and SErrors on already-clocked hardware.
++ */
++static DEFINE_MUTEX(cdnsp_sky1_init_lock);
++
+ static const char *cix_usb_clk_names[CIX_USB_CLK_NUM] = {
+ 		"sof_clk", "usb_aclk", "lpm_clk", "usb_pclk"
+ };
+@@ -633,7 +643,9 @@ static int cdnsp_sky1_probe(struct platform_device *pdev)
+ 		}
+ 	}
+ 
++	mutex_lock(&cdnsp_sky1_init_lock);
+ 	ret = cdnsp_sky1_drd_init(data);
++	mutex_unlock(&cdnsp_sky1_init_lock);
+ 	if (ret == -ETIMEDOUT)
+ 		return -EPROBE_DEFER;
+ 	else if (ret)

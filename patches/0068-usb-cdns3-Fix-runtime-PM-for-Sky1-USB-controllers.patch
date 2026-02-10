@@ -1,0 +1,111 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Entrpi <entrpi@proton.me>
+Date: Fri, 6 Feb 2026 13:45:01 +1100
+Subject: [PATCH] usb: cdns3: Fix runtime PM for Sky1 USB controllers
+
+The unconditional CDNS3_DEFAULT_PM_RUNTIME_ALLOW quirk caused USB-A
+(host-only) controllers to enter D3 where they cannot detect hot-plug
+events. Sky1 USB-A controllers have no out-of-band wake mechanism from
+D3, unlike USB-C (OTG) ports which have the rts5453 PD controller.
+
+Only enable runtime PM D3 for OTG controllers identified by the
+usb-role-switch property on their child DT node. Host-only controllers
+stay in D0 for reliable hot-plug detection.
+
+Also increase xHCI autosuspend delay to 2000ms for OTG controllers to
+allow USB3 link training and device enumeration to complete before the
+controller re-enters D3, and increase cdnsp-plat autosuspend from 20ms
+to 200ms to avoid excessive D3 cycling.
+---
+ drivers/usb/cdns3/cdnsp-plat.c | 10 ++++++----
+ drivers/usb/cdns3/cdnsp-sky1.c | 20 +++++++++++++++++++-
+ drivers/usb/cdns3/cdnsp-sky1.h |  2 +-
+ drivers/usb/host/xhci-plat.c   |  7 +++++--
+ 4 files changed, 31 insertions(+), 8 deletions(-)
+
+diff --git a/drivers/usb/cdns3/cdnsp-plat.c b/drivers/usb/cdns3/cdnsp-plat.c
+index cc7bb4b7ba6d4..0132aa18ee063 100644
+--- a/drivers/usb/cdns3/cdnsp-plat.c
++++ b/drivers/usb/cdns3/cdnsp-plat.c
+@@ -159,11 +159,13 @@ static int cdnsp_plat_probe(struct platform_device *pdev)
+ 		pm_runtime_forbid(dev);
+ 
+ 	/*
+-	 * The controller needs less time between bus and controller suspend,
+-	 * and we also needs a small delay to avoid frequently entering low
+-	 * power mode.
++	 * Allow enough time for USB3 link training and hub port polling
++	 * before entering low power mode. USB3 SuperSpeed link training
++	 * can take hundreds of milliseconds, and the hub driver polls
++	 * at ~256ms intervals. Must be shorter than the platform poll
++	 * interval (1s) to allow D3 between polls for power savings.
+ 	 */
+-	pm_runtime_set_autosuspend_delay(dev, 20);
++	pm_runtime_set_autosuspend_delay(dev, 200);
+ 	pm_runtime_mark_last_busy(dev);
+ 	pm_runtime_use_autosuspend(dev);
+ 
+diff --git a/drivers/usb/cdns3/cdnsp-sky1.c b/drivers/usb/cdns3/cdnsp-sky1.c
+index 33ace97ae8dd4..378f955e59094 100644
+--- a/drivers/usb/cdns3/cdnsp-sky1.c
++++ b/drivers/usb/cdns3/cdnsp-sky1.c
+@@ -633,7 +633,25 @@ static int cdnsp_sky1_probe(struct platform_device *pdev)
+ 		return -ENOMEM;
+ 	/* Note: mainline only supports platform_suspend, not platform_reset/platform_u3_disable */
+ 	cdns_sky1_pdata->platform_suspend = cdns_sky1_platform_suspend;
+-	cdns_sky1_pdata->quirks = CDNS3_DEFAULT_PM_RUNTIME_ALLOW;
++
++	/*
++	 * Only enable runtime PM D3 for OTG (USB-C) controllers where the
++	 * rts5453 PD controller provides out-of-band wake on device plug.
++	 * Host-only (USB-A) controllers cannot generate PME from D3, so
++	 * they must stay active for reliable hot-plug detection.
++	 */
++	{
++		struct device_node *child;
++
++		for_each_child_of_node(node, child) {
++			if (of_property_read_bool(child, "usb-role-switch")) {
++				cdns_sky1_pdata->quirks =
++					CDNS3_DEFAULT_PM_RUNTIME_ALLOW;
++				of_node_put(child);
++				break;
++			}
++		}
++	}
+ 	if (!ACPI_COMPANION(dev)) {
+ 		cdns_sky1_auxdata->platform_data = cdns_sky1_pdata;
+ 		ret = of_platform_populate(node, NULL, cdns_sky1_auxdata, dev);
+diff --git a/drivers/usb/cdns3/cdnsp-sky1.h b/drivers/usb/cdns3/cdnsp-sky1.h
+index 767cc6581325d..82563bd1000bd 100644
+--- a/drivers/usb/cdns3/cdnsp-sky1.h
++++ b/drivers/usb/cdns3/cdnsp-sky1.h
+@@ -117,7 +117,7 @@ struct cdnsp_sky1 {
+ 	bool u3_disable;
+ 	bool ssp_disable;
+ 	int axi_bmax_value;
+-	struct gpio_desc * oc_gpio;
++	struct gpio_desc *oc_gpio;
+ };
+ 
+ #endif /* __LINUX_CDNSP_SKY1_H */
+diff --git a/drivers/usb/host/xhci-plat.c b/drivers/usb/host/xhci-plat.c
+index 6b3235d5a4849..0baa3be7618c8 100644
+--- a/drivers/usb/host/xhci-plat.c
++++ b/drivers/usb/host/xhci-plat.c
+@@ -359,10 +359,13 @@ int xhci_plat_probe(struct platform_device *pdev, struct device *sysdev, const s
+ 	 * Prevent runtime pm from being on as default, users should enable
+ 	 * runtime pm using power/control in sysfs.
+ 	 */
+-	if (xhci->quirks & XHCI_DEFAULT_PM_RUNTIME_ALLOW)
++	if (xhci->quirks & XHCI_DEFAULT_PM_RUNTIME_ALLOW) {
++		pm_runtime_use_autosuspend(&pdev->dev);
++		pm_runtime_set_autosuspend_delay(&pdev->dev, 2000);
+ 		pm_runtime_allow(&pdev->dev);
+-	else
++	} else {
+ 		pm_runtime_forbid(&pdev->dev);
++	}
+ 
+ 	return 0;
+ 

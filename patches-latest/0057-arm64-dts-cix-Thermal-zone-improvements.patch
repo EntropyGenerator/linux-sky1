@@ -1,0 +1,297 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Entrpi <entrpi@proton.me>
+Date: Thu, 5 Feb 2026 23:40:51 +1100
+Subject: [PATCH] arm64: dts: cix: Thermal zone improvements
+
+- Rename thermal zones to tz-* pattern for clarity and <20 char limit
+- Add switch_on trip point (60C) to prevent IPA governor from
+  always being in passive state with single trip point zones
+- Update GPU power model thermal-zone reference to match
+---
+ arch/arm64/boot/dts/cix/sky1-orion-o6.dts  |  8 +--
+ arch/arm64/boot/dts/cix/sky1-orion-o6n.dts |  8 +--
+ arch/arm64/boot/dts/cix/sky1.dtsi          | 67 ++++++++++++++++++----
+ 3 files changed, 64 insertions(+), 19 deletions(-)
+
+diff --git a/arch/arm64/boot/dts/cix/sky1-orion-o6.dts b/arch/arm64/boot/dts/cix/sky1-orion-o6.dts
+index e8b88ad4577ae..bf58ffe54507d 100644
+--- a/arch/arm64/boot/dts/cix/sky1-orion-o6.dts
++++ b/arch/arm64/boot/dts/cix/sky1-orion-o6.dts
+@@ -2340,7 +2340,7 @@ &ddr_ctrl3 {
+ };
+ 
+ &thermal_zones {
+-	cpu-m1-thermal {
++	tz-cpu-6-7 {
+ 		polling-delay-passive = <100>;
+ 		polling-delay = <1000>;
+ 		thermal-sensors = <&scmi_sensor CPU_M1_TEMP_SENSOR_ID>;
+@@ -2376,7 +2376,7 @@ map1 {
+ 		};
+ 	};
+ 
+-	cpu-b1-thermal {
++	tz-cpu-10-11 {
+ 		polling-delay-passive = <100>;
+ 		polling-delay = <1000>;
+ 		thermal-sensors = <&scmi_sensor CPU_B1_TEMP_SENSOR_ID>;
+@@ -2412,7 +2412,7 @@ map1 {
+ 		};
+ 	};
+ 
+-	cpu-m0-thermal {
++	tz-cpu-4-5 {
+ 		polling-delay-passive = <100>;
+ 		polling-delay = <1000>;
+ 		thermal-sensors = <&scmi_sensor CPU_M0_TEMP_SENSOR_ID>;
+@@ -2448,7 +2448,7 @@ map1 {
+ 		};
+ 	};
+ 
+-	cpu-b0-thermal {
++	tz-cpu-8-9 {
+ 		polling-delay-passive = <100>;
+ 		polling-delay = <1000>;
+ 		thermal-sensors = <&scmi_sensor CPU_B0_TEMP_SENSOR_ID>;
+diff --git a/arch/arm64/boot/dts/cix/sky1-orion-o6n.dts b/arch/arm64/boot/dts/cix/sky1-orion-o6n.dts
+index 443c29753432b..2da7eaef4b479 100644
+--- a/arch/arm64/boot/dts/cix/sky1-orion-o6n.dts
++++ b/arch/arm64/boot/dts/cix/sky1-orion-o6n.dts
+@@ -2374,7 +2374,7 @@ &ddr_ctrl3 {
+ };
+ 
+ &thermal_zones {
+-	cpu-m1-thermal {
++	tz-cpu-6-7 {
+ 		polling-delay-passive = <100>;
+ 		polling-delay = <1000>;
+ 		thermal-sensors = <&scmi_sensor CPU_M1_TEMP_SENSOR_ID>;
+@@ -2410,7 +2410,7 @@ map1 {
+ 		};
+ 	};
+ 
+-	cpu-b1-thermal {
++	tz-cpu-10-11 {
+ 		polling-delay-passive = <100>;
+ 		polling-delay = <1000>;
+ 		thermal-sensors = <&scmi_sensor CPU_B1_TEMP_SENSOR_ID>;
+@@ -2446,7 +2446,7 @@ map1 {
+ 		};
+ 	};
+ 
+-	cpu-m0-thermal {
++	tz-cpu-4-5 {
+ 		polling-delay-passive = <100>;
+ 		polling-delay = <1000>;
+ 		thermal-sensors = <&scmi_sensor CPU_M0_TEMP_SENSOR_ID>;
+@@ -2482,7 +2482,7 @@ map1 {
+ 		};
+ 	};
+ 
+-	cpu-b0-thermal {
++	tz-cpu-8-9 {
+ 		polling-delay-passive = <100>;
+ 		polling-delay = <1000>;
+ 		thermal-sensors = <&scmi_sensor CPU_B0_TEMP_SENSOR_ID>;
+diff --git a/arch/arm64/boot/dts/cix/sky1.dtsi b/arch/arm64/boot/dts/cix/sky1.dtsi
+index e912f40d6bfeb..cb33685f4ce8f 100644
+--- a/arch/arm64/boot/dts/cix/sky1.dtsi
++++ b/arch/arm64/boot/dts/cix/sky1.dtsi
+@@ -3109,7 +3109,7 @@ power_model@0 {
+ 				static-coefficient = <2427750>;
+ 				dynamic-coefficient = <4687>;
+ 				ts = <20000 2000 (-20) 2>;
+-				thermal-zone = "gpu-avg-thermal";
++				thermal-zone = "tz-gpu-avg";
+ 			};
+ 			pbha {
+ 				int_id_override = <2 0x23>, <4 0x23>, <16 0x22>, <17 0x32>,
+@@ -3926,13 +3926,18 @@ cix_ddrlp: cix_ddr_lp {
+ 	};
+ 
+         thermal_zones:thermal-zones {
+-		vpu-thermal {
++		tz-vpu {
+ 			polling-delay-passive = <250>;
+ 			polling-delay = <1000>;
+ 			thermal-sensors = <&scmi_sensor VPU_TEMP_SENSOR_ID>;
+ 
+ 			trips {
+ 				trip-point-0 {
++					temperature = <60000>;
++					hysteresis = <1000>;
++					type = "passive";
++				};
++				trip-point-1 {
+ 					temperature = <95000>;
+ 					hysteresis = <1000>;
+ 					type = "passive";
+@@ -3940,13 +3945,18 @@ trip-point-0 {
+ 			};
+ 		};
+ 
+-		gpu0-thermal {
++		tz-gpu0 {
+ 			polling-delay-passive = <100>;
+ 			polling-delay = <1000>;
+ 			thermal-sensors = <&scmi_sensor GPU_BOTTOM_TEMP_SENSOR_ID>;
+ 
+ 			trips {
+ 				trip-point-0 {
++					temperature = <60000>;
++					hysteresis = <1000>;
++					type = "passive";
++				};
++				trip-point-1 {
+ 					temperature = <95000>;
+ 					hysteresis = <1000>;
+ 					type = "passive";
+@@ -3954,13 +3964,18 @@ trip-point-0 {
+ 			};
+ 		};
+ 
+-		gpu1-thermal {
++		tz-gpu1 {
+ 			polling-delay-passive = <100>;
+ 			polling-delay = <1000>;
+ 			thermal-sensors = <&scmi_sensor GPU_TOP_TEMP_SENSOR_ID>;
+ 
+ 			trips {
+ 				trip-point-0 {
++					temperature = <60000>;
++					hysteresis = <1000>;
++					type = "passive";
++				};
++				trip-point-1 {
+ 					temperature = <95000>;
+ 					hysteresis = <1000>;
+ 					type = "passive";
+@@ -3968,13 +3983,18 @@ trip-point-0 {
+ 			};
+ 		};
+ 
+-		brc-thermal {
++		tz-brc {
+ 			polling-delay-passive = <250>;
+ 			polling-delay = <1000>;
+ 			thermal-sensors = <&scmi_sensor SOC_BRC_TEMP_SENSOR_ID>;
+ 
+ 			trips {
+ 				trip-point-0 {
++					temperature = <60000>;
++					hysteresis = <1000>;
++					type = "passive";
++				};
++				trip-point-1 {
+ 					temperature = <95000>;
+ 					hysteresis = <1000>;
+ 					type = "passive";
+@@ -3982,13 +4002,18 @@ trip-point-0 {
+ 			};
+ 		};
+ 
+-		ddr0-thermal {
++		tz-ddr0 {
+ 			polling-delay-passive = <250>;
+ 			polling-delay = <1000>;
+ 			thermal-sensors = <&scmi_sensor DDR_BOTTOM4_TEMP_SENSOR_ID>;
+ 
+ 			trips {
+ 				trip-point-0 {
++					temperature = <60000>;
++					hysteresis = <1000>;
++					type = "passive";
++				};
++				trip-point-1 {
+ 					temperature = <95000>;
+ 					hysteresis = <1000>;
+ 					type = "passive";
+@@ -3996,13 +4021,18 @@ trip-point-0 {
+ 			};
+ 		};
+ 
+-		ddr1-thermal {
++		tz-ddr1 {
+ 			polling-delay-passive = <250>;
+ 			polling-delay = <1000>;
+ 			thermal-sensors = <&scmi_sensor DDR_TOP_TEMP_SENSOR_ID>;
+ 
+ 			trips {
+ 				trip-point-0 {
++					temperature = <60000>;
++					hysteresis = <1000>;
++					type = "passive";
++				};
++				trip-point-1 {
+ 					temperature = <95000>;
+ 					hysteresis = <1000>;
+ 					type = "passive";
+@@ -4010,13 +4040,18 @@ trip-point-0 {
+ 			};
+ 		};
+ 
+-		ci700-thermal {
++		tz-ci700 {
+ 			polling-delay-passive = <250>;
+ 			polling-delay = <1000>;
+ 			thermal-sensors = <&scmi_sensor CI700_TEMP_SENSOR_ID>;
+ 
+ 			trips {
+ 				trip-point-0 {
++					temperature = <60000>;
++					hysteresis = <1000>;
++					type = "passive";
++				};
++				trip-point-1 {
+ 					temperature = <95000>;
+ 					hysteresis = <1000>;
+ 					type = "passive";
+@@ -4024,13 +4059,18 @@ trip-point-0 {
+ 			};
+ 		};
+ 
+-		npu-thermal {
++		tz-npu {
+ 			polling-delay-passive = <250>;
+ 			polling-delay = <1000>;
+ 			thermal-sensors = <&scmi_sensor NPU_TEMP_SENSOR_ID>;
+ 
+ 			trips {
+ 				trip-point-0 {
++					temperature = <60000>;
++					hysteresis = <1000>;
++					type = "passive";
++				};
++				trip-point-1 {
+ 					temperature = <95000>;
+ 					hysteresis = <1000>;
+ 					type = "passive";
+@@ -4038,13 +4078,18 @@ trip-point-0 {
+ 			};
+ 		};
+ 
+-		trc-thermal {
++		tz-trc {
+ 			polling-delay-passive = <250>;
+ 			polling-delay = <1000>;
+ 			thermal-sensors = <&scmi_sensor SOC_TRC_TEMP_SENSOR_ID>;
+ 
+ 			trips {
+ 				trip-point-0 {
++					temperature = <60000>;
++					hysteresis = <1000>;
++					type = "passive";
++				};
++				trip-point-1 {
+ 					temperature = <95000>;
+ 					hysteresis = <1000>;
+ 					type = "passive";
+@@ -4052,7 +4097,7 @@ trip-point-0 {
+ 			};
+ 		};
+ 
+-		gpu-avg-thermal {
++		tz-gpu-avg {
+ 			polling-delay-passive = <100>;
+ 			polling-delay = <1000>;
+ 			thermal-sensors = <&scmi_sensor GPU_AVERAGE_TEMP_SENSOR_ID>;

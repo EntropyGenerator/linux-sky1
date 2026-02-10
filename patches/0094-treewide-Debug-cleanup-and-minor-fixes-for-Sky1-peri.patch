@@ -1,0 +1,148 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Entrpi <entrpi@proton.me>
+Date: Mon, 9 Feb 2026 14:22:34 +1100
+Subject: [PATCH] treewide: Debug cleanup and minor fixes for Sky1 peripherals
+
+arm-dma350:
+- Convert probe dev_info messages to dev_dbg
+- Skip register access on remote-controlled devices (e.g. audio
+  subsystem DMA) whose power domain is managed by a remote processor,
+  preventing SError on ARM64
+
+clk-sky1-audss:
+- Remove gate_prepare debug prints
+
+sof: cix:
+- Add missing MODULE_DESCRIPTION to silence build warnings
+---
+ drivers/clk/cix/clk-sky1-audss.c |  5 -----
+ drivers/dma/arm-dma350.c         | 36 ++++++++++++++++++++++----------
+ sound/soc/sof/cix/cix-common.c   |  1 +
+ sound/soc/sof/cix/cix-sky1.c     |  1 +
+ 4 files changed, 27 insertions(+), 16 deletions(-)
+
+diff --git a/drivers/clk/cix/clk-sky1-audss.c b/drivers/clk/cix/clk-sky1-audss.c
+index 9de133e6c2275..1edaf6a70827a 100644
+--- a/drivers/clk/cix/clk-sky1-audss.c
++++ b/drivers/clk/cix/clk-sky1-audss.c
+@@ -381,17 +381,12 @@ static int sky1_audss_gate_prepare(struct clk_hw *hw)
+ 	struct sky1_clk_gate *sky1_gate = container_of(gate, struct sky1_clk_gate, gate);
+ 	int ret;
+ 
+-	dev_info(sky1_gate->dev, "gate_prepare: bit %d\n", gate->bit_idx);
+-
+ 	ret = pm_runtime_get_sync(sky1_gate->dev);
+ 	if (ret < 0) {
+ 		pm_runtime_put_noidle(sky1_gate->dev);
+ 		dev_err(sky1_gate->dev, "failed to resume for clock prepare: %d\n", ret);
+ 		return ret;
+ 	}
+-
+-	dev_info(sky1_gate->dev, "gate_prepare: bit %d done, ret=%d\n",
+-		 gate->bit_idx, ret);
+ 	return 0;
+ }
+ 
+diff --git a/drivers/dma/arm-dma350.c b/drivers/dma/arm-dma350.c
+index f8245660595d4..c8f39f6d589bd 100644
+--- a/drivers/dma/arm-dma350.c
++++ b/drivers/dma/arm-dma350.c
+@@ -1243,17 +1243,17 @@ static int d350_probe(struct platform_device *pdev)
+ 	 * callback handles NULL dmac gracefully during this initial call.
+ 	 * We then manually enable the clock since dmac isn't set up yet.
+ 	 */
+-	dev_info(dev, "DMA-350 probe: enabling pm_runtime\n");
++	dev_dbg(dev, "DMA-350 probe: enabling pm_runtime\n");
+ 	pm_runtime_enable(dev);
+ 	ret = pm_runtime_resume_and_get(dev);
+ 	if (ret < 0) {
+ 		pm_runtime_disable(dev);
+ 		return dev_err_probe(dev, ret, "Failed to power on device\n");
+ 	}
+-	dev_info(dev, "DMA-350 probe: pm_runtime_resume_and_get returned %d\n", ret);
++	dev_dbg(dev, "DMA-350 probe: pm_runtime_resume_and_get returned %d\n", ret);
+ 
+ 	/* Manually enable clock for initial probe (runtime_resume skipped it) */
+-	dev_info(dev, "DMA-350 probe: enabling clock %pC\n", clk);
++	dev_dbg(dev, "DMA-350 probe: enabling clock %pC\n", clk);
+ 	ret = clk_prepare_enable(clk);
+ 	if (ret) {
+ 		pm_runtime_put(dev);
+@@ -1272,7 +1272,7 @@ static int d350_probe(struct platform_device *pdev)
+ 			goto err_pm_put;
+ 		}
+ 		if (rst) {
+-			dev_info(dev, "DMA-350 probe: deasserting reset\n");
++			dev_dbg(dev, "DMA-350 probe: deasserting reset\n");
+ 			ret = reset_control_deassert(rst);
+ 			if (ret) {
+ 				dev_err(dev, "Failed to deassert reset: %d\n", ret);
+@@ -1283,8 +1283,20 @@ static int d350_probe(struct platform_device *pdev)
+ 		}
+ 	}
+ 
+-	dev_info(dev, "DMA-350 probe: about to read IIDR at %p + 0x%x\n",
+-		 base, DMAINFO + IIDR);
++	dev_dbg(dev, "DMA-350 probe: about to read IIDR at %p + 0x%x\n",
++		base, DMAINFO + IIDR);
++
++	/*
++	 * Devices with "arm,remote-ctrl" (e.g. audio subsystem DMA) live in
++	 * a power domain managed by a remote processor.  Accessing registers
++	 * before that domain is powered causes an unrecoverable SError on
++	 * ARM64.  Skip these until their controller is available.
++	 */
++	if (device_property_present(dev, "arm,remote-ctrl")) {
++		dev_dbg(dev, "DMA-350: remote-controlled, skipping probe\n");
++		ret = -ENODEV;
++		goto err_pm_put;
++	}
+ 
+ 	reg = readl_relaxed(base + DMAINFO + IIDR);
+ 	r = FIELD_GET(IIDR_VARIANT, reg);
+@@ -1317,7 +1329,7 @@ static int d350_probe(struct platform_device *pdev)
+ 
+ 	/* Initialize reserved memory region if specified in DT */
+ 	ret = of_reserved_mem_device_init(dev);
+-	if (ret && ret != -ENODEV) {
++	if (ret && ret != -ENODEV && ret != -EINVAL) {
+ 		dev_err(dev, "Failed to initialize reserved memory: %d\n", ret);
+ 		goto err_pm_put;
+ 	}
+@@ -1460,10 +1472,12 @@ static int d350_probe(struct platform_device *pdev)
+ 	}
+ 
+ 	/* Register for device tree DMA channel requests */
+-	ret = of_dma_controller_register(dev->of_node, d350_of_xlate, dmac);
+-	if (ret) {
+-		dev_err(dev, "Failed to register OF DMA controller: %d\n", ret);
+-		goto err_dma_unregister;
++	if (dev->of_node) {
++		ret = of_dma_controller_register(dev->of_node, d350_of_xlate, dmac);
++		if (ret) {
++			dev_err(dev, "Failed to register OF DMA controller: %d\n", ret);
++			goto err_dma_unregister;
++		}
+ 	}
+ 
+ 	dev_info(dev, "DMA-350 r%dp%d initialized with %d channels\n",
+diff --git a/sound/soc/sof/cix/cix-common.c b/sound/soc/sof/cix/cix-common.c
+index 5a1706f264d20..31df10c63e471 100644
+--- a/sound/soc/sof/cix/cix-common.c
++++ b/sound/soc/sof/cix/cix-common.c
+@@ -105,4 +105,5 @@ void cix_disable_clocks(struct snd_sof_dev *sdev, struct cix_clocks *clks)
+ EXPORT_SYMBOL(cix_disable_clocks);
+ 
+ MODULE_AUTHOR("Joakim Zhang <joakim.zhang@cixtech.com>");
++MODULE_DESCRIPTION("SOF common support for CIX platforms");
+ MODULE_LICENSE("Dual BSD/GPL");
+diff --git a/sound/soc/sof/cix/cix-sky1.c b/sound/soc/sof/cix/cix-sky1.c
+index a2e226cccf749..fcd1ec131a6dd 100644
+--- a/sound/soc/sof/cix/cix-sky1.c
++++ b/sound/soc/sof/cix/cix-sky1.c
+@@ -575,4 +575,5 @@ module_platform_driver(snd_sof_of_sky1_driver);
+ 
+ MODULE_IMPORT_NS("SND_SOC_SOF_XTENSA");
+ MODULE_AUTHOR("Joakim Zhang <joakim.zhang@cixtech.com>");
++MODULE_DESCRIPTION("SOF support for CIX Sky1");
+ MODULE_LICENSE("Dual BSD/GPL");

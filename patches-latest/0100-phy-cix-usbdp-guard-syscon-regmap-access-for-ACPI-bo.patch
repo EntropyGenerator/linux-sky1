@@ -1,0 +1,50 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Entrpi <entrpi@proton.me>
+Date: Mon, 9 Feb 2026 16:02:20 +1100
+Subject: [PATCH] phy: cix: usbdp: guard syscon regmap access for ACPI boot
+
+Under ACPI boot, syscon_regmap_lookup_by_phandle() returns an error
+because the device has no of_node. The resulting NULL usbphy_syscon
+pointer causes a crash when sky1_udphy_init() unconditionally calls
+regmap_update_bits().
+
+Guard the syscon register access with a NULL check. Under ACPI, firmware
+manages the Type-C direction configuration, so skipping the syscon
+write is correct behavior.
+---
+ drivers/phy/cix/phy-cix-usbdp.c | 22 ++++++++++++++--------
+ 1 file changed, 14 insertions(+), 8 deletions(-)
+
+diff --git a/drivers/phy/cix/phy-cix-usbdp.c b/drivers/phy/cix/phy-cix-usbdp.c
+index 700696ed018a9..b9887d3e4e7f7 100644
+--- a/drivers/phy/cix/phy-cix-usbdp.c
++++ b/drivers/phy/cix/phy-cix-usbdp.c
+@@ -682,14 +682,20 @@ static int sky1_udphy_init(struct cix_udphy *udphy)
+ 	int ret;
+ 	u32 value;
+ 
+-	regmap_update_bits(udphy->usbphy_syscon, udphy->cfg->con_dir[udphy->id].offset,
+-		GENMASK(udphy->cfg->con_dir[udphy->id].bit,udphy->cfg->con_dir[udphy->id].bit),
+-		(udphy->flip << udphy->cfg->con_dir[udphy->id].bit));
+-
+-	udelay(10);
+-
+-	regmap_read(udphy->usbphy_syscon, udphy->cfg->con_dir[udphy->id].offset, &value);
+-	dev_info(udphy->dev, "sky1_udphy_init: typec dir= 0x%x\n", value);
++	if (udphy->usbphy_syscon) {
++		regmap_update_bits(udphy->usbphy_syscon,
++			udphy->cfg->con_dir[udphy->id].offset,
++			GENMASK(udphy->cfg->con_dir[udphy->id].bit,
++				udphy->cfg->con_dir[udphy->id].bit),
++			(udphy->flip << udphy->cfg->con_dir[udphy->id].bit));
++
++		udelay(10);
++
++		regmap_read(udphy->usbphy_syscon,
++			udphy->cfg->con_dir[udphy->id].offset, &value);
++		dev_info(udphy->dev, "sky1_udphy_init: typec dir= 0x%x\n",
++			 value);
++	}
+ 
+ 	//usb rcsu reset is default deassert
+ 	reset_control_assert(udphy->reset);

@@ -1,0 +1,85 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Entrpi <entrpi@proton.me>
+Date: Sat, 7 Feb 2026 22:55:52 +1100
+Subject: [PATCH] PCI: Silence I/O BAR assignment failures when no I/O windows
+ exist
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+On ARM64 and RISC-V platforms, PCI I/O port space is optional and
+many host bridges don't provide I/O windows at all (firmware only
+describes MMIO windows in _CRS / DT ranges).  When a PCIe device
+has an I/O BAR, pci_assign_resource logs two messages per assignment
+attempt at info level:
+
+  bridge window [??? ...]: can't assign; no space
+  BAR 0 [io size 0x0100]: failed to assign
+
+These messages are expected and harmless when the host bridge has no
+I/O windows — modern devices use MMIO BARs for actual operation.
+
+Downgrade I/O assignment failure messages to debug level when the
+host bridge has no I/O windows, keeping them at info level on
+platforms where I/O space is available and failures are unexpected.
+---
+ drivers/pci/setup-res.c | 35 +++++++++++++++++++++++++++++++++--
+ 1 file changed, 33 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/pci/setup-res.c b/drivers/pci/setup-res.c
+index e5fcadfc58b01..7d65d33de1dfe 100644
+--- a/drivers/pci/setup-res.c
++++ b/drivers/pci/setup-res.c
+@@ -321,6 +321,27 @@ static int _pci_assign_resource(struct pci_dev *dev, int resno,
+ 	return ret;
+ }
+ 
++/*
++ * Check whether I/O port assignment failures are expected because the
++ * host bridge has no I/O windows at all (common on ARM64/RISC-V where
++ * PCI I/O is optional and many bridges don't support I/O forwarding).
++ */
++static bool pci_io_failure_expected(struct pci_dev *dev, struct resource *res)
++{
++	struct pci_host_bridge *bridge;
++	struct resource_entry *entry;
++
++	if (!(res->flags & IORESOURCE_IO))
++		return false;
++
++	bridge = pci_find_host_bridge(dev->bus);
++	resource_list_for_each_entry(entry, &bridge->windows)
++		if (entry->res->flags & IORESOURCE_IO)
++			return false;
++
++	return true;
++}
++
+ int pci_assign_resource(struct pci_dev *dev, int resno)
+ {
+ 	struct resource *res = pci_resource_n(dev, resno);
+@@ -348,12 +369,22 @@ int pci_assign_resource(struct pci_dev *dev, int resno)
+ 	 * working, which is better than just leaving it disabled.
+ 	 */
+ 	if (ret < 0) {
+-		pci_info(dev, "%s %pR: can't assign; no space\n", res_name, res);
++		if (pci_io_failure_expected(dev, res))
++			pci_dbg(dev, "%s %pR: can't assign; no space\n",
++				res_name, res);
++		else
++			pci_info(dev, "%s %pR: can't assign; no space\n",
++				 res_name, res);
+ 		ret = pci_revert_fw_address(res, dev, resno, size);
+ 	}
+ 
+ 	if (ret < 0) {
+-		pci_info(dev, "%s %pR: failed to assign\n", res_name, res);
++		if (pci_io_failure_expected(dev, res))
++			pci_dbg(dev, "%s %pR: failed to assign\n",
++				res_name, res);
++		else
++			pci_info(dev, "%s %pR: failed to assign\n",
++				 res_name, res);
+ 		return ret;
+ 	}
+ 

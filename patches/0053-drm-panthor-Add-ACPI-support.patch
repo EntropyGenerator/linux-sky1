@@ -1,0 +1,143 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Entrpi <entrpi@proton.me>
+Date: Thu, 5 Feb 2026 23:12:39 +1100
+Subject: [PATCH] drm/panthor: Add ACPI support
+
+Add ACPI device table (CIXH5000) for Sky1 GPU and handle IRQ lookup
+differences between ACPI and DT modes:
+- DT: IRQs are named (JOB, MMU, GPU)
+- ACPI: IRQs are positional (0=JOB, 1=MMU, 2=GPU)
+
+The existing DT code paths remain unchanged to maintain compatibility
+with mainline device tree bindings.
+---
+ drivers/gpu/drm/panthor/panthor_device.h |  1 +
+ drivers/gpu/drm/panthor/panthor_drv.c    |  9 +++++++++
+ drivers/gpu/drm/panthor/panthor_fw.c     | 16 ++++++++++------
+ drivers/gpu/drm/panthor/panthor_gpu.c    | 16 ++++++++++------
+ drivers/gpu/drm/panthor/panthor_mmu.c    | 16 ++++++++++------
+ 5 files changed, 40 insertions(+), 18 deletions(-)
+
+diff --git a/drivers/gpu/drm/panthor/panthor_device.h b/drivers/gpu/drm/panthor/panthor_device.h
+index 4483998323c98..d415ed49c73f5 100644
+--- a/drivers/gpu/drm/panthor/panthor_device.h
++++ b/drivers/gpu/drm/panthor/panthor_device.h
+@@ -6,6 +6,7 @@
+ #ifndef __PANTHOR_DEVICE_H__
+ #define __PANTHOR_DEVICE_H__
+ 
++#include <linux/acpi.h>
+ #include <linux/atomic.h>
+ #include <linux/io-pgtable.h>
+ #include <linux/regulator/consumer.h>
+diff --git a/drivers/gpu/drm/panthor/panthor_drv.c b/drivers/gpu/drm/panthor/panthor_drv.c
+index ac62dc5285d32..6154df773d62d 100644
+--- a/drivers/gpu/drm/panthor/panthor_drv.c
++++ b/drivers/gpu/drm/panthor/panthor_drv.c
+@@ -1690,6 +1690,14 @@ static const struct of_device_id dt_match[] = {
+ };
+ MODULE_DEVICE_TABLE(of, dt_match);
+ 
++#ifdef CONFIG_ACPI
++static const struct acpi_device_id panthor_acpi_match[] = {
++	{ "CIXH5000", 0 },
++	{ }
++};
++MODULE_DEVICE_TABLE(acpi, panthor_acpi_match);
++#endif
++
+ static DEFINE_RUNTIME_DEV_PM_OPS(panthor_pm_ops,
+ 				 panthor_device_suspend,
+ 				 panthor_device_resume,
+@@ -1702,6 +1710,7 @@ static struct platform_driver panthor_driver = {
+ 		.name = "panthor",
+ 		.pm = pm_ptr(&panthor_pm_ops),
+ 		.of_match_table = dt_match,
++		.acpi_match_table = ACPI_PTR(panthor_acpi_match),
+ 		.dev_groups = panthor_groups,
+ 	},
+ };
+diff --git a/drivers/gpu/drm/panthor/panthor_fw.c b/drivers/gpu/drm/panthor/panthor_fw.c
+index 6b46e5b9f6c3a..603aa7722a447 100644
+--- a/drivers/gpu/drm/panthor/panthor_fw.c
++++ b/drivers/gpu/drm/panthor/panthor_fw.c
+@@ -1354,13 +1354,17 @@ int panthor_fw_init(struct panthor_device *ptdev)
+ 	INIT_LIST_HEAD(&fw->sections);
+ 	INIT_DELAYED_WORK(&fw->watchdog.ping_work, panthor_fw_ping_work);
+ 
+-	irq = platform_get_irq_byname(to_platform_device(ptdev->base.dev), "JOB");
+-	if (irq <= 0) {
+-		/* Try lowercase for non-Sky1 platforms */
+-		irq = platform_get_irq_byname(to_platform_device(ptdev->base.dev), "job");
+-		if (irq <= 0)
+-			return -ENODEV;
++	if (has_acpi_companion(ptdev->base.dev)) {
++		irq = platform_get_irq(to_platform_device(ptdev->base.dev), 0);
++	} else {
++		irq = platform_get_irq_byname(to_platform_device(ptdev->base.dev), "JOB");
++		if (irq <= 0) {
++			/* Try lowercase for non-Sky1 platforms */
++			irq = platform_get_irq_byname(to_platform_device(ptdev->base.dev), "job");
++		}
+ 	}
++	if (irq <= 0)
++		return -ENODEV;
+ 
+ 	ret = panthor_request_job_irq(ptdev, &fw->irq, irq, 0);
+ 	if (ret) {
+diff --git a/drivers/gpu/drm/panthor/panthor_gpu.c b/drivers/gpu/drm/panthor/panthor_gpu.c
+index fc9964a04981f..041088e296a1a 100644
+--- a/drivers/gpu/drm/panthor/panthor_gpu.c
++++ b/drivers/gpu/drm/panthor/panthor_gpu.c
+@@ -123,13 +123,17 @@ int panthor_gpu_init(struct panthor_device *ptdev)
+ 	if (ret)
+ 		return ret;
+ 
+-	irq = platform_get_irq_byname(to_platform_device(ptdev->base.dev), "GPU");
+-	if (irq < 0) {
+-		/* Try lowercase for non-Sky1 platforms */
+-		irq = platform_get_irq_byname(to_platform_device(ptdev->base.dev), "gpu");
+-		if (irq < 0)
+-			return irq;
++	if (has_acpi_companion(ptdev->base.dev)) {
++		irq = platform_get_irq(to_platform_device(ptdev->base.dev), 2);
++	} else {
++		irq = platform_get_irq_byname(to_platform_device(ptdev->base.dev), "GPU");
++		if (irq < 0) {
++			/* Try lowercase for non-Sky1 platforms */
++			irq = platform_get_irq_byname(to_platform_device(ptdev->base.dev), "gpu");
++		}
+ 	}
++	if (irq < 0)
++		return irq;
+ 
+ 	ret = panthor_request_gpu_irq(ptdev, &ptdev->gpu->irq, irq, GPU_INTERRUPTS_MASK);
+ 	if (ret)
+diff --git a/drivers/gpu/drm/panthor/panthor_mmu.c b/drivers/gpu/drm/panthor/panthor_mmu.c
+index 1dee700de8f25..8a89c8f05d25f 100644
+--- a/drivers/gpu/drm/panthor/panthor_mmu.c
++++ b/drivers/gpu/drm/panthor/panthor_mmu.c
+@@ -2797,13 +2797,17 @@ int panthor_mmu_init(struct panthor_device *ptdev)
+ 
+ 	ptdev->mmu = mmu;
+ 
+-	irq = platform_get_irq_byname(to_platform_device(ptdev->base.dev), "MMU");
+-	if (irq <= 0) {
+-		/* Try lowercase for non-Sky1 platforms */
+-		irq = platform_get_irq_byname(to_platform_device(ptdev->base.dev), "mmu");
+-		if (irq <= 0)
+-			return -ENODEV;
++	if (has_acpi_companion(ptdev->base.dev)) {
++		irq = platform_get_irq(to_platform_device(ptdev->base.dev), 1);
++	} else {
++		irq = platform_get_irq_byname(to_platform_device(ptdev->base.dev), "MMU");
++		if (irq <= 0) {
++			/* Try lowercase for non-Sky1 platforms */
++			irq = platform_get_irq_byname(to_platform_device(ptdev->base.dev), "mmu");
++		}
+ 	}
++	if (irq <= 0)
++		return -ENODEV;
+ 
+ 	ret = panthor_request_mmu_irq(ptdev, &mmu->irq, irq,
+ 				      panthor_mmu_fault_mask(ptdev, ~0));

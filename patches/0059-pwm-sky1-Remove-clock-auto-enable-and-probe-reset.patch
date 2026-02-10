@@ -1,0 +1,142 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Entrpi <entrpi@proton.me>
+Date: Fri, 6 Feb 2026 00:02:58 +1100
+Subject: [PATCH] pwm: sky1: Remove clock auto-enable and probe reset
+
+Remove clock enable/disable toggling during get_state() and apply()
+operations. Clocks are now kept enabled after probe, simplifying the
+driver and avoiding potential issues with UEFI-initialized PWM
+backlight.
+
+Also remove reset_control_reset() call in probe that could interfere
+with PWM already driving the backlight from UEFI.
+
+Clocks are still properly managed during suspend/resume for power
+savings.
+---
+ drivers/pwm/pwm-sky1.c | 58 ++++++------------------------------------
+ 1 file changed, 8 insertions(+), 50 deletions(-)
+
+diff --git a/drivers/pwm/pwm-sky1.c b/drivers/pwm/pwm-sky1.c
+index 3b55c4000359f..f6688b404952f 100644
+--- a/drivers/pwm/pwm-sky1.c
++++ b/drivers/pwm/pwm-sky1.c
+@@ -76,11 +76,6 @@ static int pwm_sky1_get_state(struct pwm_chip *chip, struct pwm_device *pwm,
+ 	struct pwm_sky1_chip *sky1 = to_pwm_sky1_chip(chip);
+ 	u64 clk_rate;
+ 	u32 cr, pwmh, pwmprd;
+-	int ret;
+-
+-	ret = pwm_sky1_clk_prepare_enable(sky1);
+-	if (ret)
+-		return ret;
+ 
+ 	cr = readl(sky1->mmio_base + TCTL);
+ 	pwmh = readl(sky1->mmio_base + PWMH_RW);
+@@ -98,15 +93,9 @@ static int pwm_sky1_get_state(struct pwm_chip *chip, struct pwm_device *pwm,
+ 	else
+ 		state->duty_cycle = 0;
+ 
+-	if ((cr & ENABLE) && (cr & ENPWM))
+-		state->enabled = true;
+-	else
+-		state->enabled = false;
+-
++	state->enabled = (cr & ENABLE) && (cr & ENPWM);
+ 	state->polarity = PWM_POLARITY_NORMAL;
+ 
+-	pwm_sky1_clk_disable_unprepare(sky1);
+-
+ 	return 0;
+ }
+ 
+@@ -117,17 +106,10 @@ static int pwm_sky1_apply(struct pwm_chip *chip, struct pwm_device *pwm,
+ 	u64 clk_rate;
+ 	unsigned long pwmh, pwmprd;
+ 	u32 cr;
+-	int ret;
+-
+-	ret = pwm_sky1_clk_prepare_enable(sky1);
+-	if (ret)
+-		return ret;
+ 
+ 	clk_rate = clk_get_rate(sky1->tclk);
+-	if (!clk_rate) {
+-		pwm_sky1_clk_disable_unprepare(sky1);
++	if (!clk_rate)
+ 		return -EINVAL;
+-	}
+ 
+ 	/* Disable PWM for configure */
+ 	cr = readl(sky1->mmio_base + TCTL);
+@@ -144,8 +126,6 @@ static int pwm_sky1_apply(struct pwm_chip *chip, struct pwm_device *pwm,
+ 		cr = readl(sky1->mmio_base + TCTL);
+ 		cr |= PWM_MODE | ENPWM | ENABLE;
+ 		writel(cr, sky1->mmio_base + TCTL);
+-	} else {
+-		pwm_sky1_clk_disable_unprepare(sky1);
+ 	}
+ 
+ 	return 0;
+@@ -160,13 +140,8 @@ static int __maybe_unused sky1_pwm_suspend(struct device *dev)
+ {
+ 	struct pwm_chip *chip = dev_get_drvdata(dev);
+ 	struct pwm_sky1_chip *sky1 = to_pwm_sky1_chip(chip);
+-	struct pwm_state cstate;
+-
+-	pwm_get_state(&chip->pwms[0], &cstate);
+-
+-	if (cstate.enabled)
+-		pwm_sky1_clk_disable_unprepare(sky1);
+ 
++	pwm_sky1_clk_disable_unprepare(sky1);
+ 	pinctrl_pm_select_sleep_state(dev);
+ 
+ 	return 0;
+@@ -176,16 +151,11 @@ static int __maybe_unused sky1_pwm_resume(struct device *dev)
+ {
+ 	struct pwm_chip *chip = dev_get_drvdata(dev);
+ 	struct pwm_sky1_chip *sky1 = to_pwm_sky1_chip(chip);
+-	struct pwm_state cstate;
+ 	int ret;
+ 
+-	pwm_get_state(&chip->pwms[0], &cstate);
+-
+-	if (cstate.enabled) {
+-		ret = pwm_sky1_clk_prepare_enable(sky1);
+-		if (ret)
+-			return ret;
+-	}
++	ret = pwm_sky1_clk_prepare_enable(sky1);
++	if (ret)
++		return ret;
+ 
+ 	pinctrl_pm_select_default_state(dev);
+ 
+@@ -248,24 +218,12 @@ static int pwm_sky1_probe(struct platform_device *pdev)
+ 	pwmcr = readl(sky1->mmio_base + TCTL);
+ 
+ 	/* Check if PWM was already initialized by UEFI */
+-	if (screen_info.lfb_linelength && (pwmcr & (PWM_MODE | ENABLE | ENPWM))) {
+-		ret = devm_pwmchip_add(dev, chip);
+-		if (ret)
+-			pwm_sky1_clk_disable_unprepare(sky1);
+-		return ret;
+-	}
+-
+-	/* Reset PWM if not using framebuffer */
+-	if (!screen_info.lfb_linelength)
+-		reset_control_reset(sky1->func_reset);
++	if (screen_info.lfb_linelength && (pwmcr & (PWM_MODE | ENABLE | ENPWM)))
++		return devm_pwmchip_add(dev, chip);
+ 
+ 	/* Configure timer to PWM mode */
+ 	writel(PWM_MODE, sky1->mmio_base + TCTL);
+ 
+-	/* Keep clocks on only if PWM is running */
+-	if (!(pwmcr & (ENABLE | ENPWM)))
+-		pwm_sky1_clk_disable_unprepare(sky1);
+-
+ 	return devm_pwmchip_add(dev, chip);
+ }
+ 

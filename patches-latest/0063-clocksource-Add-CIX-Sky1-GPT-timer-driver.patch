@@ -1,0 +1,357 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Entrpi <entrpi@proton.me>
+Date: Fri, 6 Feb 2026 02:06:31 +1100
+Subject: [PATCH] clocksource: Add CIX Sky1 GPT timer driver
+
+Add driver for the CIX Sky1 General Purpose Timer which provides both
+clocksource and clock event functionality.
+
+The timer uses a pair of 32-bit timers configured for 64-bit operation:
+- Even timer provides lower 32 bits
+- Odd timer provides upper 32 bits with TWID_64BIT mode
+
+Features:
+- 64-bit free-running clocksource registered with sched_clock
+- One-shot clock event device
+- Support for both device tree (cix,sky1-gpt) and ACPI (CIXH1007)
+
+The driver registers both a clocksource for timekeeping and a clock
+event device for scheduling timer interrupts.
+---
+ drivers/clocksource/Kconfig          |   9 +
+ drivers/clocksource/Makefile         |   1 +
+ drivers/clocksource/timer-sky1-gpt.c | 293 +++++++++++++++++++++++++++
+ 3 files changed, 303 insertions(+)
+ create mode 100644 drivers/clocksource/timer-sky1-gpt.c
+
+diff --git a/drivers/clocksource/Kconfig b/drivers/clocksource/Kconfig
+index aa59e5b133510..05e47821e97f1 100644
+--- a/drivers/clocksource/Kconfig
++++ b/drivers/clocksource/Kconfig
+@@ -512,6 +512,15 @@ config SPRD_TIMER
+ 	help
+ 	  Enables support for the Spreadtrum timer driver.
+ 
++config SKY1_GPT_TIMER
++	tristate "CIX Sky1 GPT timer driver"
++	depends on HAS_IOMEM
++	depends on (ARCH_CIX || COMPILE_TEST)
++	select CLKSRC_MMIO
++	help
++	  Enables support for the CIX Sky1 General Purpose Timer,
++	  providing clocksource and clock event functionality.
++
+ config SYS_SUPPORTS_SH_MTU2
+ 	bool
+ 
+diff --git a/drivers/clocksource/Makefile b/drivers/clocksource/Makefile
+index b46376af6b490..c1f541576e6b7 100644
+--- a/drivers/clocksource/Makefile
++++ b/drivers/clocksource/Makefile
+@@ -58,6 +58,7 @@ obj-$(CONFIG_CLKSRC_TI_32K)	+= timer-ti-32k.o
+ obj-$(CONFIG_OWL_TIMER)		+= timer-owl.o
+ obj-$(CONFIG_MILBEAUT_TIMER)	+= timer-milbeaut.o
+ obj-$(CONFIG_SPRD_TIMER)	+= timer-sprd.o
++obj-$(CONFIG_SKY1_GPT_TIMER)	+= timer-sky1-gpt.o
+ obj-$(CONFIG_NPCM7XX_TIMER)	+= timer-npcm7xx.o
+ obj-$(CONFIG_RDA_TIMER)		+= timer-rda.o
+ obj-$(CONFIG_REALTEK_OTTO_TIMER)	+= timer-rtl-otto.o
+diff --git a/drivers/clocksource/timer-sky1-gpt.c b/drivers/clocksource/timer-sky1-gpt.c
+new file mode 100644
+index 0000000000000..775a981ed8c77
+--- /dev/null
++++ b/drivers/clocksource/timer-sky1-gpt.c
+@@ -0,0 +1,293 @@
++// SPDX-License-Identifier: GPL-2.0-only
++/*
++ * CIX Sky1 General Purpose Timer
++ *
++ * Copyright 2024 Cix Technology Group Co., Ltd.
++ */
++
++#include <linux/acpi.h>
++#include <linux/clk.h>
++#include <linux/clockchips.h>
++#include <linux/interrupt.h>
++#include <linux/module.h>
++#include <linux/of.h>
++#include <linux/platform_device.h>
++#include <linux/reset.h>
++#include <linux/sched_clock.h>
++
++#define TIMER_NAME "sky1_timer"
++
++/* Timer registers */
++#define LDINIT_RW	0x0000	/* Initial value to load */
++#define FREE_CNT	0x001C	/* Free-running counter (low 32-bit) */
++#define COMP		0x0020	/* Compare value */
++#define TCTL		0x0024	/* Control register */
++#define INTSTAT		0x0030	/* Interrupt status */
++#define INTCLR		0x0034	/* Interrupt clear */
++
++/* Timer modes */
++#define FREERUN_MODE	0x2
++
++/* TCTL register bits */
++#define TCTL_ENABLE		BIT(17)
++#define TCTL_FREEENABLE		BIT(15)
++#define TCTL_TWID_64BIT		BIT(12)
++#define TCTL_INTENABLE		BIT(6)
++
++/* Interrupt bits */
++#define FREE_INTCLEAR		BIT(5)
++
++/* Offset between odd/even timer pair for 64-bit mode */
++#define TIMER_OFFSET		0x1000
++
++struct sky1_timer {
++	void __iomem *base;
++	int irq;
++	struct clock_event_device ced;
++	struct clk *pclk;
++	struct clk *tclk;
++};
++
++static void __iomem *sched_clock_reg;
++
++static inline struct sky1_timer *to_sky1_timer(struct clock_event_device *ced)
++{
++	return container_of(ced, struct sky1_timer, ced);
++}
++
++/*
++ * Read 64-bit counter using two 32-bit registers.
++ * Upper register may change during read, so re-read if necessary.
++ */
++static u64 notrace sky1_counter_read(void)
++{
++	u32 lower, upper, old_upper;
++	u64 counter;
++
++	upper = readl_relaxed(sched_clock_reg + TIMER_OFFSET);
++	do {
++		old_upper = upper;
++		lower = readl_relaxed(sched_clock_reg);
++		upper = readl_relaxed(sched_clock_reg + TIMER_OFFSET);
++	} while (upper != old_upper);
++
++	counter = (u64)upper << 32 | lower;
++	return counter;
++}
++
++static u64 notrace sky1_read_sched_clock(void)
++{
++	return sched_clock_reg ? sky1_counter_read() : 0;
++}
++
++static u64 sky1_clocksource_read(struct clocksource *cs)
++{
++	return sky1_counter_read();
++}
++
++static struct clocksource sky1_clocksource = {
++	.name	= "sky1_counter",
++	.rating	= 200,
++	.read	= sky1_clocksource_read,
++	.mask	= CLOCKSOURCE_MASK(64),
++	.flags	= CLOCK_SOURCE_IS_CONTINUOUS,
++};
++
++static void sky1_gpt_irq_enable(struct sky1_timer *sky1tm)
++{
++	u32 val = readl_relaxed(sky1tm->base + TIMER_OFFSET + TCTL);
++
++	writel_relaxed(val | TCTL_INTENABLE, sky1tm->base + TIMER_OFFSET + TCTL);
++}
++
++static void sky1_gpt_irq_disable(struct sky1_timer *sky1tm)
++{
++	u32 val = readl_relaxed(sky1tm->base + TIMER_OFFSET + TCTL);
++
++	writel_relaxed(val & ~TCTL_INTENABLE, sky1tm->base + TIMER_OFFSET + TCTL);
++}
++
++static void sky1_gpt_irq_ack(struct sky1_timer *sky1tm)
++{
++	writel_relaxed(FREE_INTCLEAR, sky1tm->base + TIMER_OFFSET + INTCLR);
++}
++
++static void sky1_gpt_setup(struct sky1_timer *sky1tm)
++{
++	u32 val;
++
++	/* Configure even timer (low 32-bit) */
++	val = TCTL_FREEENABLE | FREERUN_MODE | TCTL_INTENABLE;
++	writel_relaxed(val, sky1tm->base + TCTL);
++
++	/* Configure odd timer (high 32-bit) with 64-bit mode */
++	val = TCTL_FREEENABLE | TCTL_TWID_64BIT | FREERUN_MODE | TCTL_INTENABLE;
++	writel_relaxed(val, sky1tm->base + TIMER_OFFSET + TCTL);
++
++	/* Enable both timers (enable bit must be set last) */
++	val = TCTL_ENABLE | TCTL_FREEENABLE | FREERUN_MODE | TCTL_INTENABLE;
++	writel_relaxed(val, sky1tm->base + TCTL);
++
++	val = TCTL_ENABLE | TCTL_FREEENABLE | TCTL_TWID_64BIT | FREERUN_MODE | TCTL_INTENABLE;
++	writel_relaxed(val, sky1tm->base + TIMER_OFFSET + TCTL);
++}
++
++static int sky1_set_next_event(unsigned long evt, struct clock_event_device *ced)
++{
++	struct sky1_timer *sky1tm = to_sky1_timer(ced);
++	u64 tcn = sky1_counter_read() + evt;
++
++	/* Write compare value (high word first) */
++	writel_relaxed(tcn >> 32, sky1tm->base + COMP + TIMER_OFFSET);
++	writel_relaxed((u32)tcn, sky1tm->base + COMP);
++
++	return tcn < sky1_counter_read() ? -ETIME : 0;
++}
++
++static int sky1_shutdown(struct clock_event_device *ced)
++{
++	struct sky1_timer *sky1tm = to_sky1_timer(ced);
++	u64 tcn = sky1_counter_read();
++
++	sky1_gpt_irq_disable(sky1tm);
++
++	/* Set compare to past value to prevent spurious interrupts */
++	writel_relaxed((tcn - 3) >> 32, sky1tm->base + COMP + TIMER_OFFSET);
++	writel_relaxed((u32)(tcn - 3), sky1tm->base + COMP);
++
++	sky1_gpt_irq_ack(sky1tm);
++
++	return 0;
++}
++
++static int sky1_set_oneshot(struct clock_event_device *ced)
++{
++	struct sky1_timer *sky1tm = to_sky1_timer(ced);
++
++	sky1_gpt_irq_disable(sky1tm);
++
++	if (!clockevent_state_oneshot(ced)) {
++		u64 tcn = sky1_counter_read();
++
++		writel_relaxed((tcn - 3) >> 32, sky1tm->base + COMP + TIMER_OFFSET);
++		writel_relaxed((u32)(tcn - 3), sky1tm->base + COMP);
++		sky1_gpt_irq_ack(sky1tm);
++	}
++
++	sky1_gpt_irq_enable(sky1tm);
++	return 0;
++}
++
++static int sky1_tick_resume(struct clock_event_device *ced)
++{
++	struct sky1_timer *sky1tm = to_sky1_timer(ced);
++
++	sky1_gpt_setup(sky1tm);
++	return sky1_shutdown(ced);
++}
++
++static irqreturn_t sky1_timer_interrupt(int irq, void *dev_id)
++{
++	struct clock_event_device *ced = dev_id;
++	struct sky1_timer *sky1tm = to_sky1_timer(ced);
++
++	sky1_gpt_irq_ack(sky1tm);
++	ced->event_handler(ced);
++
++	return IRQ_HANDLED;
++}
++
++static int sky1_timer_probe(struct platform_device *pdev)
++{
++	struct device *dev = &pdev->dev;
++	struct sky1_timer *sky1tm;
++	unsigned long rate;
++	int ret;
++
++	sky1tm = devm_kzalloc(dev, sizeof(*sky1tm), GFP_KERNEL);
++	if (!sky1tm)
++		return -ENOMEM;
++
++	sky1tm->base = devm_platform_ioremap_resource(pdev, 0);
++	if (IS_ERR(sky1tm->base))
++		return PTR_ERR(sky1tm->base);
++
++	sky1tm->irq = platform_get_irq(pdev, 0);
++	if (sky1tm->irq < 0)
++		return sky1tm->irq;
++
++	sky1tm->pclk = devm_clk_get_optional_enabled(dev, "apb");
++	if (IS_ERR(sky1tm->pclk))
++		return dev_err_probe(dev, PTR_ERR(sky1tm->pclk),
++				     "failed to get apb clock\n");
++
++	sky1tm->tclk = devm_clk_get_enabled(dev, "func");
++	if (IS_ERR(sky1tm->tclk))
++		return dev_err_probe(dev, PTR_ERR(sky1tm->tclk),
++				     "failed to get func clock\n");
++
++	rate = clk_get_rate(sky1tm->tclk);
++	if (!rate)
++		return dev_err_probe(dev, -EINVAL, "invalid clock rate\n");
++
++	sky1_gpt_setup(sky1tm);
++	platform_set_drvdata(pdev, sky1tm);
++
++	/* Register clocksource */
++	sched_clock_reg = sky1tm->base + FREE_CNT;
++	sched_clock_register(sky1_read_sched_clock, 64, rate);
++	ret = clocksource_register_hz(&sky1_clocksource, rate);
++	if (ret)
++		return ret;
++
++	/* Register clock event device */
++	sky1tm->ced.name = TIMER_NAME;
++	sky1tm->ced.features = CLOCK_EVT_FEAT_ONESHOT | CLOCK_EVT_FEAT_DYNIRQ;
++	sky1tm->ced.set_next_event = sky1_set_next_event;
++	sky1tm->ced.set_state_shutdown = sky1_shutdown;
++	sky1tm->ced.set_state_oneshot = sky1_set_oneshot;
++	sky1tm->ced.set_state_oneshot_stopped = sky1_shutdown;
++	sky1tm->ced.tick_resume = sky1_tick_resume;
++	sky1tm->ced.rating = 200;
++	sky1tm->ced.cpumask = cpu_possible_mask;
++	sky1tm->ced.irq = sky1tm->irq;
++
++	clockevents_config_and_register(&sky1tm->ced, rate, 1, UINT_MAX);
++
++	ret = request_irq(sky1tm->irq, sky1_timer_interrupt,
++			  IRQF_TIMER, TIMER_NAME, &sky1tm->ced);
++	if (ret)
++		return ret;
++
++	dev_info(dev, "Sky1 GPT timer initialized at %lu Hz\n", rate);
++
++	return 0;
++}
++
++static const struct of_device_id sky1_timer_of_match[] = {
++	{ .compatible = "cix,sky1-gpt" },
++	{ }
++};
++MODULE_DEVICE_TABLE(of, sky1_timer_of_match);
++
++#ifdef CONFIG_ACPI
++static const struct acpi_device_id sky1_timer_acpi_match[] = {
++	{ "CIXH1007", 0 },
++	{ }
++};
++MODULE_DEVICE_TABLE(acpi, sky1_timer_acpi_match);
++#endif
++
++static struct platform_driver sky1_timer_driver = {
++	.probe = sky1_timer_probe,
++	.driver = {
++		.name = TIMER_NAME,
++		.of_match_table = sky1_timer_of_match,
++		.acpi_match_table = ACPI_PTR(sky1_timer_acpi_match),
++	},
++};
++module_platform_driver(sky1_timer_driver);
++
++MODULE_AUTHOR("Cix Technology Group Co., Ltd.");
++MODULE_DESCRIPTION("CIX Sky1 General Purpose Timer");
++MODULE_LICENSE("GPL");

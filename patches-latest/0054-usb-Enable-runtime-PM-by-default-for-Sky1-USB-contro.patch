@@ -1,0 +1,54 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Entrpi <entrpi@proton.me>
+Date: Thu, 5 Feb 2026 23:14:33 +1100
+Subject: [PATCH] usb: Enable runtime PM by default for Sky1 USB controllers
+
+Enable runtime power management by default for Sky1 USB controllers:
+- Set CDNS3_DEFAULT_PM_RUNTIME_ALLOW quirk for cdnsp-sky1
+- Add XHCI_DEFAULT_PM_RUNTIME_ALLOW support to xhci-plat.c
+- Change early probe log from error to debug level
+
+This allows the USB controllers to enter low power states automatically
+when no devices are connected, improving power efficiency.
+---
+ drivers/usb/cdns3/cdnsp-sky1.c | 3 ++-
+ drivers/usb/host/xhci-plat.c   | 5 ++++-
+ 2 files changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/usb/cdns3/cdnsp-sky1.c b/drivers/usb/cdns3/cdnsp-sky1.c
+index 01fa58510ff3e..33ace97ae8dd4 100644
+--- a/drivers/usb/cdns3/cdnsp-sky1.c
++++ b/drivers/usb/cdns3/cdnsp-sky1.c
+@@ -217,7 +217,7 @@ static int cdns_sky1_platform_suspend(struct device *dev,
+ 
+ 	hcd = dev_get_drvdata(&xhci_dev->dev);
+ 	if (!hcd) {
+-		dev_err(dev, "host controller have not registered\n");
++		dev_dbg(dev, "host controller have not registered\n");
+ 		return 0;
+ 	}
+ 	xhci = hcd_to_xhci(hcd);
+@@ -633,6 +633,7 @@ static int cdnsp_sky1_probe(struct platform_device *pdev)
+ 		return -ENOMEM;
+ 	/* Note: mainline only supports platform_suspend, not platform_reset/platform_u3_disable */
+ 	cdns_sky1_pdata->platform_suspend = cdns_sky1_platform_suspend;
++	cdns_sky1_pdata->quirks = CDNS3_DEFAULT_PM_RUNTIME_ALLOW;
+ 	if (!ACPI_COMPANION(dev)) {
+ 		cdns_sky1_auxdata->platform_data = cdns_sky1_pdata;
+ 		ret = of_platform_populate(node, NULL, cdns_sky1_auxdata, dev);
+diff --git a/drivers/usb/host/xhci-plat.c b/drivers/usb/host/xhci-plat.c
+index 074d9c731639f..6b3235d5a4849 100644
+--- a/drivers/usb/host/xhci-plat.c
++++ b/drivers/usb/host/xhci-plat.c
+@@ -359,7 +359,10 @@ int xhci_plat_probe(struct platform_device *pdev, struct device *sysdev, const s
+ 	 * Prevent runtime pm from being on as default, users should enable
+ 	 * runtime pm using power/control in sysfs.
+ 	 */
+-	pm_runtime_forbid(&pdev->dev);
++	if (xhci->quirks & XHCI_DEFAULT_PM_RUNTIME_ALLOW)
++		pm_runtime_allow(&pdev->dev);
++	else
++		pm_runtime_forbid(&pdev->dev);
+ 
+ 	return 0;
+ 

@@ -1,0 +1,97 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Entrpi <entrpi@proton.me>
+Date: Thu, 5 Feb 2026 22:51:33 +1100
+Subject: [PATCH] drm: cix: linlon-dp: Handle vblank event on flip timeout
+
+Port fix from CIX 6.6.89 to handle flip timeout more gracefully:
+
+- Reduce flip timeout from 60 frames to 3 frames for faster detection
+- Add dpu_sw_reset function to reset DPU on timeout
+- Manually send pending vblank event when input flip is done but
+  timeout occurred, preventing potential hangs
+
+This prevents userspace from hanging indefinitely when flip
+completion is not signaled properly.
+---
+ drivers/gpu/drm/cix/linlon-dp/hw/dp_dev.c     |  9 +++++++++
+ drivers/gpu/drm/cix/linlon-dp/linlondp_crtc.c | 17 +++++++++++++++--
+ drivers/gpu/drm/cix/linlon-dp/linlondp_dev.h  |  3 +++
+ 3 files changed, 27 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/gpu/drm/cix/linlon-dp/hw/dp_dev.c b/drivers/gpu/drm/cix/linlon-dp/hw/dp_dev.c
+index 8855898d4c84b..2de8eeea3e5cf 100644
+--- a/drivers/gpu/drm/cix/linlon-dp/hw/dp_dev.c
++++ b/drivers/gpu/drm/cix/linlon-dp/hw/dp_dev.c
+@@ -307,6 +307,14 @@ static void dp_flush(struct linlondp_dev *mdev, int master_pipe,
+ 	linlondp_write32(dp->gcu_addr, reg_offset, GCU_CONFIG_CVAL);
+ }
+ 
++static void dpu_sw_reset(struct linlondp_dev *mdev)
++{
++	struct dp_dev *dp = mdev->chip_data;
++	u32 __iomem *gcu = dp->gcu_addr;
++
++	linlondp_write32_mask(gcu, BLK_CONTROL, GCU_CONTROL_SRST, GCU_CONTROL_SRST);
++}
++
+ static int dp_reset(struct dp_dev *dp)
+ {
+ 	u32 __iomem *gcu = dp->gcu_addr;
+@@ -663,6 +671,7 @@ static const struct linlondp_dev_funcs dp_chip_funcs = {
+ 	.dump_register = dp_dump,
+ 	.close_gop = dp_close_gop,
+ 	.gop_mode_changed = dp_gop_mode_changed,
++	.dpu_reset = dpu_sw_reset,
+ };
+ 
+ const struct linlondp_dev_funcs *dp_identify(u32 __iomem *reg_base,
+diff --git a/drivers/gpu/drm/cix/linlon-dp/linlondp_crtc.c b/drivers/gpu/drm/cix/linlon-dp/linlondp_crtc.c
+index c4d69e0c1da88..0080c27049479 100644
+--- a/drivers/gpu/drm/cix/linlon-dp/linlondp_crtc.c
++++ b/drivers/gpu/drm/cix/linlon-dp/linlondp_crtc.c
+@@ -467,16 +467,29 @@ void linlondp_crtc_flush_and_wait_for_flip_done(
+ 	if (disable_crtc)
+ 		mdev->funcs->flush(mdev, kcrtc->master->id, 0);
+ 
+-	/* wait the flip take affect. wait for a maximum time of 60 frames*/
+-	timeout = 60 * vblank->framedur_ns / 1000000;
++	/* wait the flip take affect. wait for a maximum time of 3 frames */
++	timeout = 3 * vblank->framedur_ns / 1000000;
+ 	timeout = wait_for_completion_timeout(flip_done, msecs_to_jiffies(timeout));
+ 	if (timeout == 0) {
+ 		dev_err(mdev->dev, "wait pipe%d flip done timeout\n",
+ 			kcrtc->master->id);
++		mdev->funcs->dpu_reset(mdev);
+ 		if (!input_flip_done) {
+ 			spin_lock_irqsave(&drm->event_lock, flags);
+ 			kcrtc->disable_done = NULL;
+ 			spin_unlock_irqrestore(&drm->event_lock, flags);
++		} else {
++			struct drm_crtc *crtc = &kcrtc->base;
++			struct drm_pending_vblank_event *event;
++
++			event = crtc->state->event;
++			spin_lock_irqsave(&drm->event_lock, flags);
++			crtc->state->event = NULL;
++			if (event) {
++				drm_crtc_send_vblank_event(crtc, event);
++				dev_info(mdev->dev, "Send vblank event manually\n");
++			}
++			spin_unlock_irqrestore(&drm->event_lock, flags);
+ 		}
+ 	}
+ }
+diff --git a/drivers/gpu/drm/cix/linlon-dp/linlondp_dev.h b/drivers/gpu/drm/cix/linlon-dp/linlondp_dev.h
+index feb3f75634726..5cccc208f21b8 100644
+--- a/drivers/gpu/drm/cix/linlon-dp/linlondp_dev.h
++++ b/drivers/gpu/drm/cix/linlon-dp/linlondp_dev.h
+@@ -158,6 +158,9 @@ struct linlondp_dev_funcs {
+ 	/** @gop_mode_changed: test if gop mode changed */
+ 	bool (*gop_mode_changed)(struct linlondp_dev *mdev,
+ 				 struct drm_display_mode *mode);
++
++	/** @dpu_reset: SW reset for DPU on flip timeout */
++	void (*dpu_reset)(struct linlondp_dev *mdev);
+ };
+ 
+ /*

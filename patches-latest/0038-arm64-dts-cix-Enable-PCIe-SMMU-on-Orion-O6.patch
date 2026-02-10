@@ -1,0 +1,53 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Entrpi <entrpi@proton.me>
+Date: Thu, 5 Feb 2026 09:41:26 +1100
+Subject: [PATCH] arm64: dts: cix: Enable PCIe SMMU on Orion O6
+
+Enable smmu_pciehub to provide IOMMU translation for all PCIe devices.
+This enables DMA isolation, VFIO device passthrough support, and
+protection against stray DMA from buggy devices.
+
+The prerequisite patches are in place: dma-coherent for coherent page
+table walks, boot-active-sids for bypass during early boot, and
+iommu-map entries in each PCIe root complex node.
+---
+ arch/arm64/boot/dts/cix/sky1-orion-o6.dts |  2 +-
+ arch/arm64/boot/dts/cix/sky1.dtsi         | 12 ++++++------
+ 2 files changed, 7 insertions(+), 7 deletions(-)
+
+diff --git a/arch/arm64/boot/dts/cix/sky1-orion-o6.dts b/arch/arm64/boot/dts/cix/sky1-orion-o6.dts
+index 6f8976e5ef220..e8b88ad4577ae 100644
+--- a/arch/arm64/boot/dts/cix/sky1-orion-o6.dts
++++ b/arch/arm64/boot/dts/cix/sky1-orion-o6.dts
+@@ -2159,7 +2159,7 @@ &its_pcie {
+ };
+ 
+ &smmu_pciehub {
+-	status = "disabled";
++	status = "okay";
+ };
+ 
+ &smmu_mmhub {
+diff --git a/arch/arm64/boot/dts/cix/sky1.dtsi b/arch/arm64/boot/dts/cix/sky1.dtsi
+index e21458f9f4810..8f50e6053197f 100644
+--- a/arch/arm64/boot/dts/cix/sky1.dtsi
++++ b/arch/arm64/boot/dts/cix/sky1.dtsi
+@@ -496,12 +496,12 @@ linux,cma {
+ 		};
+ 
+ 		dpu_gop: dpu_gop@84800000 {
+-			reg = <0x0 0x84800000 0x0 0x800000>;
+-			iommu-addresses = <&dpu0 0x0 0x84800000 0x0 0x800000>,
+-				<&dpu1 0x0 0x84800000 0x0 0x800000>,
+-				<&dpu2 0x0 0x84800000 0x0 0x800000>,
+-				<&dpu3 0x0 0x84800000 0x0 0x800000>,
+-				<&dpu4 0x0 0x84800000 0x0 0x800000>;
++			reg = <0x0 0x84800000 0x0 0x2000000>;
++			iommu-addresses = <&dpu0 0x0 0x84800000 0x0 0x02000000>,
++				<&dpu1 0x0 0x84800000 0x0 0x02000000>,
++				<&dpu2 0x0 0x84800000 0x0 0x02000000>,
++				<&dpu3 0x0 0x84800000 0x0 0x02000000>,
++				<&dpu4 0x0 0x84800000 0x0 0x02000000>;
+ 			no-map;
+ 		};
+ 

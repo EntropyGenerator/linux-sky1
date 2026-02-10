@@ -1,0 +1,195 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Entrpi <entrpi@proton.me>
+Date: Thu, 5 Feb 2026 22:38:17 +1100
+Subject: [PATCH] thermal: cix: Add IPA power integration for cpufreq_cooling
+
+Export cix_get_static_power_cpus() and cix_get_dynamic_power_cpus()
+from the CIX IPA driver for use by cpufreq_cooling.
+
+When CONFIG_CIX_CPU_IPA is enabled, cpufreq_cooling uses real hardware
+power measurements instead of Energy Model estimates:
+
+- cpufreq_get_requested_power(): Returns actual measured power
+- cpufreq_state2power(): Adds static power to budget calculation
+- cpufreq_power2state(): Subtracts static power before frequency
+  conversion (only dynamic power can be controlled via scaling)
+
+This provides more accurate thermal throttling when ACPI thermal zones
+are enabled, using real-time power data from firmware-populated
+registers.
+
+The header provides inline stubs returning 0 when CONFIG_CIX_CPU_IPA
+is disabled, so there's no runtime overhead for other platforms.
+---
+ drivers/thermal/cix/cix_cpu_ipa.c | 40 +++++++++++++++++++++++++++++++
+ drivers/thermal/cpufreq_cooling.c | 29 +++++++++++++++++++---
+ include/linux/cix/cix_cpu_ipa.h   | 32 +++++++++++++++++++++++++
+ 3 files changed, 98 insertions(+), 3 deletions(-)
+ create mode 100644 include/linux/cix/cix_cpu_ipa.h
+
+diff --git a/drivers/thermal/cix/cix_cpu_ipa.c b/drivers/thermal/cix/cix_cpu_ipa.c
+index 77d656826e071..10979593d97c6 100644
+--- a/drivers/thermal/cix/cix_cpu_ipa.c
++++ b/drivers/thermal/cix/cix_cpu_ipa.c
+@@ -8,11 +8,13 @@
+  * Copyright 2024 Cix Technology Group Co., Ltd.
+  */
+ 
++#include <linux/cpumask.h>
+ #include <linux/device.h>
+ #include <linux/io.h>
+ #include <linux/module.h>
+ #include <linux/of.h>
+ #include <linux/platform_device.h>
++#include <linux/cix/cix_cpu_ipa.h>
+ #include <asm/cpu.h>
+ 
+ #define REG_OFFSET 0x40
+@@ -59,6 +61,44 @@ static int cix_get_dynamic_power(int cpu)
+ 	return readl(&info->dynamic_power);
+ }
+ 
++/**
++ * cix_get_static_power_cpus - Get total static power for a set of CPUs
++ * @cpus: CPU mask
++ *
++ * Returns total static (leakage) power in milliwatts for the specified CPUs.
++ * Used by cpufreq_cooling for accurate power accounting.
++ */
++int cix_get_static_power_cpus(const struct cpumask *cpus)
++{
++	int cpu;
++	int total_power = 0;
++
++	for_each_cpu(cpu, cpus)
++		total_power += cix_get_static_power(cpu);
++
++	return total_power;
++}
++EXPORT_SYMBOL_GPL(cix_get_static_power_cpus);
++
++/**
++ * cix_get_dynamic_power_cpus - Get total dynamic power for a set of CPUs
++ * @cpus: CPU mask
++ *
++ * Returns total dynamic power in milliwatts for the specified CPUs.
++ * Used by cpufreq_cooling for accurate power accounting.
++ */
++int cix_get_dynamic_power_cpus(const struct cpumask *cpus)
++{
++	int cpu;
++	int total_power = 0;
++
++	for_each_cpu(cpu, cpus)
++		total_power += cix_get_dynamic_power(cpu);
++
++	return total_power;
++}
++EXPORT_SYMBOL_GPL(cix_get_dynamic_power_cpus);
++
+ /* Sysfs interface for power monitoring */
+ static ssize_t cpu_power_show(struct device *dev,
+ 			      struct device_attribute *attr, char *buf)
+diff --git a/drivers/thermal/cpufreq_cooling.c b/drivers/thermal/cpufreq_cooling.c
+index 6b7ab1814c12d..5b472da0b090c 100644
+--- a/drivers/thermal/cpufreq_cooling.c
++++ b/drivers/thermal/cpufreq_cooling.c
+@@ -23,6 +23,8 @@
+ #include <linux/thermal.h>
+ #include <linux/units.h>
+ 
++#include <linux/cix/cix_cpu_ipa.h>
++
+ #include "thermal_trace.h"
+ 
+ /*
+@@ -251,7 +253,13 @@ static int cpufreq_get_requested_power(struct thermal_cooling_device *cdev,
+ 
+ 	cpufreq_cdev->last_load = total_load;
+ 
+-	*power = get_dynamic_power(cpufreq_cdev, freq);
++	if (IS_ENABLED(CONFIG_CIX_CPU_IPA)) {
++		/* Use real measured power from CIX IPA hardware */
++		*power = cix_get_static_power_cpus(policy->cpus) +
++			 cix_get_dynamic_power_cpus(policy->cpus);
++	} else {
++		*power = get_dynamic_power(cpufreq_cdev, freq);
++	}
+ 
+ 	trace_thermal_power_cpu_get_power_simple(policy->cpu, *power);
+ 
+@@ -293,6 +301,9 @@ static int cpufreq_state2power(struct thermal_cooling_device *cdev,
+ 
+ 	*power = cpu_freq_to_power(cpufreq_cdev, freq) * num_cpus;
+ 
++	if (IS_ENABLED(CONFIG_CIX_CPU_IPA))
++		*power += cix_get_static_power_cpus(cpufreq_cdev->policy->cpus);
++
+ 	return 0;
+ }
+ 
+@@ -315,12 +326,24 @@ static int cpufreq_power2state(struct thermal_cooling_device *cdev,
+ 			       u32 power, unsigned long *state)
+ {
+ 	unsigned int target_freq;
+-	u32 last_load, normalised_power;
++	u32 last_load, normalised_power, dynamic_power;
+ 	struct cpufreq_cooling_device *cpufreq_cdev = cdev->devdata;
+ 	struct cpufreq_policy *policy = cpufreq_cdev->policy;
+ 
++	/*
++	 * When using real IPA power, subtract static power from the budget
++	 * since only dynamic power can be controlled via frequency scaling.
++	 */
++	if (IS_ENABLED(CONFIG_CIX_CPU_IPA)) {
++		u32 static_power = cix_get_static_power_cpus(policy->cpus);
++
++		dynamic_power = (power > static_power) ? power - static_power : 0;
++	} else {
++		dynamic_power = power;
++	}
++
+ 	last_load = cpufreq_cdev->last_load ?: 1;
+-	normalised_power = (power * 100) / last_load;
++	normalised_power = (dynamic_power * 100) / last_load;
+ 	target_freq = cpu_power_to_freq(cpufreq_cdev, normalised_power);
+ 
+ 	*state = get_level(cpufreq_cdev, target_freq);
+diff --git a/include/linux/cix/cix_cpu_ipa.h b/include/linux/cix/cix_cpu_ipa.h
+new file mode 100644
+index 0000000000000..7b7850ba0e953
+--- /dev/null
++++ b/include/linux/cix/cix_cpu_ipa.h
+@@ -0,0 +1,32 @@
++/* SPDX-License-Identifier: GPL-2.0-only */
++/*
++ * CIX CPU IPA power monitoring interface
++ *
++ * Copyright 2024 Cix Technology Group Co., Ltd.
++ */
++
++#ifndef __LINUX_CIX_CPU_IPA_H
++#define __LINUX_CIX_CPU_IPA_H
++
++#include <linux/cpumask.h>
++
++#if IS_ENABLED(CONFIG_CIX_CPU_IPA)
++
++int cix_get_static_power_cpus(const struct cpumask *cpus);
++int cix_get_dynamic_power_cpus(const struct cpumask *cpus);
++
++#else
++
++static inline int cix_get_static_power_cpus(const struct cpumask *cpus)
++{
++	return 0;
++}
++
++static inline int cix_get_dynamic_power_cpus(const struct cpumask *cpus)
++{
++	return 0;
++}
++
++#endif /* CONFIG_CIX_CPU_IPA */
++
++#endif /* __LINUX_CIX_CPU_IPA_H */

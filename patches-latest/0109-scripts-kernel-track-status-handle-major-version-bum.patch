@@ -1,0 +1,46 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Entrpi <entrpi@proton.me>
+Date: Wed, 11 Feb 2026 01:58:34 +1100
+Subject: [PATCH] scripts: kernel-track-status: handle major version bumps in
+ RC detection
+
+When checking for the next RC cycle, also look for a major version
+bump (e.g. 7.0-rc1) in addition to a minor version bump (e.g. 6.20-rc1).
+Linux 7.0 follows 6.19, so the simple minor+1 logic would miss it.
+---
+ scripts/kernel-track-status.py | 22 +++++++++++++---------
+ 1 file changed, 13 insertions(+), 9 deletions(-)
+
+diff --git a/scripts/kernel-track-status.py b/scripts/kernel-track-status.py
+index 73528e5786bf5..979d0146cfe35 100755
+--- a/scripts/kernel-track-status.py
++++ b/scripts/kernel-track-status.py
+@@ -183,15 +183,19 @@ def main() -> None:
+             else:
+                 print("upstream=unknown")
+ 
+-        # Check for next RC cycle
+-        next_minor = ver.minor + 1
+-        next_mm = f"{ver.major}.{next_minor}"
+-        next_rc1 = latest_remote_tag("origin", f"refs/tags/v{next_mm}-rc1")
+-        if next_rc1:
+-            actions.append((
+-                f"New RC cycle available ({next_rc1})",
+-                f"git checkout rc && git rebase --onto {next_rc1} v{local_rc}",
+-            ))
++        # Check for next RC cycle (could be minor bump or major bump, e.g. 6.19 -> 7.0)
++        candidates = [
++            f"{ver.major}.{ver.minor + 1}",  # e.g. 6.20
++            f"{ver.major + 1}.0",             # e.g. 7.0
++        ]
++        for next_mm in candidates:
++            next_rc1 = latest_remote_tag("origin", f"refs/tags/v{next_mm}-rc1")
++            if next_rc1:
++                actions.append((
++                    f"New RC cycle available ({next_rc1})",
++                    f"git checkout rc && git rebase --onto {next_rc1} v{local_rc}",
++                ))
++                break
+     else:
+         print(f"{RED}branch missing{NC}")
+ 

@@ -1,0 +1,40 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Entrpi <entrpi@proton.me>
+Date: Thu, 5 Feb 2026 21:49:45 +1100
+Subject: [PATCH] cpufreq: cppc: Skip redundant frequency updates
+
+Add an early return in cppc_cpufreq_set_target() when the requested
+performance level is already set. This avoids unnecessary CPPC mailbox
+transactions when the cpufreq governor requests the same frequency
+multiple times in succession.
+
+On systems with slow PCC (Platform Communication Channel) mailbox
+responses, this optimization reduces CPU overhead and improves
+responsiveness by eliminating redundant firmware calls.
+---
+ drivers/cpufreq/cppc_cpufreq.c | 10 ++++++++--
+ 1 file changed, 8 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/cpufreq/cppc_cpufreq.c b/drivers/cpufreq/cppc_cpufreq.c
+index 9eac77c4f2944..156a0448066b9 100644
+--- a/drivers/cpufreq/cppc_cpufreq.c
++++ b/drivers/cpufreq/cppc_cpufreq.c
+@@ -262,10 +262,16 @@ static int cppc_cpufreq_set_target(struct cpufreq_policy *policy,
+ 	struct cppc_cpudata *cpu_data = policy->driver_data;
+ 	unsigned int cpu = policy->cpu;
+ 	struct cpufreq_freqs freqs;
++	u32 desired_perf;
+ 	int ret = 0;
+ 
+-	cpu_data->perf_ctrls.desired_perf =
+-			cppc_khz_to_perf(&cpu_data->perf_caps, target_freq);
++	desired_perf = cppc_khz_to_perf(&cpu_data->perf_caps, target_freq);
++
++	/* Return early if already at the requested performance level */
++	if (desired_perf == cpu_data->perf_ctrls.desired_perf)
++		return 0;
++
++	cpu_data->perf_ctrls.desired_perf = desired_perf;
+ 	freqs.old = policy->cur;
+ 	freqs.new = target_freq;
+ 

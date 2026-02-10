@@ -1,0 +1,253 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Entrpi <entrpi@proton.me>
+Date: Sat, 7 Feb 2026 21:21:29 +1100
+Subject: [PATCH] sound: hda: cix-ipbloq: Add ACPI DMA range map and reserved
+ memory support
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Under ACPI boot, configure DMA address translation for the HDA
+controller (CPU 0x90000000 → bus 0x0) and parse the RSVL table from
+the CIX audio resource device (CIXA1019) to set up reserved DMA
+memory. This fixes dma_alloc_coherent failures (-ENOMEM) caused by
+the buddy allocator returning pages outside the controller's DMA
+window.
+
+Use plain kcalloc for dma_range_map since device_unbind_cleanup()
+frees it with kfree(), not devm-managed free.
+
+Export dma_declare_coherent_memory for module use, and allow memremap
+to fall back from WC to WB for RAM regions not removed from the
+linear map by firmware.
+---
+ kernel/dma/coherent.c              |  10 +-
+ sound/hda/controllers/cix-ipbloq.c | 148 +++++++++++++++++++++++++++--
+ 2 files changed, 151 insertions(+), 7 deletions(-)
+
+diff --git a/kernel/dma/coherent.c b/kernel/dma/coherent.c
+index 77c8d9487a9ab..308a43111d440 100644
+--- a/kernel/dma/coherent.c
++++ b/kernel/dma/coherent.c
+@@ -45,7 +45,14 @@ static struct dma_coherent_mem *dma_init_coherent_memory(phys_addr_t phys_addr,
+ 	if (!size)
+ 		return ERR_PTR(-EINVAL);
+ 
+-	mem_base = memremap(phys_addr, size, MEMREMAP_WC);
++	/*
++	 * Try write-combining first for non-cacheable DMA access.
++	 * Fall back to write-back if the region is System RAM (e.g.
++	 * firmware-reserved memory not removed from the linear map).
++	 * On architectures with hardware cache coherency (e.g. ARM64),
++	 * write-back is safe for DMA-coherent allocations.
++	 */
++	mem_base = memremap(phys_addr, size, MEMREMAP_WC | MEMREMAP_WB);
+ 	if (!mem_base)
+ 		return ERR_PTR(-EINVAL);
+ 
+@@ -129,6 +136,7 @@ int dma_declare_coherent_memory(struct device *dev, phys_addr_t phys_addr,
+ 		_dma_release_coherent_memory(mem);
+ 	return ret;
+ }
++EXPORT_SYMBOL_GPL(dma_declare_coherent_memory);
+ 
+ void dma_release_coherent_memory(struct device *dev)
+ {
+diff --git a/sound/hda/controllers/cix-ipbloq.c b/sound/hda/controllers/cix-ipbloq.c
+index 4133556c2c732..b453ab4102727 100644
+--- a/sound/hda/controllers/cix-ipbloq.c
++++ b/sound/hda/controllers/cix-ipbloq.c
+@@ -2,8 +2,11 @@
+ // Copyright 2024 Cix Technology Group Co., Ltd.
+ // Ported to mainline 6.18 for Radxa Orion O6
+ 
++#include <linux/acpi.h>
+ #include <linux/clk.h>
+ #include <linux/delay.h>
++#include <linux/dma-direct.h>
++#include <linux/dma-map-ops.h>
+ #include <linux/gpio/consumer.h>
+ #include <linux/interrupt.h>
+ #include <linux/io.h>
+@@ -24,6 +27,17 @@
+ #define CIX_IPBLOQ_JACKPOLL_DEFAULT_TIME_MS	1000
+ #define CIX_IPBLOQ_POWER_SAVE_DEFAULT_TIME_MS	100
+ 
++/*
++ * CIX Sky1 HDA DMA address translation.
++ * The HDA controller sits behind the audio subsystem bus which has a
++ * fixed offset: CPU phys 0x90000000 maps to DMA addr 0x0 on the controller.
++ * Under DT this is handled via dma-ranges on the hda_bus simple-bus node.
++ * Under ACPI we must configure the offset explicitly.
++ */
++#define CIX_HDA_DMA_CPU_START	0x90000000ULL
++#define CIX_HDA_DMA_DEV_START	0x0ULL
++#define CIX_HDA_DMA_SIZE	0x80000000ULL
++
+ struct cix_ipbloq_hda {
+ 	struct azx chip;
+ 	struct device *dev;
+@@ -634,9 +648,8 @@ static int cix_ipbloq_hda_create(struct snd_card *card,
+ 	chip->bus.jackpoll_in_suspend = 1;
+ 
+ 	/*
+-	 * Note: DMA address translation is handled via dma-ranges in device tree.
+-	 * The HDA controller sees memory at a 0x90000000 offset from CPU addresses.
+-	 * This is configured in sky1.dtsi via the hda_bus sub-bus dma-ranges property.
++	 * DMA address translation (CPU phys → HDA bus addr) is handled by
++	 * dma-ranges under DT, or configured in probe under ACPI.
+ 	 */
+ 
+ 	err = snd_device_new(card, SNDRV_DEV_LOWLEVEL, chip, &ops);
+@@ -648,6 +661,95 @@ static int cix_ipbloq_hda_create(struct snd_card *card,
+ 	return 0;
+ }
+ 
++/*
++ * Parse the RSVL table from the CIX audio subsystem resource device
++ * (CIXA1019) to find reserved DMA memory for the HDA controller.
++ * The RSVL table format is:
++ *   Package { Package { base_addr, size, flags_str, consumer_ref }, ... }
++ */
++#ifdef CONFIG_ACPI
++static int cix_ipbloq_hda_setup_acpi_rsvmem(struct device *dev)
++{
++	struct acpi_device *rest_adev;
++	struct acpi_buffer output = {ACPI_ALLOCATE_BUFFER, NULL};
++	union acpi_object *out_obj, *entry, *el;
++	acpi_status status;
++	phys_addr_t base;
++	resource_size_t size;
++	dma_addr_t bus_addr;
++	int i, ret = -ENODEV;
++
++	/* Find the audio subsystem resource device CIXA1019 */
++	rest_adev = acpi_dev_get_first_match_dev("CIXA1019", NULL, -1);
++	if (!rest_adev)
++		return -ENODEV;
++
++	status = acpi_evaluate_object_typed(
++		acpi_device_handle(rest_adev), "RSVL", NULL, &output,
++		ACPI_TYPE_PACKAGE);
++	acpi_dev_put(rest_adev);
++	if (ACPI_FAILURE(status))
++		return -ENODEV;
++
++	out_obj = output.pointer;
++
++	for (i = 0; i < out_obj->package.count; i++) {
++		struct acpi_device *consumer;
++
++		entry = &out_obj->package.elements[i];
++		if (entry->type != ACPI_TYPE_PACKAGE || entry->package.count < 4)
++			continue;
++
++		/* Element 3 is the consumer device reference */
++		el = &entry->package.elements[3];
++		if (el->type != ACPI_TYPE_LOCAL_REFERENCE)
++			continue;
++
++		consumer = acpi_fetch_acpi_dev(el->reference.handle);
++		if (!consumer || consumer != ACPI_COMPANION(dev))
++			continue;
++
++		/* Found our entry — extract base and size */
++		el = &entry->package.elements[0];
++		if (el->type != ACPI_TYPE_INTEGER)
++			break;
++		base = el->integer.value;
++
++		el = &entry->package.elements[1];
++		if (el->type != ACPI_TYPE_INTEGER)
++			break;
++		size = el->integer.value;
++
++		/* Translate CPU physical to bus address */
++		if (base < CIX_HDA_DMA_CPU_START ||
++		    base + size > CIX_HDA_DMA_CPU_START + CIX_HDA_DMA_SIZE) {
++			dev_warn(dev, "RSVL: region 0x%llx+0x%llx outside DMA window\n",
++				 (u64)base, (u64)size);
++			break;
++		}
++		bus_addr = base - CIX_HDA_DMA_CPU_START + CIX_HDA_DMA_DEV_START;
++
++		ret = dma_declare_coherent_memory(dev, base, bus_addr, size);
++		if (ret) {
++			dev_warn(dev, "RSVL: failed to declare coherent mem: %d\n", ret);
++			break;
++		}
++		dev_info(dev, "RSVL: reserved %lluMB DMA at 0x%llx (bus 0x%llx)\n",
++			 (u64)size >> 20, (u64)base, (u64)bus_addr);
++		ret = 0;
++		break;
++	}
++
++	kfree(output.pointer);
++	return ret;
++}
++#else
++static inline int cix_ipbloq_hda_setup_acpi_rsvmem(struct device *dev)
++{
++	return -ENODEV;
++}
++#endif
++
+ static int cix_ipbloq_hda_probe(struct platform_device *pdev)
+ {
+ 	const unsigned int driver_flags = AZX_DCAPS_PM_RUNTIME;
+@@ -672,11 +774,35 @@ static int cix_ipbloq_hda_probe(struct platform_device *pdev)
+ 	}
+ 
+ 	dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(32));
+-	if (!pdev->dev.dma_mem && pdev->dev.of_node) {
++
++	/*
++	 * Under ACPI, configure DMA address translation for the HDA
++	 * controller. The audio subsystem bus applies a fixed offset
++	 * between CPU physical addresses and the controller's bus
++	 * addresses. Under DT this is handled by dma-ranges.
++	 */
++	if (has_acpi_companion(&pdev->dev) && !pdev->dev.dma_range_map) {
++		struct bus_dma_region *map;
++
+ 		/*
+-		 * if dev.dma_mem not allocated
+-		 * we should try to get it from dts
++		 * Use kcalloc, not devm_kcalloc: the core driver model
++		 * frees dma_range_map with plain kfree() in
++		 * device_unbind_cleanup(), so this must be a standalone
++		 * allocation.
+ 		 */
++		map = kcalloc(2, sizeof(*map), GFP_KERNEL);
++		if (!map) {
++			err = -ENOMEM;
++			goto out_free;
++		}
++		map[0].cpu_start = CIX_HDA_DMA_CPU_START;
++		map[0].dma_start = CIX_HDA_DMA_DEV_START;
++		map[0].size = CIX_HDA_DMA_SIZE;
++		/* map[1] is zero-initialized sentinel */
++		pdev->dev.dma_range_map = map;
++	}
++
++	if (!pdev->dev.dma_mem && pdev->dev.of_node) {
+ 		err = of_reserved_mem_device_init(&pdev->dev);
+ 		if (err && err != -ENODEV) {
+ 			dev_err(&pdev->dev,
+@@ -685,6 +811,16 @@ static int cix_ipbloq_hda_probe(struct platform_device *pdev)
+ 		}
+ 	}
+ 
++	if (IS_ENABLED(CONFIG_ACPI) &&
++	    !pdev->dev.dma_mem && has_acpi_companion(&pdev->dev)) {
++		err = cix_ipbloq_hda_setup_acpi_rsvmem(&pdev->dev);
++		if (err && err != -ENODEV) {
++			dev_err(&pdev->dev,
++				"failed to init ACPI reserved mem for DMA, err = %d\n", err);
++			goto out_free;
++		}
++	}
++
+ 	hda->resets[hda->nresets++].id = "hda";
+ 	err = devm_reset_control_bulk_get_exclusive(&pdev->dev, hda->nresets,
+ 						    hda->resets);

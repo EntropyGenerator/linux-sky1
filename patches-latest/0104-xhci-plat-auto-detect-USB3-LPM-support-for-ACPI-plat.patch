@@ -1,0 +1,42 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Entrpi <entrpi@proton.me>
+Date: Tue, 10 Feb 2026 21:18:47 +1100
+Subject: [PATCH] xhci: plat: auto-detect USB3 LPM support for ACPI platform
+ controllers
+
+Under DT, USB3 LPM (Link Power Management) is enabled by the
+usb3-lpm-capable property.  ACPI platform controllers lack this
+property, but the hardware capability is reported in HCSPARAMS3.
+
+Auto-enable XHCI_LPM_SUPPORT when running on an ACPI platform
+controller that reports non-zero U1/U2 exit latencies, so USB3
+devices can enter low-power link states without needing DT
+properties.
+---
+ drivers/usb/host/xhci-plat.c | 13 +++++++++++++
+ 1 file changed, 13 insertions(+)
+
+diff --git a/drivers/usb/host/xhci-plat.c b/drivers/usb/host/xhci-plat.c
+index 0baa3be7618c8..c6be3321cac75 100644
+--- a/drivers/usb/host/xhci-plat.c
++++ b/drivers/usb/host/xhci-plat.c
+@@ -90,6 +90,19 @@ static void xhci_plat_quirks(struct device *dev, struct xhci_hcd *xhci)
+ 	struct xhci_plat_priv *priv = xhci_to_priv(xhci);
+ 
+ 	xhci->quirks |= priv->quirks;
++
++	/*
++	 * For ACPI platform controllers, auto-detect LPM support from
++	 * hardware capability registers.  Under DT, the usb3-lpm-capable
++	 * property is used instead (set from device properties in probe).
++	 * If HCS_PARAMS3 reports non-zero U1/U2 exit latencies, the
++	 * controller supports USB3 LPM.
++	 */
++	if (!(xhci->quirks & XHCI_LPM_SUPPORT) &&
++	    is_acpi_device_node(dev_fwnode(dev)) &&
++	    (HCS_U1_LATENCY(xhci->hcs_params3) |
++	     HCS_U2_LATENCY(xhci->hcs_params3)))
++		xhci->quirks |= XHCI_LPM_SUPPORT;
+ }
+ 
+ /* called during probe() after chip reset completes */

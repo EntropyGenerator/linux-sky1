@@ -1,0 +1,190 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Entrpi <entrpi@proton.me>
+Date: Mon, 9 Feb 2026 17:09:53 +1100
+Subject: [PATCH] remoteproc: cix_dsp_rproc: add ACPI boot support
+
+The CIX DSP remoteproc driver fails to probe under ACPI because it
+relies on OF-only APIs for syscon lookup, clock/reset acquisition,
+and assumes all memory regions can be ioremap'd.
+
+Add ACPI support:
+- Resolve the "cix,dsp-ctrl" syscon via fwnode_find_reference() and
+  dev_get_regmap() instead of syscon_regmap_lookup_by_phandle()
+- Use devm_clk_get_optional() and devm_reset_control_get_optional_exclusive()
+  under ACPI where clocks and resets are provided through the CIX
+  ACPI resource bridge rather than DT
+- Use memremap(MEMREMAP_WB) for memory regions in system RAM (e.g.
+  DSP firmware load area at 0xcde00000) since ioremap_wc() rejects
+  linear-map addresses on arm64; detect via pfn_is_map_memory()
+---
+ drivers/remoteproc/cix_dsp_rproc.c | 98 ++++++++++++++++++++++++------
+ 1 file changed, 79 insertions(+), 19 deletions(-)
+
+diff --git a/drivers/remoteproc/cix_dsp_rproc.c b/drivers/remoteproc/cix_dsp_rproc.c
+index 5c96a65c6c5da..62337c39045a9 100644
+--- a/drivers/remoteproc/cix_dsp_rproc.c
++++ b/drivers/remoteproc/cix_dsp_rproc.c
+@@ -6,6 +6,7 @@
+ #include <linux/err.h>
+ #include <linux/firmware.h>
+ #include <linux/interrupt.h>
++#include <linux/io.h>
+ #include <linux/kernel.h>
+ #include <linux/mailbox_client.h>
+ #include <linux/mfd/syscon.h>
+@@ -127,6 +128,11 @@ enum cix_dsp_mbox_messages {
+ 	MBOX_MSG_REPROC_STOP_ACK= 0xFFF7,
+ };
+ 
++/*
++ * Map a DSP memory region.  Regions in system RAM (vdev vrings/buffers)
++ * use memremap() since ioremap_wc() rejects addresses in the linear map
++ * on arm64.  MMIO regions (DSP SRAM) use the traditional ioremap path.
++ */
+ static int cix_dsp_rproc_mem_alloc(struct rproc *rproc,
+ 				 struct rproc_mem_entry *mem)
+ {
+@@ -135,16 +141,19 @@ static int cix_dsp_rproc_mem_alloc(struct rproc *rproc,
+ 	void *va;
+ 
+ 	dev_dbg(dev, "map memory: %pa+%lx\n", &mem->dma, mem->len);
+-	va = ioremap_wc(mem->dma, mem->len);
++
++	if (pfn_is_map_memory(__phys_to_pfn(mem->dma)))
++		va = memremap(mem->dma, mem->len, MEMREMAP_WB);
++	else
++		va = ioremap_wc(mem->dma, mem->len);
++
+ 	if (IS_ERR_OR_NULL(va)) {
+ 		dev_err(dev, "Unable to map memory region: %pa+%lx\n",
+ 			&mem->dma, mem->len);
+ 		return -ENOMEM;
+ 	}
+ 
+-	/* Update memory entry va */
+ 	mem->va = va;
+-
+ 	return 0;
+ }
+ 
+@@ -154,7 +163,11 @@ static int cix_dsp_rproc_mem_release(struct rproc *rproc,
+ 	struct cix_dsp_rproc *rproc_priv = rproc->priv;
+ 
+ 	dev_dbg(rproc_priv->dev, "unmap memory: %pa\n", &mem->dma);
+-	iounmap(mem->va);
++
++	if (pfn_is_map_memory(__phys_to_pfn(mem->dma)))
++		memunmap(mem->va);
++	else
++		iounmap(mem->va);
+ 
+ 	return 0;
+ }
+@@ -229,13 +242,19 @@ static const char *cix_dsp_clk_names[CIX_AUD_CLK_NUM] = {
+ 
+ static int cix_dsp_rproc_clks_get(struct cix_dsp_rproc *rproc_priv)
+ {
++	struct device *dev = rproc_priv->dev;
++	bool optional = has_acpi_companion(dev);
+ 	int i;
+ 
+ 	for (i = 0; i < CIX_AUD_CLK_NUM; i++) {
+-		rproc_priv->clks[i] = devm_clk_get(rproc_priv->dev,
+-						   cix_dsp_clk_names[i]);
++		if (optional)
++			rproc_priv->clks[i] =
++				devm_clk_get_optional(dev, cix_dsp_clk_names[i]);
++		else
++			rproc_priv->clks[i] =
++				devm_clk_get(dev, cix_dsp_clk_names[i]);
+ 		if (IS_ERR(rproc_priv->clks[i])) {
+-			dev_err(rproc_priv->dev, "failed to get clock %s\n",
++			dev_err(dev, "failed to get clock %s\n",
+ 				cix_dsp_clk_names[i]);
+ 			return PTR_ERR(rproc_priv->clks[i]);
+ 		}
+@@ -611,7 +630,14 @@ static int cix_dsp_rproc_addr_init(struct cix_dsp_rproc *rproc_priv)
+ 		return -ENOMEM;
+ 
+ 	for (i = 0; i < CIX_MEM_REG_NUM; i++) {
+-		p_mem[i].cpu_addr = devm_ioremap_wc(dev, mem_reg[i].sa, mem_reg[i].len);
++		if (pfn_is_map_memory(__phys_to_pfn(mem_reg[i].sa)))
++			p_mem[i].cpu_addr = memremap(mem_reg[i].sa,
++						     mem_reg[i].len,
++						     MEMREMAP_WB);
++		else
++			p_mem[i].cpu_addr = devm_ioremap_wc(dev,
++							    mem_reg[i].sa,
++							    mem_reg[i].len);
+ 		if (!p_mem[i].cpu_addr) {
+ 			dev_err(dev, "failed to remap %#x bytes from %#llx\n",
+ 				mem_reg[i].len, mem_reg[i].sa);
+@@ -854,23 +880,57 @@ static int cix_dsp_rproc_probe(struct platform_device *pdev)
+ 		return ret;
+ 	}
+ 
+-	rproc_priv->regmap =
+-		syscon_regmap_lookup_by_phandle(pdev->dev.of_node,
+-						"cix,dsp-ctrl");
+-	if (IS_ERR(rproc_priv->regmap)) {
+-		dev_err(dev, "failed to find syscon\n");
+-		return PTR_ERR(rproc_priv->regmap);
++	if (has_acpi_companion(dev)) {
++		struct fwnode_handle *ref;
++		struct acpi_device *adev;
++		struct device *syscon_dev;
++
++		ref = fwnode_find_reference(dev_fwnode(dev), "cix,dsp-ctrl", 0);
++		if (IS_ERR(ref)) {
++			dev_err(dev, "failed to find cix,dsp-ctrl reference\n");
++			return PTR_ERR(ref);
++		}
++
++		adev = to_acpi_device_node(ref);
++		syscon_dev = adev ?
++			bus_find_device_by_acpi_dev(&platform_bus_type, adev) :
++			NULL;
++		fwnode_handle_put(ref);
++
++		if (!syscon_dev)
++			return -EPROBE_DEFER;
++
++		rproc_priv->regmap = dev_get_regmap(syscon_dev, NULL);
++		put_device(syscon_dev);
++
++		if (!rproc_priv->regmap)
++			return -EPROBE_DEFER;
++	} else {
++		rproc_priv->regmap =
++			syscon_regmap_lookup_by_phandle(pdev->dev.of_node,
++							"cix,dsp-ctrl");
++		if (IS_ERR(rproc_priv->regmap)) {
++			dev_err(dev, "failed to find syscon\n");
++			return PTR_ERR(rproc_priv->regmap);
++		}
+ 	}
+ 
+-	rproc_priv->dsp_rst = devm_reset_control_get(dev, "dsp");
++	if (has_acpi_companion(dev)) {
++		rproc_priv->dsp_rst =
++			devm_reset_control_get_optional_exclusive(dev, "dsp");
++		rproc_priv->mb0_rst =
++			devm_reset_control_get_optional_exclusive(dev, "mb0");
++		rproc_priv->mb1_rst =
++			devm_reset_control_get_optional_exclusive(dev, "mb1");
++	} else {
++		rproc_priv->dsp_rst = devm_reset_control_get(dev, "dsp");
++		rproc_priv->mb0_rst = devm_reset_control_get(dev, "mb0");
++		rproc_priv->mb1_rst = devm_reset_control_get(dev, "mb1");
++	}
+ 	if (IS_ERR(rproc_priv->dsp_rst))
+ 		return PTR_ERR(rproc_priv->dsp_rst);
+-
+-	rproc_priv->mb0_rst = devm_reset_control_get(dev, "mb0");
+ 	if (IS_ERR(rproc_priv->mb0_rst))
+ 		return PTR_ERR(rproc_priv->mb0_rst);
+-
+-	rproc_priv->mb1_rst = devm_reset_control_get(dev, "mb1");
+ 	if (IS_ERR(rproc_priv->mb1_rst))
+ 		return PTR_ERR(rproc_priv->mb1_rst);
+ 

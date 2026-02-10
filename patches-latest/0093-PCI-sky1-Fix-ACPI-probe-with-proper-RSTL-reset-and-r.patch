@@ -1,0 +1,280 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Entrpi <entrpi@proton.me>
+Date: Mon, 9 Feb 2026 11:08:15 +1100
+Subject: [PATCH] PCI: sky1: Fix ACPI probe with proper RSTL reset and
+ regulator support
+
+The scan handler creates CIXH2020 platform devices without fwnode to
+avoid fw_devlink blocking at device_add() time.  Bind the ACPI companion
+post-registration via acpi_bind_one() so cix-acpi-resource-lookup
+(CIXA1019) can resolve RSTL reset entries via bus_find_device_by_acpi_dev().
+Without the companion, devm_reset_control_get_optional_exclusive() silently
+returns NULL and the controller reset is skipped.
+
+The ACPI companion exposes _DSD references to PRP0001 voltage regulators
+(PVC0-PVC4) which fw_devlink checks at probe time.  The regulator-fixed
+driver only reads config from of_node (DT) or platdata, so PRP0001 devices
+fail to probe with -ENODEV.  Add a fwnode-based config path that reads
+properties via device_property_*() APIs, allowing ACPI PRP0001 regulators
+to probe and satisfy fw_devlink.
+
+Also fix root bus config space access to always use reg_base (matching
+mainline cdns_pci_map_bus), reorder probe to parse properties before bus
+allocation, and make internal functions static.
+---
+ .../pci/controller/cadence/pci-sky1-acpi.c    | 26 +++++++--
+ .../pci/controller/cadence/pci-sky1-acpi.h    |  6 +-
+ drivers/pci/controller/cadence/pci-sky1.c     | 50 ++++++++--------
+ drivers/regulator/fixed.c                     | 57 +++++++++++++++++++
+ 4 files changed, 107 insertions(+), 32 deletions(-)
+
+diff --git a/drivers/pci/controller/cadence/pci-sky1-acpi.c b/drivers/pci/controller/cadence/pci-sky1-acpi.c
+index 1ad1318035904..1032a73cc7ad6 100644
+--- a/drivers/pci/controller/cadence/pci-sky1-acpi.c
++++ b/drivers/pci/controller/cadence/pci-sky1-acpi.c
+@@ -94,12 +94,11 @@ static int sky1_cixh2020_create_pdev(struct acpi_device *adev)
+ 	acpi_dev_free_resource_list(&resource_list);
+ 
+ 	/*
+-	 * Use driver name for matching (no fwnode = name-based match).
+-	 * Do NOT set fwnode — it enables fw_devlink which creates
+-	 * mandatory supplier links from _DSD references (e.g. PHY →
+-	 * clock controller) that have no driver.  Pass the ACPI device
+-	 * via platform data so pci-sky1.c can set ACPI_COMPANION at
+-	 * probe time (after fw_devlink checks have passed).
++	 * Register without fwnode to bypass fw_devlink at device_add()
++	 * time — CIXH2020 _DSD references suppliers (PRP0001 regulators)
++	 * that may lack drivers, which would create unsatisfiable links.
++	 * The ACPI companion is bound post-registration (see below) so
++	 * bus_find_device_by_acpi_dev() works for RSTL reset lookups.
+ 	 */
+ 	pdevinfo.name = "sky1-pcie";
+ 	pdevinfo.id = PLATFORM_DEVID_AUTO;
+@@ -117,6 +116,21 @@ static int sky1_cixh2020_create_pdev(struct acpi_device *adev)
+ 		return 1; /* claim to prevent default enumeration (fw_devlink) */
+ 	}
+ 
++	/*
++	 * Bind the ACPI companion now.  The device was registered without
++	 * fwnode (to bypass fw_devlink), so device_add() created no
++	 * supplier links.  Setting fwnode post-registration does NOT
++	 * retroactively trigger fw_devlink — add_links only runs during
++	 * device_add().
++	 *
++	 * The companion is needed so cix-acpi-resource-lookup (CIXA1019)
++	 * can resolve CIXH2020 RSTL entries via bus_find_device_by_acpi_dev()
++	 * and register reset_control_lookup entries for this device.
++	 * Without this, devm_reset_control_get_optional_exclusive() returns
++	 * NULL and the controller reset is silently skipped.
++	 */
++	acpi_bind_one(&pdev->dev, adev);
++
+ 	dev_info(&adev->dev, "Sky1: created platform device %s (%d resources)\n",
+ 		 dev_name(&pdev->dev), count);
+ 	return 1;
+diff --git a/drivers/pci/controller/cadence/pci-sky1-acpi.h b/drivers/pci/controller/cadence/pci-sky1-acpi.h
+index 2e4869c78e8cf..43b20a339027e 100644
+--- a/drivers/pci/controller/cadence/pci-sky1-acpi.h
++++ b/drivers/pci/controller/cadence/pci-sky1-acpi.h
+@@ -7,9 +7,9 @@ struct acpi_device;
+ /*
+  * Platform data passed from pci-sky1-acpi.c scan handler to pci-sky1.c
+  * probe function.  CIXH2020 platform devices are created without fwnode
+- * to bypass fw_devlink (ACPI _DSD references create mandatory supplier
+- * links to devices like CIXHA010 that have no driver).  The ACPI device
+- * is passed via platform data and set as companion at probe time.
++ * (to avoid fw_devlink at device_add time), then the ACPI companion is
++ * bound post-registration via acpi_bind_one().  The pdata carries the
++ * acpi_device for fallback binding in the driver's probe function.
+  */
+ struct sky1_pcie_acpi_pdata {
+ 	struct acpi_device *adev;
+diff --git a/drivers/pci/controller/cadence/pci-sky1.c b/drivers/pci/controller/cadence/pci-sky1.c
+index 6db46657df989..6a6613f86604b 100644
+--- a/drivers/pci/controller/cadence/pci-sky1.c
++++ b/drivers/pci/controller/cadence/pci-sky1.c
+@@ -339,7 +339,7 @@ static void sky1_pcie_ctrl_writel_reg(struct sky1_pcie *pcie, u32 reg, u32 val)
+ 	writel(val, pcie->reg_base + reg);
+ }
+ 
+-void sky1_pcie_enable_indicatbit_int(struct sky1_pcie *pcie, bool en)
++static void sky1_pcie_enable_indicatbit_int(struct sky1_pcie *pcie, bool en)
+ {
+ 	u32 reg = 0;
+ 
+@@ -2164,7 +2164,7 @@ static struct resource *devm_pci_create_bus_range(struct device *dev)
+ 	return res;
+ }
+ 
+-int devm_acpi_pci_bridge_init(struct device *dev,
++static int devm_acpi_pci_bridge_init(struct device *dev,
+ 			struct pci_host_bridge *bridge)
+ {
+ 	struct resource *res = NULL;
+@@ -2364,27 +2364,28 @@ static void sky1_pcie_set_link_disable(struct sky1_pcie *pcie)
+ 		dev_dbg(pcie->dev, "link not in DISABLED, 0x%x\n", val);
+ }
+ 
+-void __iomem *sky1_pcie_own_conf_map_bus(struct pci_bus *bus,
++static void __iomem *sky1_pcie_own_conf_map_bus(struct pci_bus *bus,
+ 					 unsigned int devfn, int where)
+ {
+ 	struct pci_host_bridge *bridge = pci_find_host_bridge(bus);
+ 	struct cdns_pcie_rc *rc = pci_host_bridge_priv(bridge);
+ 	struct cdns_pcie *c_pcie = &rc->pcie;
+ 	struct sky1_pcie *pcie = dev_get_drvdata(c_pcie->dev);
+-	void __iomem *addr;
+-
+-	if (PCI_SLOT(devfn) > 0)
+-		return NULL;
+ 
+-	if ((where == PCI_BRIDGE_CONTROL) || (where == pcie->linkctrl_offset))
+-		addr = pcie->reg_base + where;
+-	else
+-		addr = pci_generic_ecam_ops.pci_ops.map_bus(bus, devfn, where);
++	/*
++	 * Root port config space is in the controller register block,
++	 * not the ECAM window.  After controller reset/reinit the ECAM
++	 * only covers downstream buses — reading ECAM offset 0 returns
++	 * 0xffffffff.  This matches mainline cdns_pci_map_bus().
++	 */
++	if (pci_is_root_bus(bus)) {
++		if (PCI_SLOT(devfn) > 0)
++			return NULL;
++		return pcie->reg_base + (where & 0xfff);
++	}
+ 
+-	return addr;
++	return pci_generic_ecam_ops.pci_ops.map_bus(bus, devfn, where);
+ }
+-EXPORT_SYMBOL_GPL(sky1_pcie_own_conf_map_bus);
+-
+ static struct pci_ops sky1_pcie_own_ops = {
+ 	.map_bus = sky1_pcie_own_conf_map_bus,
+ 	.read = pci_generic_config_read,
+@@ -2615,13 +2616,16 @@ static int sky1_pcie_probe(struct platform_device *pdev)
+ 	dev_info(dev, "%s starting!\n", __func__);
+ 
+ 	/*
+-	 * When created by pci-sky1-acpi.c scan handler, the platform
+-	 * device has no fwnode (to bypass fw_devlink).  Set the ACPI
+-	 * companion here so resource lookups and match data work.
++	 * ACPI companion is normally set by pci-sky1-acpi.c scan handler
++	 * after platform device registration.  Fallback binding here in
++	 * case it wasn't set (shouldn't happen in normal flow).
+ 	 */
+ 	acpi_pdata = dev_get_platdata(dev);
+-	if (acpi_pdata)
+-		ACPI_COMPANION_SET(dev, acpi_pdata->adev);
++	if (acpi_pdata && !has_acpi_companion(dev)) {
++		ret = acpi_bind_one(dev, acpi_pdata->adev);
++		if (ret)
++			return ret;
++	}
+ 
+ 	pcie = devm_kzalloc(dev, sizeof(*pcie), GFP_KERNEL);
+ 	if (!pcie)
+@@ -2642,6 +2646,10 @@ static int sky1_pcie_probe(struct platform_device *pdev)
+ 		}
+ 	}
+ 
++	ret = sky1_pcie_parse_property(pdev, pcie);
++	if (ret < 0)
++		return ret;
++
+ 	sky1_pcie_debugfs_init(pcie);
+ 
+ 	if (!ACPI_COMPANION(dev))
+@@ -2655,10 +2663,6 @@ static int sky1_pcie_probe(struct platform_device *pdev)
+ 	if (!bus)
+ 		return -ENODEV;
+ 
+-	ret = sky1_pcie_parse_property(pdev, pcie);
+-	if (ret < 0)
+-		return -EINVAL;
+-
+ 	ret = sky1_pcie_en_ep_power(pcie, true);
+ 	if (ret < 0)
+ 		return -EINVAL;
+diff --git a/drivers/regulator/fixed.c b/drivers/regulator/fixed.c
+index 3c0255ca03133..61917ea611ed3 100644
+--- a/drivers/regulator/fixed.c
++++ b/drivers/regulator/fixed.c
+@@ -29,6 +29,7 @@
+ #include <linux/regulator/of_regulator.h>
+ #include <linux/regulator/machine.h>
+ #include <linux/clk.h>
++#include <linux/property.h>
+ 
+ /* Default time in millisecond to wait for emergency shutdown */
+ #define FV_DEF_EMERG_SHUTDWN_TMO	10
+@@ -207,6 +208,57 @@ of_get_fixed_voltage_config(struct device *dev,
+ static const struct regulator_ops fixed_voltage_ops = {
+ };
+ 
++/**
++ * fwnode_get_fixed_voltage_config - extract config from fwnode properties
++ * @dev: device requesting for fixed_voltage_config
++ * @desc: regulator description
++ *
++ * Populates fixed_voltage_config from generic device properties (fwnode),
++ * enabling ACPI PRP0001 devices with compatible = "regulator-fixed" to
++ * probe via the same driver as their DT counterparts.
++ *
++ * Return: Pointer to a populated &struct fixed_voltage_config or ERR_PTR()
++ *	   on failure.
++ */
++static struct fixed_voltage_config *
++fwnode_get_fixed_voltage_config(struct device *dev,
++				const struct regulator_desc *desc)
++{
++	struct fixed_voltage_config *config;
++	u32 uv_min = 0, uv_max = 0;
++
++	config = devm_kzalloc(dev, sizeof(*config), GFP_KERNEL);
++	if (!config)
++		return ERR_PTR(-ENOMEM);
++
++	device_property_read_string(dev, "regulator-name",
++				    &config->supply_name);
++	if (!config->supply_name)
++		config->supply_name = dev_name(dev);
++
++	device_property_read_u32(dev, "regulator-min-microvolt", &uv_min);
++	device_property_read_u32(dev, "regulator-max-microvolt", &uv_max);
++	if (uv_min && uv_min == uv_max)
++		config->microvolts = uv_min;
++
++	device_property_read_u32(dev, "startup-delay-us",
++				 &config->startup_delay);
++	device_property_read_u32(dev, "off-on-delay-us",
++				 &config->off_on_delay);
++
++	if (device_property_present(dev, "vin-supply"))
++		config->input_supply = "vin";
++
++	/*
++	 * Firmware-described fixed regulators are typically already enabled
++	 * by firmware at boot.  Default to enabled to avoid glitching
++	 * supply rails during probe.
++	 */
++	config->enabled_at_boot = true;
++
++	return config;
++}
++
+ static const struct regulator_ops fixed_voltage_clkenabled_ops = {
+ 	.enable = reg_clock_enable,
+ 	.disable = reg_clock_disable,
+@@ -239,6 +291,11 @@ static int reg_fixed_voltage_probe(struct platform_device *pdev)
+ 						     &drvdata->desc);
+ 		if (IS_ERR(config))
+ 			return PTR_ERR(config);
++	} else if (dev_fwnode(&pdev->dev)) {
++		config = fwnode_get_fixed_voltage_config(&pdev->dev,
++							 &drvdata->desc);
++		if (IS_ERR(config))
++			return PTR_ERR(config);
+ 	} else {
+ 		config = dev_get_platdata(&pdev->dev);
+ 	}

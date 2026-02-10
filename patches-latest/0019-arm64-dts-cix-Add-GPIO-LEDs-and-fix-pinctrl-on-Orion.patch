@@ -1,0 +1,145 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Entrpi <entrpi@proton.me>
+Date: Mon, 2 Feb 2026 23:59:01 +1100
+Subject: [PATCH] arm64: dts: cix: Add GPIO LEDs and fix pinctrl on Orion O6
+ and O6N
+
+O6: Add gpio-leds node with power LED (GPIO015, default-on), state LED
+(GPIO008, heartbeat), and SSD activity LED (GPIO016, disk-activity).
+Include explicit pinctrl pad mux definitions for all three.
+
+O6N: Add explicit pinctrl for power-led and status-led to match
+user-led pattern. Move orphaned pinctrl-names from parent gpio-leds
+node to individual LED nodes. Fix comment typos: usbc0_gpio pad was
+mislabeled as GPIO009, vgfx_poweren_gpio pad was mislabeled as GPIO0-01.
+---
+ arch/arm64/boot/dts/cix/sky1-orion-o6.dts  | 46 ++++++++++++++++++++++
+ arch/arm64/boot/dts/cix/sky1-orion-o6n.dts | 22 +++++++++--
+ 2 files changed, 64 insertions(+), 4 deletions(-)
+
+diff --git a/arch/arm64/boot/dts/cix/sky1-orion-o6.dts b/arch/arm64/boot/dts/cix/sky1-orion-o6.dts
+index 674fb0944f7fa..aec8305638231 100644
+--- a/arch/arm64/boot/dts/cix/sky1-orion-o6.dts
++++ b/arch/arm64/boot/dts/cix/sky1-orion-o6.dts
+@@ -204,6 +204,34 @@ wlan_rfkill: wlan-rfkill {
+ 		shutdown-gpios = <&s5_gpio0 19 GPIO_ACTIVE_HIGH>;
+ 	};
+ 
++	gpio-leds {
++		compatible = "gpio-leds";
++
++		power-led {
++			pinctrl-names = "default";
++			pinctrl-0 = <&pwr_led_gpio>;
++			gpios = <&s5_gpio1 0 GPIO_ACTIVE_HIGH>;
++			linux,default-trigger = "default-on";
++			default-state = "on";
++		};
++
++		state-led {
++			pinctrl-names = "default";
++			pinctrl-0 = <&state_led_gpio>;
++			gpios = <&s5_gpio0 7 GPIO_ACTIVE_HIGH>;
++			linux,default-trigger = "heartbeat";
++			default-state = "on";
++		};
++
++		ssd-led {
++			pinctrl-names = "default";
++			pinctrl-0 = <&ssd_led_gpio>;
++			gpios = <&s5_gpio1 1 GPIO_ACTIVE_HIGH>;
++			linux,default-trigger = "disk-activity";
++			default-state = "off";
++		};
++	};
++
+ 	vgfx_power: vgfx-power {
+ 		compatible = "regulator-fixed";
+ 		regulator-name = "vgfx_power";
+@@ -338,6 +366,24 @@ CIX_PAD_GPIO019_FUNC_GPIO019 (PULL_UP|ST|DS_LEVEL7) /* GPIO0-19 */
+ 		>;
+ 	};
+ 
++	pwr_led_gpio: pwr_led_gpio {
++		sky1,pins = <
++			CIX_PAD_SFI_GPIO0_FUNC_GPIO015 (PULL_UP|DS_LEVEL4) /* GPIO015 - S5_gpio1 0 */
++		>;
++	};
++
++	ssd_led_gpio: ssd_led_gpio {
++		sky1,pins = <
++			CIX_PAD_SFI_GPIO1_FUNC_GPIO016 (PULL_UP|DS_LEVEL4) /* GPIO016 - S5_gpio1 1 */
++		>;
++	};
++
++	state_led_gpio: state_led_gpio {
++		sky1,pins = <
++			CIX_PAD_GPIO008_FUNC_GPIO008 (PULL_UP|DS_LEVEL4) /* GPIO008 - S5_gpio0 7 */
++		>;
++	};
++
+ 	pinctrl_sfi_i2c0: pinctrl_sfi_i2c0_grp {
+ 		sky1,pins = <
+ 			CIX_PAD_SFI_I2C0_SCL_FUNC_SFI_I2C0_SCL (PULL_UP|ST|DS_LEVEL12)
+diff --git a/arch/arm64/boot/dts/cix/sky1-orion-o6n.dts b/arch/arm64/boot/dts/cix/sky1-orion-o6n.dts
+index 7d2ccf31434a4..66eedd8a16845 100644
+--- a/arch/arm64/boot/dts/cix/sky1-orion-o6n.dts
++++ b/arch/arm64/boot/dts/cix/sky1-orion-o6n.dts
+@@ -336,16 +336,18 @@ power-button {
+ 
+ 	gpio-leds {
+ 		compatible = "gpio-leds";
+-		pinctrl-names = "default";
+-		status = "okay";
+ 
+ 		power-led {
++			pinctrl-names = "default";
++			pinctrl-0 = <&pwr_led_gpio>;
+ 			gpios = <&s5_gpio2 0 GPIO_ACTIVE_HIGH>;
+ 			linux,default-trigger = "default-on";
+ 			default-state = "on";
+ 		};
+ 
+ 		status-led {
++			pinctrl-names = "default";
++			pinctrl-0 = <&state_led_gpio>;
+ 			gpios = <&s5_gpio0 7 GPIO_ACTIVE_LOW>;
+ 			linux,default-trigger = "heartbeat";
+ 			default-state = "on";
+@@ -407,7 +409,7 @@ CIX_PAD_GPIO012_FUNC_GPIO012  (PULL_UP|DS_LEVEL4) /* GPIO0-12 */
+ 
+ 	vgfx_poweren_gpio: vgfx_poweren_gpio {
+ 		sky1,pins = <
+-			CIX_PAD_GPIO018_FUNC_GPIO018 (PULL_UP|DS_LEVEL4) /* GPIO0-01 */
++			CIX_PAD_GPIO018_FUNC_GPIO018 (PULL_UP|DS_LEVEL4) /* GPIO018 - S5_gpio0 0 */
+ 		>;
+ 	};
+ 
+@@ -603,6 +605,18 @@ CIX_PAD_SFI_GPIO1_FUNC_SFI_GPIO1 (PULL_UP|DS_LEVEL4) /* GPIO016 - S5_gpio2 1 */
+ 		>;
+ 	};
+ 
++	pwr_led_gpio: pwr_led_gpio {
++		sky1,pins = <
++			CIX_PAD_SFI_GPIO0_FUNC_SFI_GPIO0 (PULL_UP|DS_LEVEL4) /* SFI_GPIO0 - S5_gpio2 0 */
++		>;
++	};
++
++	state_led_gpio: state_led_gpio {
++		sky1,pins = <
++			CIX_PAD_GPIO008_FUNC_GPIO008 (PULL_UP|DS_LEVEL4) /* GPIO008 - S5_gpio0 7 */
++		>;
++	};
++
+ 	user_led: user_led {
+ 		sky1,pins = <
+ 			CIX_PAD_GPIO021_FUNC_SFI_GPIO6 (PULL_UP|DS_LEVEL4) /* GPIO021 - S5_gpio2 6 */
+@@ -617,7 +631,7 @@ CIX_PAD_GPIO009_FUNC_GPIO009 (PULL_UP|DS_LEVEL4) /* GPIO009 - S5_gpio0 8 */
+ 
+ 	usbc0_gpio: usbc0_gpio {
+ 		sky1,pins = <
+-			CIX_PAD_GPIO007_FUNC_GPIO007 (PULL_UP|DS_LEVEL4) /* GPIO009 - S5_gpio0 8 */
++			CIX_PAD_GPIO007_FUNC_GPIO007 (PULL_UP|DS_LEVEL4) /* GPIO007 - S5_gpio0 6 */
+ 		>;
+ 	};
+ };

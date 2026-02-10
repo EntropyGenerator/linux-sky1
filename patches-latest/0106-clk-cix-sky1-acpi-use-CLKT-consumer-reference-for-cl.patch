@@ -1,0 +1,65 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Entrpi <entrpi@proton.me>
+Date: Tue, 10 Feb 2026 21:19:09 +1100
+Subject: [PATCH] clk: cix: sky1-acpi: use CLKT consumer reference for clkdev
+ registration
+
+CLKT table entries have the form { scmi_clock_id, con_id, consumer_ref }.
+The third element is the actual consumer device, but the parser was
+ignoring it and registering the clock against the CLKT-owning device.
+
+This caused DMA1's CLKT entry { 0xEF, "", DMA0 } to register SCMI
+clock 239 (fch_dma_aclk) for CIXH1006:00 (audio DMA) instead of for
+CIXHA014:00 (FCH DMA).  Audio DMA then got the wrong clock, bypassing
+the audss clock gate and crashing with SError on register access.
+
+Parse element[2] as the consumer reference when present, so each CLKT
+clock is registered against its intended consumer device.
+---
+ drivers/clk/cix/clk-sky1-acpi.c | 33 ++++++++++++++++++++++++++++-----
+ 1 file changed, 28 insertions(+), 5 deletions(-)
+
+diff --git a/drivers/clk/cix/clk-sky1-acpi.c b/drivers/clk/cix/clk-sky1-acpi.c
+index 1cd096a5a8c09..4c5ca954da000 100644
+--- a/drivers/clk/cix/clk-sky1-acpi.c
++++ b/drivers/clk/cix/clk-sky1-acpi.c
+@@ -116,11 +116,34 @@ static acpi_status sky1_clkt_walk_cb(acpi_handle handle, u32 level,
+ 	if (!adev)
+ 		goto out;
+ 
+-	consumer_name = acpi_dev_name(adev);
+-
+-	for (i = 0; i < obj->package.count; i++)
+-		sky1_parse_clkt_entry(priv, consumer_name,
+-				      &obj->package.elements[i]);
++	for (i = 0; i < obj->package.count; i++) {
++		union acpi_object *e = &obj->package.elements[i];
++		union acpi_object *ref;
++
++		/*
++		 * Element 2 (if present) is the actual consumer device
++		 * reference.  Use it instead of the CLKT-owning device.
++		 * Most entries are self-references (consumer == owner),
++		 * but some cross-reference a different device (e.g.,
++		 * DMA1's CLKT registers a clock for DMA0).
++		 */
++		if (e->type == ACPI_TYPE_PACKAGE &&
++		    e->package.count >= 3) {
++			struct acpi_device *cdev;
++
++			ref = &e->package.elements[2];
++			if (ref->type == ACPI_TYPE_LOCAL_REFERENCE) {
++				cdev = acpi_fetch_acpi_dev(ref->reference.handle);
++				if (cdev) {
++					consumer_name = acpi_dev_name(cdev);
++					goto parse;
++				}
++			}
++		}
++		consumer_name = acpi_dev_name(adev);
++parse:
++		sky1_parse_clkt_entry(priv, consumer_name, e);
++	}
+ 
+ out:
+ 	kfree(buf.pointer);

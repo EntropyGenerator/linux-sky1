@@ -1,0 +1,248 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Entrpi <entrpi@proton.me>
+Date: Tue, 3 Feb 2026 14:08:37 +1100
+Subject: [PATCH] drm/panthor: Rate-limit SCMI perf domain DVFS requests
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The SCP firmware on Sky1 processes SCMI perf_level_set messages through
+a shared mailbox channel used by all 12 performance domains. The GPU
+devfreq governor polls every 50ms and can generate up to 20 frequency
+change requests per second. Over time, the firmware falls behind,
+responds out of order, and the SCMI transport locks up — blocking all
+SCMI users including networking clocks and resets.
+
+Fast channels are advertised by firmware but return -EOPNOTSUPP for
+all DESCRIBE_FASTCHANNEL requests, so we must rate-limit in the driver.
+
+Add three defense layers to panthor_devfreq_target() for SCMI platforms:
+
+1. Frequency deduplication: skip SCMI call if the requested frequency
+   matches the last successfully set value.
+
+2. Rate limiting: enforce a minimum 100ms interval between SCMI
+   perf_level_set calls using ktime tracking.
+
+3. Error backoff with safe-freq boost: on SCMI errors, apply
+   exponential backoff (500ms to 4s). After 3 consecutive failures,
+   boost to a mid-range "safe" OPP to escape potentially problematic
+   low-frequency states.
+
+Also increase the devfreq polling interval from 50ms to 100ms on SCMI
+platforms to align with the rate limit.
+
+Non-SCMI platforms are unaffected — the new logic is gated on the
+presence of opp_dev (SCMI perf domain virtual device).
+---
+ drivers/gpu/drm/panthor/panthor_devfreq.c | 156 +++++++++++++++++++++-
+ 1 file changed, 149 insertions(+), 7 deletions(-)
+
+diff --git a/drivers/gpu/drm/panthor/panthor_devfreq.c b/drivers/gpu/drm/panthor/panthor_devfreq.c
+index 7a632f9161485..c006aa99fbf2f 100644
+--- a/drivers/gpu/drm/panthor/panthor_devfreq.c
++++ b/drivers/gpu/drm/panthor/panthor_devfreq.c
+@@ -14,6 +14,23 @@
+ #include "panthor_devfreq.h"
+ #include "panthor_device.h"
+ 
++/*
++ * SCMI rate limiting for GPU DVFS.
++ *
++ * The SCP firmware on Sky1 processes SCMI perf_level_set messages through a
++ * shared mailbox channel used by all 12 performance domains. Under sustained
++ * devfreq load (governor polling every 50-100ms), the firmware falls behind,
++ * responds out of order, and the SCMI transport locks up — blocking all SCMI
++ * users including networking.
++ *
++ * Fast channels are advertised by firmware but return -EOPNOTSUPP for all
++ * DESCRIBE_FASTCHANNEL requests, so we must rate-limit at the driver level.
++ */
++#define PANTHOR_SCMI_RATE_LIMIT_US	100000		/* 100ms min between SCMI calls */
++#define PANTHOR_SCMI_MAX_ERRORS		3		/* errors before safe-freq boost */
++#define PANTHOR_SCMI_BACKOFF_BASE_US	500000		/* 500ms base backoff */
++#define PANTHOR_SCMI_BACKOFF_MAX_US	4000000		/* 4s max backoff */
++
+ /**
+  * struct panthor_devfreq - Device frequency management
+  */
+@@ -48,13 +65,28 @@ struct panthor_devfreq {
+ 	bool last_busy_state;
+ 
+ 	/**
+-	 * @lock: Lock used to protect busy_time, idle_time, time_last_update and
+-	 * last_busy_state.
++	 * @lock: Lock used to protect busy_time, idle_time, time_last_update,
++	 * last_busy_state, and the SCMI rate-limiting fields below.
+ 	 *
+ 	 * These fields can be accessed concurrently by panthor_devfreq_get_dev_status()
+ 	 * and panthor_devfreq_record_{busy,idle}().
+ 	 */
+ 	spinlock_t lock;
++
++	/** @last_set_freq: Last frequency successfully sent to SCMI. */
++	unsigned long last_set_freq;
++
++	/** @last_set_time: ktime of the last actual SCMI frequency change. */
++	ktime_t last_set_time;
++
++	/** @scmi_err_count: Consecutive SCMI error count for backoff. */
++	unsigned int scmi_err_count;
++
++	/** @backoff_until: ktime before which SCMI calls are suppressed. */
++	ktime_t backoff_until;
++
++	/** @safe_freq: Mid-range OPP for error recovery (computed at init). */
++	unsigned long safe_freq;
+ };
+ 
+ static void panthor_devfreq_update_utilization(struct panthor_devfreq *pdevfreq)
+@@ -78,19 +110,93 @@ static int panthor_devfreq_target(struct device *dev, unsigned long *freq,
+ 	struct panthor_device *ptdev = dev_get_drvdata(dev);
+ 	struct panthor_devfreq *pdevfreq = ptdev->devfreq;
+ 	struct dev_pm_opp *opp;
++	unsigned long target_freq;
++	unsigned long irqflags;
++	ktime_t now;
+ 	int err;
+ 
+ 	opp = devfreq_recommended_opp(dev, freq, flags);
+ 	if (IS_ERR(opp))
+ 		return PTR_ERR(opp);
++	target_freq = *freq;
+ 	dev_pm_opp_put(opp);
+ 
+-	if (pdevfreq->opp_dev)
+-		err = dev_pm_opp_set_rate(pdevfreq->opp_dev, *freq);
+-	else
+-		err = dev_pm_opp_set_rate(dev, *freq);
++	/* Non-SCMI platforms: pass through unchanged */
++	if (!pdevfreq->opp_dev)
++		return dev_pm_opp_set_rate(dev, target_freq);
+ 
+-	return err;
++	now = ktime_get();
++	spin_lock_irqsave(&pdevfreq->lock, irqflags);
++
++	/* Suppress calls during error backoff */
++	if (ktime_before(now, pdevfreq->backoff_until)) {
++		spin_unlock_irqrestore(&pdevfreq->lock, irqflags);
++		return 0;
++	}
++
++	/* Skip if already at the requested frequency */
++	if (target_freq == pdevfreq->last_set_freq) {
++		spin_unlock_irqrestore(&pdevfreq->lock, irqflags);
++		return 0;
++	}
++
++	/* Rate limit: enforce minimum interval between SCMI calls */
++	if (ktime_us_delta(now, pdevfreq->last_set_time) <
++	    PANTHOR_SCMI_RATE_LIMIT_US) {
++		spin_unlock_irqrestore(&pdevfreq->lock, irqflags);
++		return 0;
++	}
++
++	spin_unlock_irqrestore(&pdevfreq->lock, irqflags);
++
++	/* Actual SCMI frequency change (may sleep on mailbox) */
++	err = dev_pm_opp_set_rate(pdevfreq->opp_dev, target_freq);
++
++	spin_lock_irqsave(&pdevfreq->lock, irqflags);
++
++	if (!err) {
++		pdevfreq->last_set_freq = target_freq;
++		pdevfreq->last_set_time = now;
++		pdevfreq->scmi_err_count = 0;
++		pdevfreq->backoff_until = 0;
++	} else {
++		unsigned int errcnt = ++pdevfreq->scmi_err_count;
++		unsigned long backoff_us;
++
++		/* Exponential backoff: 500ms, 1s, 2s, capped at 4s */
++		backoff_us = PANTHOR_SCMI_BACKOFF_BASE_US <<
++			     min(errcnt - 1, 3u);
++		if (backoff_us > PANTHOR_SCMI_BACKOFF_MAX_US)
++			backoff_us = PANTHOR_SCMI_BACKOFF_MAX_US;
++		pdevfreq->backoff_until = ktime_add_us(now, backoff_us);
++
++		drm_warn(&ptdev->base,
++			 "GPU DVFS: SCMI error %d (count=%u), backoff %lu ms\n",
++			 err, errcnt, backoff_us / 1000);
++
++		/* After repeated errors, boost to safe mid-range frequency */
++		if (errcnt >= PANTHOR_SCMI_MAX_ERRORS && pdevfreq->safe_freq &&
++		    pdevfreq->last_set_freq != pdevfreq->safe_freq) {
++			spin_unlock_irqrestore(&pdevfreq->lock, irqflags);
++
++			drm_info(&ptdev->base,
++				 "GPU DVFS: boosting to safe freq %lu MHz\n",
++				 pdevfreq->safe_freq / 1000000);
++			err = dev_pm_opp_set_rate(pdevfreq->opp_dev,
++						  pdevfreq->safe_freq);
++
++			spin_lock_irqsave(&pdevfreq->lock, irqflags);
++			if (!err) {
++				pdevfreq->last_set_freq = pdevfreq->safe_freq;
++				pdevfreq->last_set_time = ktime_get();
++			}
++		}
++	}
++
++	spin_unlock_irqrestore(&pdevfreq->lock, irqflags);
++
++	/* Always return 0 — errors cause devfreq to spam retries */
++	return 0;
+ }
+ 
+ static void panthor_devfreq_reset(struct panthor_devfreq *pdevfreq)
+@@ -343,6 +449,36 @@ int panthor_devfreq_init(struct panthor_device *ptdev)
+ 
+ 	dev_pm_opp_put(opp);
+ 
++	/*
++	 * For SCMI platforms, compute a safe mid-range frequency for error
++	 * recovery and increase the polling interval to match our rate limit.
++	 */
++	if (pdevfreq->opp_dev) {
++		unsigned long min_f = 0, max_f = ULONG_MAX, mid, safe;
++		struct dev_pm_opp *opp_tmp;
++
++		opp_tmp = dev_pm_opp_find_freq_ceil(dev, &min_f);
++		if (!IS_ERR(opp_tmp)) {
++			dev_pm_opp_put(opp_tmp);
++			opp_tmp = dev_pm_opp_find_freq_floor(dev, &max_f);
++			if (!IS_ERR(opp_tmp)) {
++				dev_pm_opp_put(opp_tmp);
++				mid = min_f + (max_f - min_f) / 2;
++				safe = mid;
++				opp_tmp = dev_pm_opp_find_freq_ceil(dev, &safe);
++				if (!IS_ERR(opp_tmp)) {
++					pdevfreq->safe_freq = safe;
++					dev_pm_opp_put(opp_tmp);
++					drm_info(&ptdev->base,
++						 "GPU DVFS: safe freq = %lu MHz\n",
++						 safe / 1000000);
++				}
++			}
++		}
++
++		panthor_devfreq_profile.polling_ms = 100;
++	}
++
+ 	/*
+ 	 * Setup default thresholds for the simple_ondemand governor.
+ 	 * The values are chosen based on experiments.
+@@ -376,6 +512,12 @@ void panthor_devfreq_resume(struct panthor_device *ptdev)
+ 
+ 	panthor_devfreq_reset(pdevfreq);
+ 
++	/* Clear SCMI rate-limiting state on resume */
++	pdevfreq->last_set_freq = 0;
++	pdevfreq->last_set_time = 0;
++	pdevfreq->scmi_err_count = 0;
++	pdevfreq->backoff_until = 0;
++
+ 	drm_WARN_ON(&ptdev->base, devfreq_resume_device(pdevfreq->devfreq));
+ }
+ 

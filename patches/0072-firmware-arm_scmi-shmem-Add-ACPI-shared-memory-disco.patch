@@ -1,0 +1,145 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Entrpi <entrpi@proton.me>
+Date: Fri, 6 Feb 2026 17:46:12 +1100
+Subject: [PATCH] firmware: arm_scmi: shmem: Add ACPI shared memory discovery
+
+shmem_setup_iomap() uses of_parse_phandle() to find shared memory nodes,
+which only works with Device Tree. In ACPI mode, the SCMI device's _DSD
+contains "shmem" property references pointing to separate ACPI devices
+(e.g. SHM0/SHM1) that have _CRS memory resources.
+
+Add an ACPI fallback path that uses fwnode_property_get_reference_args()
+to resolve the shmem device references from _DSD, then extracts the
+memory resource from the referenced ACPI device via
+acpi_dev_get_resources(). This enables SCMI shared memory discovery on
+platforms like Sky1/Orion O6 where firmware provides ACPI tables with
+SCMI shmem devices (CIXHA004/CIXHA005).
+
+Also remove debug pr_info/pr_err prints that were added during
+development.
+---
+ drivers/firmware/arm_scmi/shmem.c | 89 +++++++++++++++++++++++++++++--
+ 1 file changed, 84 insertions(+), 5 deletions(-)
+
+diff --git a/drivers/firmware/arm_scmi/shmem.c b/drivers/firmware/arm_scmi/shmem.c
+index 4f1b2b65b1950..da61234b77fd4 100644
+--- a/drivers/firmware/arm_scmi/shmem.c
++++ b/drivers/firmware/arm_scmi/shmem.c
+@@ -5,11 +5,13 @@
+  * Copyright (C) 2019-2024 ARM Ltd.
+  */
+ 
++#include <linux/acpi.h>
+ #include <linux/ktime.h>
+ #include <linux/io.h>
+ #include <linux/of.h>
+ #include <linux/of_address.h>
+ #include <linux/processor.h>
++#include <linux/property.h>
+ #include <linux/types.h>
+ 
+ #include <linux/bug.h>
+@@ -191,6 +193,80 @@ static bool shmem_channel_intr_enabled(struct scmi_shared_mem __iomem *shmem)
+ 	return ioread32(&shmem->flags) & SCMI_SHMEM_FLAG_INTR_ENABLED;
+ }
+ 
++#ifdef CONFIG_ACPI
++static void __iomem *shmem_acpi_setup_iomap(struct scmi_chan_info *cinfo,
++					     struct device *dev, bool tx,
++					     struct resource *res,
++					     struct scmi_shmem_io_ops **ops)
++{
++	struct fwnode_reference_args args;
++	struct resource_entry *rentry;
++	const char *desc = tx ? "Tx" : "Rx";
++	int idx = tx ? 0 : 1;
++	struct acpi_device *adev;
++	struct resource lres = {};
++	resource_size_t size;
++	void __iomem *addr;
++	LIST_HEAD(res_list);
++	int ret;
++
++	if (!res)
++		res = &lres;
++
++	ret = fwnode_property_get_reference_args(dev_fwnode(cinfo->dev),
++						 "shmem", NULL, 0, idx, &args);
++	if (ret) {
++		dev_err(cinfo->dev,
++			"failed to get SCMI %s shmem reference\n", desc);
++		return IOMEM_ERR_PTR(ret);
++	}
++
++	if (!is_acpi_device_node(args.fwnode)) {
++		fwnode_handle_put(args.fwnode);
++		return IOMEM_ERR_PTR(-EINVAL);
++	}
++
++	adev = to_acpi_device_node(args.fwnode);
++
++	ret = acpi_dev_get_resources(adev, &res_list, NULL, NULL);
++	if (ret <= 0) {
++		fwnode_handle_put(args.fwnode);
++		return IOMEM_ERR_PTR(ret ? ret : -EINVAL);
++	}
++
++	addr = IOMEM_ERR_PTR(-ENODEV);
++	list_for_each_entry(rentry, &res_list, node) {
++		if (resource_type(rentry->res) != IORESOURCE_MEM)
++			continue;
++
++		*res = *rentry->res;
++		size = resource_size(res);
++		if (cinfo->max_msg_size + SCMI_SHMEM_LAYOUT_OVERHEAD > size) {
++			dev_err(dev, "misconfigured SCMI shared memory\n");
++			addr = IOMEM_ERR_PTR(-ENOSPC);
++			break;
++		}
++
++		addr = devm_ioremap(dev, res->start, size);
++		if (!addr) {
++			dev_err(dev,
++				"failed to ioremap SCMI %s shared memory\n",
++				desc);
++			addr = IOMEM_ERR_PTR(-EADDRNOTAVAIL);
++		}
++		break;
++	}
++
++	acpi_dev_free_resource_list(&res_list);
++	fwnode_handle_put(args.fwnode);
++
++	if (!IS_ERR(addr))
++		*ops = &shmem_io_ops_default;
++
++	return addr;
++}
++#endif
++
+ static void __iomem *shmem_setup_iomap(struct scmi_chan_info *cinfo,
+ 				       struct device *dev, bool tx,
+ 				       struct resource *res,
+@@ -205,14 +281,17 @@ static void __iomem *shmem_setup_iomap(struct scmi_chan_info *cinfo,
+ 	void __iomem *addr;
+ 	u32 reg_io_width;
+ 
+-	pr_info("shmem_setup_iomap: cdev=%s cdev->of_node=%pOF idx=%d\n",
+-		dev_name(cdev), cdev->of_node, idx);
++	if (!cdev->of_node) {
++#ifdef CONFIG_ACPI
++		return shmem_acpi_setup_iomap(cinfo, dev, tx, res, ops);
++#else
++		return IOMEM_ERR_PTR(-ENODEV);
++#endif
++	}
+ 
+ 	shmem = of_parse_phandle(cdev->of_node, "shmem", idx);
+-	if (!shmem) {
+-		pr_err("shmem_setup_iomap: of_parse_phandle failed for shmem[%d]\n", idx);
++	if (!shmem)
+ 		return IOMEM_ERR_PTR(-ENODEV);
+-	}
+ 
+ 	if (!of_device_is_compatible(shmem, "arm,scmi-shmem"))
+ 		return IOMEM_ERR_PTR(-ENXIO);

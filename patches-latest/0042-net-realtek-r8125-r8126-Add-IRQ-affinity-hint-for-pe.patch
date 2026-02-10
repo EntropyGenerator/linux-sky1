@@ -1,0 +1,319 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Entrpi <entrpi@proton.me>
+Date: Thu, 5 Feb 2026 21:29:15 +1100
+Subject: [PATCH] net: realtek: r8125/r8126: Add IRQ affinity hint for
+ performance cores
+
+On ARM big.LITTLE systems, network interrupt processing benefits from
+running on the performance (big) cores rather than the efficiency
+(little) cores. This reduces latency variance and improves throughput
+for latency-sensitive workloads.
+
+Add a helper function to detect little cores based on CPU capacity
+(using topology_get_cpu_scale), and set IRQ affinity hints to prefer
+big cores when allocating MSI-X interrupts.
+
+The capacity threshold of 512 is chosen to distinguish between
+efficiency cores (typically ~446 on Sky1) and performance cores
+(typically ~1024).
+---
+ drivers/net/ethernet/realtek/r8125/r8125_n.c |  35 +++++++++++++++++++
+ drivers/net/ethernet/realtek/r8126/r8126_n.c |  35 +++++++++++++++++++
+ scripts/tracepoint-update                    | Bin 0 -> 73472 bytes
+ 3 files changed, 70 insertions(+)
+ create mode 100755 scripts/tracepoint-update
+
+diff --git a/drivers/net/ethernet/realtek/r8125/r8125_n.c b/drivers/net/ethernet/realtek/r8125/r8125_n.c
+index 783c7b4c712c8..73a1cbf1c37c6 100755
+--- a/drivers/net/ethernet/realtek/r8125/r8125_n.c
++++ b/drivers/net/ethernet/realtek/r8125/r8125_n.c
+@@ -71,6 +71,7 @@
+ #else
+ #include <linux/dma-mapping.h>
+ #include <linux/moduleparam.h>
++#include <linux/arch_topology.h>
+ #endif
+ 
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,31)
+@@ -17710,6 +17711,22 @@ static void rtl8125_free_irq(struct rtl8125_private *tp)
+         }
+ }
+ 
++#ifdef CONFIG_ARM64
++/*
++ * Check if CPU is a little/efficiency core based on capacity.
++ * On ARM big.LITTLE systems, efficiency cores have lower capacity (~446)
++ * compared to performance cores (~1024). We avoid scheduling network
++ * interrupts on little cores to reduce latency variance.
++ */
++#define RTL8125_LITTLE_CORE_CAPACITY 512
++
++static bool rtl8125_is_little_core(int cpu)
++{
++        unsigned long capacity = topology_get_cpu_scale(cpu);
++        return capacity < RTL8125_LITTLE_CORE_CAPACITY;
++}
++#endif
++
+ static int rtl8125_alloc_irq(struct rtl8125_private *tp)
+ {
+         struct net_device *dev = tp->dev;
+@@ -17718,6 +17735,18 @@ static int rtl8125_alloc_irq(struct rtl8125_private *tp)
+         struct r8125_napi *r8125napi;
+         int i = 0;
+         const int len = sizeof(tp->irq_tbl[0].name);
++#ifdef CONFIG_ARM64
++        cpumask_var_t big_core_mask;
++        int cpu;
++
++        /* Build mask of performance cores for IRQ affinity */
++        if (zalloc_cpumask_var(&big_core_mask, GFP_KERNEL)) {
++                for_each_online_cpu(cpu) {
++                        if (!rtl8125_is_little_core(cpu))
++                                cpumask_set_cpu(cpu, big_core_mask);
++                }
++        }
++#endif
+ 
+ #if defined(RTL_USE_NEW_INTR_API)
+         for (i=0; i<tp->irq_nvecs; i++) {
+@@ -17737,6 +17766,9 @@ static int rtl8125_alloc_irq(struct rtl8125_private *tp)
+ 
+                 irq->vector = pci_irq_vector(tp->pci_dev, i);
+                 irq->requested = 1;
++#ifdef CONFIG_ARM64
++                irq_set_affinity_hint(irq->vector, big_core_mask);
++#endif
+         }
+ #else
+         unsigned long irq_flags = 0;
+@@ -17774,6 +17806,9 @@ static int rtl8125_alloc_irq(struct rtl8125_private *tp)
+         if (rc)
+                 rtl8125_free_irq(tp);
+ 
++#ifdef CONFIG_ARM64
++        free_cpumask_var(big_core_mask);
++#endif
+         return rc;
+ }
+ 
+diff --git a/drivers/net/ethernet/realtek/r8126/r8126_n.c b/drivers/net/ethernet/realtek/r8126/r8126_n.c
+index 9174cee339773..55b989eb8fec1 100644
+--- a/drivers/net/ethernet/realtek/r8126/r8126_n.c
++++ b/drivers/net/ethernet/realtek/r8126/r8126_n.c
+@@ -71,6 +71,7 @@
+ #else
+ #include <linux/dma-mapping.h>
+ #include <linux/moduleparam.h>
++#include <linux/arch_topology.h>
+ #endif
+ 
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,31)
+@@ -13998,6 +13999,22 @@ static void rtl8126_free_irq(struct rtl8126_private *tp)
+         }
+ }
+ 
++#ifdef CONFIG_ARM64
++/*
++ * Check if CPU is a little/efficiency core based on capacity.
++ * On ARM big.LITTLE systems, efficiency cores have lower capacity (~446)
++ * compared to performance cores (~1024). We avoid scheduling network
++ * interrupts on little cores to reduce latency variance.
++ */
++#define RTL8126_LITTLE_CORE_CAPACITY 512
++
++static bool rtl8126_is_little_core(int cpu)
++{
++        unsigned long capacity = topology_get_cpu_scale(cpu);
++        return capacity < RTL8126_LITTLE_CORE_CAPACITY;
++}
++#endif
++
+ static int rtl8126_alloc_irq(struct rtl8126_private *tp)
+ {
+         struct net_device *dev = tp->dev;
+@@ -14006,6 +14023,18 @@ static int rtl8126_alloc_irq(struct rtl8126_private *tp)
+         struct r8126_napi *r8126napi;
+         int i = 0;
+         const int len = sizeof(tp->irq_tbl[0].name);
++#ifdef CONFIG_ARM64
++        cpumask_var_t big_core_mask;
++        int cpu;
++
++        /* Build mask of performance cores for IRQ affinity */
++        if (zalloc_cpumask_var(&big_core_mask, GFP_KERNEL)) {
++                for_each_online_cpu(cpu) {
++                        if (!rtl8126_is_little_core(cpu))
++                                cpumask_set_cpu(cpu, big_core_mask);
++                }
++        }
++#endif
+ 
+ #if defined(RTL_USE_NEW_INTR_API)
+         for (i=0; i<tp->irq_nvecs; i++) {
+@@ -14025,6 +14054,9 @@ static int rtl8126_alloc_irq(struct rtl8126_private *tp)
+ 
+                 irq->vector = pci_irq_vector(tp->pci_dev, i);
+                 irq->requested = 1;
++#ifdef CONFIG_ARM64
++                irq_set_affinity_hint(irq->vector, big_core_mask);
++#endif
+         }
+ #else
+         unsigned long irq_flags = 0;
+@@ -14062,6 +14094,9 @@ static int rtl8126_alloc_irq(struct rtl8126_private *tp)
+         if (rc)
+                 rtl8126_free_irq(tp);
+ 
++#ifdef CONFIG_ARM64
++        free_cpumask_var(big_core_mask);
++#endif
+         return rc;
+ }
+ 
+diff --git a/scripts/tracepoint-update b/scripts/tracepoint-update
+new file mode 100755
+index 0000000000000000000000000000000000000000..6cd2d90eadab4515e4fe22b5ca0b55920f36f71a
+GIT binary patch
+literal 73472
+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%0D3A^}1SuHrOa$;U
+zAeBx=V(lpkc7%hQ4HyGPDjc+hlrUsVrMueN5FH99!|jn&I-E4poklPkkA+jHB@{Q>
+zqw&^2)Ci^H$&?Z3+GchX4X4AQhQ`VsMq4BnF#^eCV7n2HrIXvKEg9$x8=<bw&g}@X
+zX$CygWv=09+d_;Z#X|~rgpx~_7^#kUTbrpYUSv~D3-YHT4}?orJ79W%k6371$-$<Z
+z_E=YE$;e8|>NOAwCCxTE9d086wWPvnX|ZXXjZ5KpE>yOG%c6wIuEH9P#5T*Q;WqFX
+zNHcM?)7ukhZ|}4<(T5GaKM?IQJpd24;hpN>(Ib*eGTX^;GysFBoHdxrHH<eL3z6{L
+znvA6JlBtBjzZ`1~Q*sgiS<Zi=tnr`a__GzrR+enq%81A+@(D`JkqAp9))qIt(2v;`
+zJ{BJ)2eJtdvuPM>Hu*NJHdf!U$}q@Sb?+U%4eM57tu^2ANn`a|VO_gw6B*6x?`-m|
+zH||`s=C0L#!|!WazuF)yifA~dH?LpUw9;7AaPu;RMkB33?5036ZFB}ACF9~Hln5u2
+z@no6%I{yZvw2Ay1R`M3|2U;;;!)Q&VL?(l<zzuVOCt(O~3-E3UM6p=x>Dm%q>7X4*
+zrIEa>$1SONGHrJ;!o1nZ+<l@?Od{xrC(4JG4C6?Nm!-!}HxCLPEn)Yk%BnGp_Re^0
+zcm!}x#f=WUb;RHTt<Eym-3iZ7BxZD_!Xaih*qN}`+1VK=)0q%Jgk2KCNfCB*ZH>Xk
+zA@OXOG$IO-!H!5QOl{_hEbFH$R=FnwQ`2tkPs6}W$yLKsC{Mw%3FHdRWYmWBP$GTt
+zVlodfYD?hEO}E*5rv~h~bf6V7owQ_!Y{lX@vD;%^4Xs^~XlP+1L=6ZJClh3%9f4E_
+zHH5aukinAaq-D83oJ>XHu`<PgjW-Slh*lz+=8O^iO^3JPFCWOT#mxoM5bh91Fb*mj
+z)~LZO%h$ASA>Vz>c<W@g;$<7%1Ue%@)DTBz{An<|vr=QBQv>cqojBsC!MABcLm-X&
+zQEOKkx0Aol#jjcUw+{JKDBojCInU9JykASW0S%WeUcT>^()k*feeKs$DDUI957~d8
+zXh<o)ugZSq_d=ONM}vP0lJNtgA*C*KJTBlpuJ~~VQa-<|6}XI-@7bj+z;3^s^>2ic
+zf7_Aq@_oFNjUrgqFa4zaEbRPSk<{gT`(Y{Kxqj~3IsPax&Mo8R`+X_T!p4{EU&hPv
+z-!E)UrWXzW4j_LIkiVC4{7ihD@fl!Tm-rcL`1b<&yMdfPxR{r$L+bpV(jG5=R~VKK
+z!sYjB8PD%6?eX&W2Pt2umY$Z>%T;;;x;<Y0P9de_NrpM=|Eh?W{L9}nr2L#Thy;>9
+zneS;wy!_om%2ST<JNw`3h?l>QNO_bOj_q>x|6SPZ`(OT!BBf@F<)*X$95AMs_ZDCB
+z_uvB;E#29l)TKNEH+~f@<K^!%xepnC0<paIWW0Qja9G6W1%HwT*{@tjgNS7p886=}
+z>=nPT=&;!@8878;VYJ7~--Awz_`UXEv}K%>e{{sl-;KJ>to&WF{E~4JeGd)BWc~7c
+zSg(lBOGhD{@qY%+^*1{FWc+Lg&c1v}=|Ka1CoHt|Hzz#il_0a_TtA%0u|-V3(;|Ma
+z_??2!k<a5J>zDhI-}}h1n}Om_x7VuhH97GDmvu{Deuq*izI~?UIn5E^Q0e~xrfYIL
+
+literal 0
+HcmV?d00001
+

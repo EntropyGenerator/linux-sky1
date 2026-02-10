@@ -1,0 +1,58 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Entrpi <entrpi@proton.me>
+Date: Sat, 7 Feb 2026 18:16:38 +1100
+Subject: [PATCH] usb: cdns3: Harden cdnsp-sky1 probe for ACPI boot
+
+Add a NULL guard for usb_syscon in sky1_set_mode_by_id() since the
+syscon regmap may not be available under ACPI.
+
+Pre-validate all required clocks before drd_init touches hardware.
+drd_init asserts resets and disables clocks before re-enabling them;
+if clock lookup fails at that point the hardware is left in an
+inaccessible state, causing SErrors during xHCI probe. Validating
+clocks early ensures clean failure without touching hardware.
+---
+ drivers/usb/cdns3/cdnsp-sky1.c | 23 +++++++++++++++++++++++
+ 1 file changed, 23 insertions(+)
+
+diff --git a/drivers/usb/cdns3/cdnsp-sky1.c b/drivers/usb/cdns3/cdnsp-sky1.c
+index 378f955e59094..023c1fa937dc1 100644
+--- a/drivers/usb/cdns3/cdnsp-sky1.c
++++ b/drivers/usb/cdns3/cdnsp-sky1.c
+@@ -54,6 +54,9 @@ static int sky1_set_mode_by_id(struct device *dev, int mode)
+ {
+ 	struct cdnsp_sky1 *data = dev_get_drvdata(dev);
+ 
++	if (!data->usb_syscon)
++		return 0;
++
+ 	return regmap_update_bits(data->usb_syscon,
+ 			sky1_usb_signals[data->id].offset,
+ 			GENMASK(sky1_usb_signals[data->id].bit+1,
+@@ -610,6 +613,26 @@ static int cdnsp_sky1_probe(struct platform_device *pdev)
+ 	if (!data->device_base)
+ 		return PTR_ERR(data->device_base);
+ 
++	/*
++	 * Pre-validate clocks before drd_init touches hardware.
++	 * drd_init asserts resets and disables clocks before trying
++	 * to re-enable them; if clock lookup fails at that point the
++	 * hardware is left inaccessible, causing SErrors on xHCI probe.
++	 * Validate here so we fail cleanly without touching hardware.
++	 */
++	{
++		int i;
++
++		for (i = 0; i < CIX_USB_CLK_NUM; i++) {
++			struct clk *clk = devm_clk_get(dev,
++						       cix_usb_clk_names[i]);
++			if (IS_ERR(clk))
++				return dev_err_probe(dev, PTR_ERR(clk),
++					"could not get %s clock\n",
++					cix_usb_clk_names[i]);
++		}
++	}
++
+ 	ret = cdnsp_sky1_drd_init(data);
+ 	if (ret == -ETIMEDOUT)
+ 		return -EPROBE_DEFER;

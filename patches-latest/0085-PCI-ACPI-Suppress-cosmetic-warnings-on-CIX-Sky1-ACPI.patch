@@ -1,0 +1,58 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Entrpi <entrpi@proton.me>
+Date: Sat, 7 Feb 2026 22:11:07 +1100
+Subject: [PATCH] PCI: ACPI: Suppress cosmetic warnings on CIX Sky1 ACPI boot
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+On ACPI-only systems with CIX Sky1 SoC, two harmless warnings appear
+during PCI enumeration:
+
+1. "of_root node is NULL" from PCI OF bridge node creation — expected
+   on ACPI systems where there is no device tree. Silence the error
+   and return quietly when !of_root, since the DT overlay path is
+   simply not applicable.
+
+2. CIXH2020 platform device creation fails with -EBUSY because the
+   PCIe controller register regions overlap with PCI root bridge
+   resources. These vendor ACPI devices (Cadence PCIe controllers)
+   are not needed as platform devices — firmware already initializes
+   the hardware, and PCI enumeration proceeds via the PNP0A08 root
+   bridges. Add CIXH2020 to the forbidden_id_list to prevent
+   unnecessary platform device creation attempts.
+---
+ drivers/acpi/acpi_platform.c | 1 +
+ drivers/pci/of.c             | 6 ++----
+ 2 files changed, 3 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/acpi/acpi_platform.c b/drivers/acpi/acpi_platform.c
+index 48d15dd785f6e..7631935ba2ae4 100644
+--- a/drivers/acpi/acpi_platform.c
++++ b/drivers/acpi/acpi_platform.c
+@@ -30,6 +30,7 @@ static const struct acpi_device_id forbidden_id_list[] = {
+ 	{"PNP0100",  0},	/* Timer */
+ 	{"PNP0200",  0},	/* AT DMA Controller */
+ 	{ACPI_SMBUS_MS_HID,  ACPI_ALLOW_WO_RESOURCES},	/* ACPI SMBUS virtual device */
++	{"CIXH2020", 0},	/* CIX Sky1 PCIe controller (handled via PNP0A08) */
+ 	{ }
+ };
+ 
+diff --git a/drivers/pci/of.c b/drivers/pci/of.c
+index 3579265f11984..cf54a54f27091 100644
+--- a/drivers/pci/of.c
++++ b/drivers/pci/of.c
+@@ -773,11 +773,9 @@ void of_pci_make_host_bridge_node(struct pci_host_bridge *bridge)
+ 		return;
+ 	}
+ 
+-	/* Check if there is a DT root node to attach the created node */
+-	if (!of_root) {
+-		pr_err("of_root node is NULL, cannot create PCI host bridge node\n");
++	/* On ACPI systems there is no DT root — this is expected */
++	if (!of_root)
+ 		return;
+-	}
+ 
+ 	name = kasprintf(GFP_KERNEL, "pci@%x,%x", pci_domain_nr(bridge->bus),
+ 			 bridge->bus->number);

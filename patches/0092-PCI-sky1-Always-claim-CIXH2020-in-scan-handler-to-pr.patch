@@ -1,0 +1,70 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Entrpi <entrpi@proton.me>
+Date: Sun, 8 Feb 2026 22:05:41 +1100
+Subject: [PATCH] PCI: sky1: Always claim CIXH2020 in scan handler to prevent
+ fallback
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+All failure paths in sky1_cixh2020_create_pdev() returned 0 (unhandled),
+which lets ACPI core fall through to default platform device enumeration.
+Default enumeration creates the device with fwnode, hitting the fw_devlink
+deadlock (CIXHA010→CIXH2023→CIXH2020 supplier chain) that the scan
+handler was specifically designed to avoid.  Meanwhile PNP0A08 is already
+blocked, so the controller is left with no working path.
+
+Return 1 (claimed) on all failure paths.  A stranded controller with a
+dev_err is preferable to a silent hang from fw_devlink deferred probe.
+---
+ drivers/pci/controller/cadence/pci-sky1-acpi.c | 17 ++++++++++++-----
+ 1 file changed, 12 insertions(+), 5 deletions(-)
+
+diff --git a/drivers/pci/controller/cadence/pci-sky1-acpi.c b/drivers/pci/controller/cadence/pci-sky1-acpi.c
+index 4e3d879a47261..1ad1318035904 100644
+--- a/drivers/pci/controller/cadence/pci-sky1-acpi.c
++++ b/drivers/pci/controller/cadence/pci-sky1-acpi.c
+@@ -55,6 +55,12 @@ static int sky1_cixh2020_res_filter(struct acpi_resource *ares, void *data)
+  * Replicates the key parts of acpi_create_platform_device() but with
+  * our resource filter to exclude PCI window resources that can't be
+  * claimed by platform_device_add().
++ *
++ * Always returns 1 (handled) — even on failure.  PNP0A08 is already
++ * blocked, so falling through to default ACPI enumeration (return 0)
++ * would create a platform device with fwnode, hitting the fw_devlink
++ * deadlock we're explicitly avoiding.  A stranded controller with an
++ * error log is preferable to a silent hang.
+  */
+ static int sky1_cixh2020_create_pdev(struct acpi_device *adev)
+ {
+@@ -71,14 +77,15 @@ static int sky1_cixh2020_create_pdev(struct acpi_device *adev)
+ 				       sky1_cixh2020_res_filter, NULL);
+ 	if (count <= 0) {
+ 		acpi_dev_free_resource_list(&resource_list);
+-		dev_warn(&adev->dev, "no usable resources in _CRS\n");
+-		return 0;
++		dev_err(&adev->dev, "no usable resources in _CRS, controller stranded\n");
++		return 1; /* claim to prevent default enumeration (fw_devlink) */
+ 	}
+ 
+ 	resources = kcalloc(count, sizeof(*resources), GFP_KERNEL);
+ 	if (!resources) {
+ 		acpi_dev_free_resource_list(&resource_list);
+-		return -ENOMEM;
++		dev_err(&adev->dev, "resource alloc failed, controller stranded\n");
++		return 1; /* claim to prevent default enumeration (fw_devlink) */
+ 	}
+ 
+ 	i = 0;
+@@ -105,9 +112,9 @@ static int sky1_cixh2020_create_pdev(struct acpi_device *adev)
+ 	kfree(resources);
+ 
+ 	if (IS_ERR(pdev)) {
+-		dev_err(&adev->dev, "platform device creation failed: %ld\n",
++		dev_err(&adev->dev, "platform device creation failed: %ld, controller stranded\n",
+ 			PTR_ERR(pdev));
+-		return 0;
++		return 1; /* claim to prevent default enumeration (fw_devlink) */
+ 	}
+ 
+ 	dev_info(&adev->dev, "Sky1: created platform device %s (%d resources)\n",

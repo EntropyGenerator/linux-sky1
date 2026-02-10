@@ -1,0 +1,152 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Entrpi <entrpi@proton.me>
+Date: Thu, 5 Feb 2026 09:41:18 +1100
+Subject: [PATCH] arm64: dts: cix: Add missing DPU SIDs and enable GOP RMR from
+ IORT
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Cross-reference vendor ACPI IORT table to fix two issues:
+
+Add the 5th DMA stream ID to each display controller's iommus property.
+The IORT declares 5 SIDs per DPU instance (at group offsets 0, 1, 3, 4,
+5 — offset 2 is the audio encoder) but only 4 were listed in the DTS.
+
+Enable the dpu_gop reserved-memory node and correct its size from 32MB
+to 8MB to match the IORT Reserved Memory Region. This region holds the
+firmware boot splash framebuffer and needs iommu-addresses identity
+mappings so the SMMU doesn't block display DMA during the handoff from
+firmware to the display driver.
+
+IORT source: hw-extract-o6-acpi/acpi/IORT (decompiled with iasl)
+---
+ arch/arm64/boot/dts/cix/sky1.dtsi | 35 ++++++++++++++++---------------
+ 1 file changed, 18 insertions(+), 17 deletions(-)
+
+diff --git a/arch/arm64/boot/dts/cix/sky1.dtsi b/arch/arm64/boot/dts/cix/sky1.dtsi
+index 3eaca2bee81e6..e21458f9f4810 100644
+--- a/arch/arm64/boot/dts/cix/sky1.dtsi
++++ b/arch/arm64/boot/dts/cix/sky1.dtsi
+@@ -496,13 +496,12 @@ linux,cma {
+ 		};
+ 
+ 		dpu_gop: dpu_gop@84800000 {
+-			reg = <0x0 0x84800000 0x0 0x2000000>;
+-			iommu-addresses = <&dpu0 0x0 0x84800000 0x0 0x02000000>,
+-				<&dpu1 0x0 0x84800000 0x0 0x02000000>,
+-				<&dpu2 0x0 0x84800000 0x0 0x02000000>,
+-				<&dpu3 0x0 0x84800000 0x0 0x02000000>,
+-				<&dpu4 0x0 0x84800000 0x0 0x02000000>;
+-			status = "disabled"; /* not for device dma and cma memory */
++			reg = <0x0 0x84800000 0x0 0x800000>;
++			iommu-addresses = <&dpu0 0x0 0x84800000 0x0 0x800000>,
++				<&dpu1 0x0 0x84800000 0x0 0x800000>,
++				<&dpu2 0x0 0x84800000 0x0 0x800000>,
++				<&dpu3 0x0 0x84800000 0x0 0x800000>,
++				<&dpu4 0x0 0x84800000 0x0 0x800000>;
+ 			no-map;
+ 		};
+ 
+@@ -553,9 +552,11 @@ sfh_vdev0buffer: vdev0buffer@84008000 {		/* 1M for tx/rx buffer */
+ 			no-map;
+ 		};
+ 
++		/* Disabled: overlaps dpu_gop@84800000 and SFH is unused */
+ 		sfh_sharebuffer: sfh_sharebuffer@84800000 {
+ 			reg = <0x0 0x84800000 0x0 0x800000>; /* 8M for IPC */
+ 			no-map;
++			status = "disabled";
+ 		};
+ 
+ 		sfh_ram: ram0@1ca0000000 {	/* 512KB RAM */
+@@ -2612,7 +2613,8 @@ dpu0: disp-controller@14010000 {
+ 			reg = <0x0 0x14010000 0x0 0x20000>;
+ 			interrupts = <GIC_SPI 316 IRQ_TYPE_LEVEL_HIGH 0>;
+ 			iommus = <&smmu_mmhub 0>, <&smmu_mmhub 1>,
+-				 <&smmu_mmhub 3>, <&smmu_mmhub 4>;
++				 <&smmu_mmhub 3>, <&smmu_mmhub 4>,
++				 <&smmu_mmhub 5>;
+ 			power-domains = <&smc_devpd SKY1_PD_DPU0>;
+ 			power-domain-names = "dpu_pd";
+ 			clocks = <&scmi_clk CLK_TREE_DPU0_ACLK>;
+@@ -2620,7 +2622,6 @@ dpu0: disp-controller@14010000 {
+ 			resets = <&src SKY1_DPU0_RCSU_RESET_N>,
+ 					<&src SKY1_DPU_RESET0_N>;
+ 			reset-names = "rcsu_reset", "ip_reset";
+-			memory-region = <&dpu_gop>;
+ 			enabled_by_gop = <0>;
+ 			status = "disabled";
+ 
+@@ -2645,7 +2646,8 @@ dpu1: disp-controller@14080000 {
+ 			reg = <0x0 0x14080000 0x0 0x20000>;
+ 			interrupts = <GIC_SPI 318 IRQ_TYPE_LEVEL_HIGH 0>;
+ 			iommus = <&smmu_mmhub 6>, <&smmu_mmhub 7>,
+-				 <&smmu_mmhub 9>, <&smmu_mmhub 10>;
++				 <&smmu_mmhub 9>, <&smmu_mmhub 10>,
++				 <&smmu_mmhub 11>;
+ 			power-domains = <&smc_devpd SKY1_PD_DPU1>;
+ 			power-domain-names = "dpu_pd";
+ 			clocks = <&scmi_clk CLK_TREE_DPU1_ACLK>;
+@@ -2653,7 +2655,6 @@ dpu1: disp-controller@14080000 {
+ 			resets = <&src SKY1_DPU1_RCSU_RESET_N>,
+ 					<&src SKY1_DPU_RESET1_N>;
+ 			reset-names = "rcsu_reset", "ip_reset";
+-			memory-region = <&dpu_gop>;
+ 			enabled_by_gop = <0>;
+ 			status = "disabled";
+ 
+@@ -2678,7 +2679,8 @@ dpu2: disp-controller@140f0000 {
+ 			reg = <0x0 0x140f0000 0x0 0x20000>;
+ 			interrupts = <GIC_SPI 320 IRQ_TYPE_LEVEL_HIGH 0>;
+ 			iommus = <&smmu_mmhub 12>, <&smmu_mmhub 13>,
+-				 <&smmu_mmhub 15>, <&smmu_mmhub 16>;
++				 <&smmu_mmhub 15>, <&smmu_mmhub 16>,
++				 <&smmu_mmhub 17>;
+ 			power-domains = <&smc_devpd SKY1_PD_DPU2>;
+ 			power-domain-names = "dpu_pd";
+ 			clocks = <&scmi_clk CLK_TREE_DPU2_ACLK>;
+@@ -2686,7 +2688,6 @@ dpu2: disp-controller@140f0000 {
+ 			resets = <&src SKY1_DPU2_RCSU_RESET_N>,
+ 					<&src SKY1_DPU_RESET2_N>;
+ 			reset-names = "rcsu_reset", "ip_reset";
+-			memory-region = <&dpu_gop>;
+ 			enabled_by_gop = <0>;
+ 			status = "disabled";
+ 
+@@ -2711,7 +2712,8 @@ dpu3: disp-controller@14160000 {
+ 			reg = <0x0 0x14160000 0x0 0x20000>;
+ 			interrupts = <GIC_SPI 322 IRQ_TYPE_LEVEL_HIGH 0>;
+ 			iommus = <&smmu_mmhub 18>, <&smmu_mmhub 19>,
+-				 <&smmu_mmhub 21>, <&smmu_mmhub 22>;
++				 <&smmu_mmhub 21>, <&smmu_mmhub 22>,
++				 <&smmu_mmhub 23>;
+ 			power-domains = <&smc_devpd SKY1_PD_DPU3>;
+ 			power-domain-names = "dpu_pd";
+ 			clocks = <&scmi_clk CLK_TREE_DPU3_ACLK>;
+@@ -2719,7 +2721,6 @@ dpu3: disp-controller@14160000 {
+ 			resets = <&src SKY1_DPU3_RCSU_RESET_N>,
+ 					<&src SKY1_DPU_RESET3_N>;
+ 			reset-names = "rcsu_reset", "ip_reset";
+-			memory-region = <&dpu_gop>;
+ 			enabled_by_gop = <0>;
+ 			status = "disabled";
+ 
+@@ -2744,7 +2745,8 @@ dpu4: disp-controller@141d0000 {
+ 			reg = <0x0 0x141d0000 0x0 0x20000>;
+ 			interrupts = <GIC_SPI 324 IRQ_TYPE_LEVEL_HIGH 0>;
+ 			iommus = <&smmu_mmhub 24>, <&smmu_mmhub 25>,
+-				 <&smmu_mmhub 27>, <&smmu_mmhub 28>;
++				 <&smmu_mmhub 27>, <&smmu_mmhub 28>,
++				 <&smmu_mmhub 29>;
+ 			power-domains = <&smc_devpd SKY1_PD_DPU4>;
+ 			power-domain-names = "dpu_pd";
+ 			clocks = <&scmi_clk CLK_TREE_DPU4_ACLK>;
+@@ -2752,7 +2754,6 @@ dpu4: disp-controller@141d0000 {
+ 			resets = <&src SKY1_DPU4_RCSU_RESET_N>,
+ 					<&src SKY1_DPU_RESET4_N>;
+ 			reset-names = "rcsu_reset", "ip_reset";
+-			memory-region = <&dpu_gop>;
+ 			enabled_by_gop = <0>;
+ 			status = "disabled";
+ 
