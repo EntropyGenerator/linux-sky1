@@ -103,7 +103,7 @@ echo "deb [signed-by=/usr/share/keyrings/sky1-linux.asc] https://sky1-linux.gith
 
 # Install kernel
 sudo apt update
-sudo apt install linux-image-6.18.9-sky1 linux-headers-6.18.9-sky1 sky1-firmware
+sudo apt install linux-image-sky1 sky1-firmware
 ```
 
 ## Verifying Your Config
@@ -125,7 +125,7 @@ This checks for missing required options and shows differences from the Sky1 def
 - [sky1-linux-build](https://github.com/Sky1-Linux/sky1-linux-build) - Build tooling for kernel packages
 - [apt](https://github.com/Sky1-Linux/apt) - APT repository
 - [sky1-firmware](https://github.com/Sky1-Linux/sky1-firmware) - Firmware packages
-- [sky1-drivers-dkms](https://github.com/Sky1-Linux/sky1-drivers-dkms) - DKMS drivers (VPU, NPU, 5GbE)
+
 
 ## License
 
