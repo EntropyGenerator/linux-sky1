@@ -67,13 +67,23 @@ These are required for Sky1 hardware to function:
 | `PINCTRL_SKY1` | bool | Sky1 pin muxing |
 | `RESET_SKY1` | bool | Reset controller |
 | `CLK_SKY1_AUDSS` | bool | Audio subsystem clocks |
+| `CLK_SKY1_ACPI` | bool | ACPI clock bridge (bridges SCMI clocks to ACPI consumers) |
 | `CIX_MBOX` | bool | SCMI mailbox (power/thermal) |
 | `GPIO_CADENCE` | bool | Cadence GPIO IP |
+| `SKY1_GPT_TIMER` | module | Sky1 general-purpose timer |
+| `SENSORS_CIX_FAN` | module | ACPI-based fan control |
 
 ## Thermal & Power Management
 
 Thermal management and power allocation are handled by mainline kernel (SCMI cpufreq driver).
 No vendor-specific thermal drivers are needed.
+
+## ACPI Infrastructure
+
+| Config | Type | Purpose |
+|--------|------|---------|
+| `CIX_ACPI_RESOURCE_LOOKUP` | bool | Processes RSTL/RSNL/DLKL tables for resets, resource names, device links |
+| `CIX_ACPI_USB_SCAN` | bool | Blocks PNP0D10 so vendor USB drivers own the hardware |
 
 ## USB Support
 
