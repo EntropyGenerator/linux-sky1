@@ -34,17 +34,28 @@ The script will:
 - Warn about **missing recommended options** for specific hardware features
 - Show all differences between your config and the default
 
+### Set a config option across all tracks (developers)
+
+```bash
+# Set an option across all tracks, policy, and docs (dry-run by default)
+~/sky1-linux-distro/sky1-linux-build/scripts/manage-config.py set USB_UAS=m \
+    --policy usb --doc "USB Support" --type module --desc "USB Attached SCSI" --apply
+
+# Show current state of an option
+~/sky1-linux-distro/sky1-linux-build/scripts/manage-config.py show USB_UAS
+```
+
 ### Cross-track reconciliation (developers)
 
 ```bash
 # Check all track configs for policy violations and divergence
-~/mainline-linux/scripts/reconcile-configs.py
+~/sky1-linux-distro/sky1-linux-build/scripts/reconcile-configs.py
 
 # Auto-fix policy violations
-~/mainline-linux/scripts/reconcile-configs.py --fix
+~/sky1-linux-distro/sky1-linux-build/scripts/reconcile-configs.py --fix
 
 # Review config changes after rebasing to a new kernel version
-~/mainline-linux/scripts/reconcile-configs.py --review .config.pre-rebase .config
+~/sky1-linux-distro/sky1-linux-build/scripts/reconcile-configs.py --review .config.pre-rebase .config
 ```
 
 ### Config policy
