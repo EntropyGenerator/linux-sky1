@@ -111,3 +111,4 @@
 0111-usb-cdnsp-sky1-unify-DT-and-ACPI-init-paths-with-PHY.patch
 0112-phy-cix-usbdp-enable-full-PHY-reset-under-ACPI.patch
 0113-scripts-move-Sky1-dev-tools-to-sky1-linux-build-repo.patch
+0114-dmaengine-arm-dma350-fix-ACPI-probe-missing-address-.patch

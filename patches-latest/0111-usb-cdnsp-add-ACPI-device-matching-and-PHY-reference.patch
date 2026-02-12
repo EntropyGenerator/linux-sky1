@@ -1,0 +1,153 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Entrpi <entrpi@proton.me>
+Date: Thu, 12 Feb 2026 12:43:44 +1100
+Subject: [PATCH] usb: cdnsp: add ACPI device matching and PHY reference
+ resolution
+
+Add CIXH2031 ACPI device ID to cdnsp-plat so the Cadence USBSSP
+controller probes under ACPI boot.
+
+The PHY framework's phy_get() only resolves DT phandles natively.
+Under ACPI, _DSD device references like "cdnsp,usb3-phy" point to
+child nodes of the PHY provider (e.g. ^^U3P4.USB0).  Add a helper
+that follows the ACPI _DSD reference, finds the parent PHY provider,
+and looks up the PHY via the provider's lookup table.  This gives
+the controller its USB2/USB3 PHY handles for proper SuperSpeed
+link training.
+---
+ drivers/usb/cdns3/cdnsp-plat.c | 84 ++++++++++++++++++++++++++++++++++
+ 1 file changed, 84 insertions(+)
+
+diff --git a/drivers/usb/cdns3/cdnsp-plat.c b/drivers/usb/cdns3/cdnsp-plat.c
+index 0132aa18ee063..b58cc37cf0971 100644
+--- a/drivers/usb/cdns3/cdnsp-plat.c
++++ b/drivers/usb/cdns3/cdnsp-plat.c
+@@ -13,17 +13,80 @@
+  *         Roger Quadros <rogerq@ti.com>
+  */
+ 
++#include <linux/acpi.h>
+ #include <linux/module.h>
+ #include <linux/irq.h>
+ #include <linux/kernel.h>
+ #include <linux/of.h>
++#include <linux/phy/phy.h>
+ #include <linux/platform_device.h>
+ #include <linux/pm_runtime.h>
++#include <linux/property.h>
+ 
+ #include "core.h"
+ #include "gadget-export.h"
+ #include "drd.h"
+ 
++/*
++ * Resolve a PHY reference from an ACPI _DSD property.
++ *
++ * Under DT, devm_phy_optional_get() resolves PHY phandles directly.
++ * Under ACPI, _DSD device references (e.g. "cdnsp,usb3-phy" → ^^U3P4.USB0)
++ * are not handled by the PHY framework.  Resolve the reference manually:
++ * find the referenced fwnode, get its parent device (the PHY provider),
++ * and look up the PHY via the provider's lookup table.
++ *
++ * Based on the vendor kernel's devm_phy_optional_ref_get().
++ */
++static void cdnsp_phy_release(struct device *dev, void *res)
++{
++	struct phy *phy = *(struct phy **)res;
++
++	phy_put(dev, phy);
++}
++
++static struct phy *cdnsp_acpi_phy_ref_get(struct device *dev, const char *name)
++{
++	struct fwnode_handle *ref_fwnode, *parent_fwnode;
++	const char *phy_con_id;
++	struct device *phy_dev;
++	struct phy **ptr, *phy;
++
++	ref_fwnode = fwnode_find_reference(dev_fwnode(dev), name, 0);
++	if (IS_ERR_OR_NULL(ref_fwnode))
++		return NULL;
++
++	phy_con_id = fwnode_get_name(ref_fwnode);
++
++	parent_fwnode = fwnode_get_parent(ref_fwnode);
++	fwnode_handle_put(ref_fwnode);
++	if (!parent_fwnode)
++		return NULL;
++
++	phy_dev = get_dev_from_fwnode(parent_fwnode);
++	fwnode_handle_put(parent_fwnode);
++	if (!phy_dev)
++		return NULL;
++
++	ptr = devres_alloc(cdnsp_phy_release, sizeof(*ptr), GFP_KERNEL);
++	if (!ptr) {
++		put_device(phy_dev);
++		return ERR_PTR(-ENOMEM);
++	}
++
++	phy = phy_get(phy_dev, phy_con_id);
++	put_device(phy_dev);
++
++	if (IS_ERR_OR_NULL(phy)) {
++		devres_free(ptr);
++		return NULL;
++	}
++
++	*ptr = phy;
++	devres_add(dev, ptr);
++	return phy;
++}
++
+ static int set_phy_power_on(struct cdns *cdns)
+ {
+ 	int ret;
+@@ -128,6 +191,13 @@ static int cdnsp_plat_probe(struct platform_device *pdev)
+ 		return dev_err_probe(dev, PTR_ERR(cdns->usb2_phy),
+ 				     "Failed to get cdnsp,usb2-phy\n");
+ 
++	/* ACPI: _DSD device references aren't resolved by the PHY framework */
++	if (!cdns->usb2_phy) {
++		cdns->usb2_phy = cdnsp_acpi_phy_ref_get(dev, "cdnsp,usb2-phy");
++		if (IS_ERR(cdns->usb2_phy))
++			return PTR_ERR(cdns->usb2_phy);
++	}
++
+ 	ret = phy_init(cdns->usb2_phy);
+ 	if (ret)
+ 		return ret;
+@@ -137,6 +207,13 @@ static int cdnsp_plat_probe(struct platform_device *pdev)
+ 		return dev_err_probe(dev, PTR_ERR(cdns->usb3_phy),
+ 				     "Failed to get cdnsp,usb3-phy\n");
+ 
++	/* ACPI: _DSD device references aren't resolved by the PHY framework */
++	if (!cdns->usb3_phy) {
++		cdns->usb3_phy = cdnsp_acpi_phy_ref_get(dev, "cdnsp,usb3-phy");
++		if (IS_ERR(cdns->usb3_phy))
++			return PTR_ERR(cdns->usb3_phy);
++	}
++
+ 	ret = phy_init(cdns->usb3_phy);
+ 	if (ret)
+ 		goto err_phy3_init;
+@@ -328,12 +405,19 @@ static const struct of_device_id of_cdnsp_match[] = {
+ MODULE_DEVICE_TABLE(of, of_cdnsp_match);
+ #endif
+ 
++static const struct acpi_device_id acpi_cdnsp_match[] = {
++	{ "CIXH2031" },
++	{ },
++};
++MODULE_DEVICE_TABLE(acpi, acpi_cdnsp_match);
++
+ static struct platform_driver cdnsp_driver = {
+ 	.probe		= cdnsp_plat_probe,
+ 	.remove		= cdnsp_plat_remove,
+ 	.driver		= {
+ 		.name	= "cdns-usbssp",
+ 		.of_match_table	= of_match_ptr(of_cdnsp_match),
++		.acpi_match_table = acpi_cdnsp_match,
+ 		.pm	= &cdnsp_pm_ops,
+ 	},
+ };

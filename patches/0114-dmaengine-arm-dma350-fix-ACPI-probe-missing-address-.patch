@@ -1,0 +1,104 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Entrpi <entrpi@proton.me>
+Date: Thu, 12 Feb 2026 19:06:10 +1100
+Subject: [PATCH] dmaengine: arm-dma350: fix ACPI probe missing address
+ translation and IRQ routing
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The DMA-350 driver read address translation maps (arm,reg-map,
+arm,ram-map) using of_property_read_u32_array() which only works
+with Device Tree.  Under ACPI these properties are present in _DSD
+but were silently ignored, causing the controller to use untranslated
+CPU addresses for DMA transfers.
+
+The remote control regmap (arm,remote-ctrl) used to route per-channel
+DMA completion interrupts to the application processor was resolved
+via syscon_regmap_lookup_by_phandle(), also DT-only.  Without it,
+the AUDSS_CRU_AP_IRQ bits were never set and DMA interrupts never
+reached the GIC — resulting in zero DMA completions, I2S FIFO
+starvation, and an interrupt storm of ~600K/s on the I2S IRQ line.
+
+Fix the address maps by switching to device_property_read_u32_array()
+which works for both DT and ACPI.  For the remote control regmap,
+add an ACPI fallback that resolves the _DSD device reference via
+fwnode_find_reference(), finds the corresponding syscon platform
+device, and obtains its regmap.
+
+This fixes HDMI audio output under ACPI boot on Sky1/Orion O6.
+---
+ drivers/dma/arm-dma350.c | 32 ++++++++++++++++++++++++++------
+ 1 file changed, 26 insertions(+), 6 deletions(-)
+
+diff --git a/drivers/dma/arm-dma350.c b/drivers/dma/arm-dma350.c
+index 4dcc7868fa534..463258bffa135 100644
+--- a/drivers/dma/arm-dma350.c
++++ b/drivers/dma/arm-dma350.c
+@@ -18,6 +18,7 @@
+ #include <linux/module.h>
+ #include <linux/platform_device.h>
+ #include <linux/pm_runtime.h>
++#include <linux/property.h>
+ #include <linux/regmap.h>
+ #include <linux/reset.h>
+ 
+@@ -1373,16 +1374,16 @@ static int d350_probe(struct platform_device *pdev)
+ 	{
+ 		u32 reg_map[2], ram_map[2];
+ 
+-		if (of_property_read_u32_array(dev->of_node, "arm,reg-map",
+-					       reg_map, 2) == 0) {
++		if (device_property_read_u32_array(dev, "arm,reg-map",
++						   reg_map, 2) == 0) {
+ 			dmac->addr_xlat.reg_cpu = reg_map[0];
+ 			dmac->addr_xlat.reg_dma = reg_map[1];
+ 			dev_info(dev, "Address translation: reg 0x%llx -> 0x%llx\n",
+ 				 dmac->addr_xlat.reg_cpu, dmac->addr_xlat.reg_dma);
+ 		}
+ 
+-		if (of_property_read_u32_array(dev->of_node, "arm,ram-map",
+-					       ram_map, 2) == 0) {
++		if (device_property_read_u32_array(dev, "arm,ram-map",
++						   ram_map, 2) == 0) {
+ 			dmac->addr_xlat.ram_cpu = ram_map[0];
+ 			dmac->addr_xlat.ram_dma = ram_map[1];
+ 			dev_info(dev, "Address translation: ram 0x%llx -> 0x%llx\n",
+@@ -1396,6 +1397,25 @@ static int d350_probe(struct platform_device *pdev)
+ 	 */
+ 	dmac->remote_ctrl = syscon_regmap_lookup_by_phandle(dev->of_node,
+ 							    "arm,remote-ctrl");
++	if (IS_ERR(dmac->remote_ctrl) && has_acpi_companion(dev)) {
++		struct fwnode_handle *fw;
++		struct device *syscon_dev;
++
++		fw = fwnode_find_reference(dev_fwnode(dev),
++					  "arm,remote-ctrl", 0);
++		if (!IS_ERR(fw)) {
++			syscon_dev = bus_find_device_by_fwnode(
++					&platform_bus_type, fw);
++			fwnode_handle_put(fw);
++			if (syscon_dev) {
++				dmac->remote_ctrl = dev_get_regmap(
++							syscon_dev, NULL);
++				put_device(syscon_dev);
++				if (!dmac->remote_ctrl)
++					dmac->remote_ctrl = ERR_PTR(-EPROBE_DEFER);
++			}
++		}
++	}
+ 	if (IS_ERR(dmac->remote_ctrl)) {
+ 		if (PTR_ERR(dmac->remote_ctrl) == -ENODEV)
+ 			dmac->remote_ctrl = NULL;  /* Optional */
+@@ -1403,9 +1423,9 @@ static int d350_probe(struct platform_device *pdev)
+ 			dev_dbg(dev, "No remote control regmap: %ld\n",
+ 				PTR_ERR(dmac->remote_ctrl));
+ 		dmac->remote_ctrl = NULL;
+-	} else {
+-		dev_info(dev, "Using remote control regmap for interrupt routing\n");
+ 	}
++	if (dmac->remote_ctrl)
++		dev_info(dev, "Using remote control regmap for interrupt routing\n");
+ 
+ 	dev_dbg(dev, "DMA-350 r%dp%d with %d channels, %d requests\n", r, p, dmac->nchan, dmac->nreq);
+ 

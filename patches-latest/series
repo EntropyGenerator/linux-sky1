@@ -107,3 +107,9 @@
 0107-audio-cix-sky1-enable-HDMI-DisplayPort-audio-output-.patch
 0108-reset-restore-lookup-table-API-for-ACPI-reset-consum.patch
 0109-scripts-kernel-track-status-handle-major-version-bum.patch
+0110-soc-cix-add-ACPI-USB-scan-handler-to-block-PNP0D10.patch
+0111-usb-cdnsp-add-ACPI-device-matching-and-PHY-reference.patch
+0112-usb-cdnsp-sky1-unify-DT-and-ACPI-init-paths-with-PHY.patch
+0113-phy-cix-usbdp-enable-full-PHY-reset-under-ACPI.patch
+0114-scripts-move-Sky1-dev-tools-to-sky1-linux-build-repo.patch
+0115-dmaengine-arm-dma350-fix-ACPI-probe-missing-address-.patch
