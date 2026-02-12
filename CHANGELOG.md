@@ -2,6 +2,21 @@
 
 All notable changes to the Sky1 kernel patch set.
 
+## [6.18.10-1] - 2026-02-12
+
+### Changed
+- Rebased to Linux 6.18.10 stable (113 patches)
+- Dropped redundant "reset: restore lookup table API" patch — already present in 6.18.x upstream (only needed on 6.19+ where it was removed)
+
+### Added
+- USB3 SuperSpeed under ACPI: deferred PHY probe ordering, ACPI device matching for CDNSP
+- USB Attached SCSI (UAS) enabled in config for improved USB storage throughput
+- ACPI USB scan handler (PNP0D10) to block premature XHCI probe before PHY ready
+- Full PHY reset under ACPI (phy-cix-usbdp)
+
+### Fixed
+- HDA Realtek alc269: resolved context conflict with upstream Yoga 9i fixup addition
+
 ## [6.19-1] - 2026-02-11
 
 ### Added

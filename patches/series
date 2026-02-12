@@ -106,3 +106,8 @@
 0106-clk-cix-sky1-acpi-use-CLKT-consumer-reference-for-cl.patch
 0107-audio-cix-sky1-enable-HDMI-DisplayPort-audio-output-.patch
 0108-scripts-kernel-track-status-handle-major-version-bum.patch
+0109-soc-cix-add-ACPI-USB-scan-handler-to-block-PNP0D10.patch
+0110-usb-cdnsp-add-ACPI-device-matching-and-PHY-reference.patch
+0111-usb-cdnsp-sky1-unify-DT-and-ACPI-init-paths-with-PHY.patch
+0112-phy-cix-usbdp-enable-full-PHY-reset-under-ACPI.patch
+0113-scripts-move-Sky1-dev-tools-to-sky1-linux-build-repo.patch

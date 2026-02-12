@@ -1,0 +1,184 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Entrpi <entrpi@proton.me>
+Date: Thu, 12 Feb 2026 12:45:40 +1100
+Subject: [PATCH] usb: cdnsp: sky1: unify DT and ACPI init paths with PHY probe
+ ordering
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Under ACPI, there is no guaranteed probe ordering between the USB
+wrapper (CIXH2030) and its PHY providers (CIXH2033/CIXH2034).  If the
+wrapper probes first, drd_init deasserts the controller reset while the
+PHY is still firmware-active.  When the PHY later probes and asserts
+resets, the controller sees an unexpected link drop that prevents USB3
+SuperSpeed enumeration — devices fall back to USB2 High-Speed.
+
+Add cdnsp_sky1_check_phy_deps() which follows each child controller's
+"cdnsp,usb3-phy" _DSD reference to find the PHY provider device, and
+returns -EPROBE_DEFER if it hasn't probed yet.  This replicates the DT
+ordering guarantee where PHY phandle dependencies ensure PHYs probe
+before their consumers.
+
+With PHY ordering guaranteed, the separate ACPI "skip drd_init" path is
+no longer needed.  Remove it and run the same full drd_init (timing
+prescalers, APB timeout, mode straps, AXI configuration) for both DT
+and ACPI.  The PNP0D10 scan handler (cix-acpi-usb-scan.c) blocks
+generic xHCI from claiming the hardware, so no conflict exists.
+
+Tested on Radxa Orion O6: ORICO USB 3.1 Gen 2 enclosure detected at
+SuperSpeed Plus (10 Gbps), dd write throughput 687 MB/s with UAS.
+---
+ drivers/usb/cdns3/cdnsp-sky1.c | 109 +++++++++++++++++++++++----------
+ 1 file changed, 78 insertions(+), 31 deletions(-)
+
+diff --git a/drivers/usb/cdns3/cdnsp-sky1.c b/drivers/usb/cdns3/cdnsp-sky1.c
+index 85330fe524087..ed61e2a928b14 100644
+--- a/drivers/usb/cdns3/cdnsp-sky1.c
++++ b/drivers/usb/cdns3/cdnsp-sky1.c
+@@ -23,6 +23,7 @@
+ #include <linux/mfd/syscon.h>
+ #include <linux/of_address.h>
+ #include <linux/device.h>
++#include <linux/property.h>
+ 
+ #include "core.h"
+ #include "../host/xhci.h"
+@@ -537,6 +538,55 @@ static const struct acpi_device_id cdns_sky1_sub_match[] = {
+ 	{},
+ };
+ 
++/*
++ * Ensure USB3 PHY providers have probed before the wrapper's drd_init.
++ *
++ * Under DT, PHY drivers probe before their consumers (phandle dependency).
++ * The PHY probe asserts resets, so when drd_init later configures the
++ * controller, the PHY is in a known reset state.
++ *
++ * Under ACPI, there's no guaranteed probe ordering.  If the wrapper
++ * probes first, drd_init deasserts the controller reset while the PHY
++ * is still active from firmware.  When the PHY later probes and asserts
++ * resets, the controller sees an unexpected link drop that prevents USB3
++ * enumeration.
++ *
++ * This check follows each child controller's "cdnsp,usb3-phy" _DSD
++ * reference to find the PHY provider device, and defers if it hasn't
++ * probed yet.
++ */
++static int cdnsp_sky1_check_phy_deps(struct device *dev)
++{
++	struct fwnode_handle *child;
++
++	device_for_each_child_node(dev, child) {
++		struct fwnode_handle *ref, *phy_parent;
++		struct device *phy_dev;
++
++		ref = fwnode_find_reference(child, "cdnsp,usb3-phy", 0);
++		if (IS_ERR_OR_NULL(ref))
++			continue;
++
++		phy_parent = fwnode_get_parent(ref);
++		fwnode_handle_put(ref);
++		if (!phy_parent)
++			continue;
++
++		phy_dev = bus_find_device_by_fwnode(&platform_bus_type,
++						    phy_parent);
++		fwnode_handle_put(phy_parent);
++		if (!phy_dev || !phy_dev->driver) {
++			if (phy_dev)
++				put_device(phy_dev);
++			fwnode_handle_put(child);
++			return -EPROBE_DEFER;
++		}
++		put_device(phy_dev);
++	}
++
++	return 0;
++}
++
+ static int cdnsp_sky1_probe(struct platform_device *pdev)
+ {
+ 	struct device *dev = &pdev->dev;
+@@ -545,6 +595,12 @@ static int cdnsp_sky1_probe(struct platform_device *pdev)
+ 	int ret;
+ 	struct cdns3_platform_data *cdns_sky1_pdata;
+ 
++	if (ACPI_COMPANION(dev)) {
++		ret = cdnsp_sky1_check_phy_deps(dev);
++		if (ret)
++			return ret;
++	}
++
+ 	data = devm_kzalloc(dev, sizeof(*data), GFP_KERNEL);
+ 	if (!data)
+ 		return -ENOMEM;
+@@ -623,29 +679,20 @@ static int cdnsp_sky1_probe(struct platform_device *pdev)
+ 	if (!data->device_base)
+ 		return PTR_ERR(data->device_base);
+ 
+-	if (ACPI_COMPANION(dev)) {
+-		/*
+-		 * Under ACPI, firmware already initialized clocks, resets,
+-		 * and controller mode.  The xHCI register space is driven
+-		 * by the generic xhci-plat driver via PNP0D10 devices.
+-		 * Calling drd_init would cycle clocks and assert resets,
+-		 * killing xHCI controllers that are already active.
+-		 *
+-		 * Acquire clock references for PM refcounting and set the
+-		 * AXI cache configuration — skip the full hardware reset.
+-		 */
+-		ret = sky1_usb_clk_enable_all(dev);
+-		if (ret)
+-			return ret;
+-		writel(CIX_USB_AXI_WR_CACHE_VALUE, data->axi_base);
+-	} else {
+-		/*
+-		 * Pre-validate clocks before drd_init touches hardware.
+-		 * drd_init asserts resets and disables clocks before trying
+-		 * to re-enable them; if clock lookup fails at that point the
+-		 * hardware is left inaccessible, causing SErrors on xHCI
+-		 * probe.  Validate here so we fail cleanly.
+-		 */
++	/*
++	 * Pre-validate clocks before drd_init touches hardware.
++	 * drd_init asserts resets and disables clocks before trying
++	 * to re-enable them; if clock lookup fails at that point the
++	 * hardware is left inaccessible, causing SErrors on child
++	 * driver probe.  Validate here so we fail cleanly.
++	 *
++	 * Under ACPI, PNP0D10 (generic xHCI) is blocked by the scan
++	 * handler in cix-acpi-usb-scan.c, so no other driver is using
++	 * this hardware.  Both DT and ACPI paths do the same full
++	 * drd_init: timing prescalers, APB timeout chicken bits, mode
++	 * straps, and AXI configuration.
++	 */
++	{
+ 		int i;
+ 
+ 		for (i = 0; i < CIX_USB_CLK_NUM; i++) {
+@@ -656,16 +703,16 @@ static int cdnsp_sky1_probe(struct platform_device *pdev)
+ 					"could not get %s clock\n",
+ 					cix_usb_clk_names[i]);
+ 		}
+-
+-		mutex_lock(&cdnsp_sky1_init_lock);
+-		ret = cdnsp_sky1_drd_init(data);
+-		mutex_unlock(&cdnsp_sky1_init_lock);
+-		if (ret == -ETIMEDOUT)
+-			return -EPROBE_DEFER;
+-		else if (ret)
+-			return ret;
+ 	}
+ 
++	mutex_lock(&cdnsp_sky1_init_lock);
++	ret = cdnsp_sky1_drd_init(data);
++	mutex_unlock(&cdnsp_sky1_init_lock);
++	if (ret == -ETIMEDOUT)
++		return -EPROBE_DEFER;
++	else if (ret)
++		return ret;
++
+ 	data->oc_gpio = devm_gpiod_get_optional(data->dev, "oc", GPIOD_IN);
+ 	if (IS_ERR(data->oc_gpio)) {
+ 		dev_err(data->dev, "[%s:%d] can not get oc_gpio\n", __func__, __LINE__);
