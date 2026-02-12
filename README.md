@@ -28,6 +28,7 @@ linux-sky1/
 │   ├── config.sky1-latest      # Latest config
 │   ├── config.sky1-rc          # RC config
 │   ├── config.sky1-next        # Next config
+│   ├── config-policy.ini       # Cross-track policy enforcement
 │   ├── diff-kernel-config.sh   # Config comparison tool
 │   └── README.md               # Config documentation
 └── CHANGELOG.md                # Patch set version history
@@ -45,10 +46,10 @@ linux-sky1/
 ### Apply to Kernel Source
 
 ```bash
-# Download kernel
-wget https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.18.9.tar.xz
-tar xf linux-6.18.9.tar.xz
-cd linux-6.18.9
+# Download kernel (replace with current LTS version)
+wget https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.18.x.tar.xz
+tar xf linux-6.18.x.tar.xz
+cd linux-6.18.x
 
 # Apply patches
 for p in /path/to/linux-sky1/patches/*.patch; do
@@ -82,7 +83,6 @@ make ARCH=arm64 -j$(nproc) Image modules dtbs
 | 10 | media: cix: vpu | Video codec (amvx) driver |
 | 11 | irqchip, iommu, perf | PDC, SMMU boot-active streams, ARM SPE heterogeneous CPU |
 | 12 | arm64: cix: misc | Thermal, PWM, watchdog, DDR LP, bus DVFS, CPU IPA, cpufreq |
-| 13 | scripts | Sky1 kernel development tools |
 
 ## Installing Pre-built Packages
 
@@ -120,9 +120,27 @@ This checks for missing required options and shows differences from the Sky1 def
 
 - [Kernel Configuration Guide](config/README.md) - Essential vs optional configs for Sky1
 
+## Config Management
+
+Config options can be set across all tracks, policy, and documentation with a single command:
+
+```bash
+# Set an option across all tracks (dry-run by default)
+~/sky1-linux-distro/sky1-linux-build/scripts/manage-config.py set USB_UAS=m \
+    --policy usb --doc "USB Support" --type module --desc "USB Attached SCSI" --apply
+
+# Show current state of an option
+~/sky1-linux-distro/sky1-linux-build/scripts/manage-config.py show USB_UAS
+
+# Validate all tracks against policy
+~/sky1-linux-distro/sky1-linux-build/scripts/reconcile-configs.py
+```
+
+See [config/README.md](config/README.md) for full details.
+
 ## Related Repositories
 
-- [sky1-linux-build](https://github.com/Sky1-Linux/sky1-linux-build) - Build tooling for kernel packages
+- [sky1-linux-build](https://github.com/Sky1-Linux/sky1-linux-build) - Build scripts and development tools
 - [apt](https://github.com/Sky1-Linux/apt) - APT repository
 - [sky1-firmware](https://github.com/Sky1-Linux/sky1-firmware) - Firmware packages
 
