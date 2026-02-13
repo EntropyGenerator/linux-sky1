@@ -76,7 +76,7 @@ make ARCH=arm64 -j$(nproc) Image modules dtbs
 | 03 | arm64: cix: infrastructure | SCMI, mailbox, pinctrl, clock, reset, hwspinlock, eFuse, SoC info |
 | 04 | usb: phy | CDNSP, RTS5453 Type-C PD, USBDP PHYs |
 | 05 | drm: cix: display | linlon-dp, trilin-dpsub display drivers |
-| 06 | drm/panthor | GPU support for Mali-G720-Immortalis |
+| 06 | drm/panthor | GPU support for Mali-G720-Immortalis (ACE-Lite bus coherency, DVFS) |
 | 07 | sound: audio | HDA, DMA-350, DSP drivers |
 | 08 | net | Realtek RTL8126 5GbE and RTL8125 2.5GbE drivers |
 | 09 | misc: armchina-npu | Zhouyi NPU driver |

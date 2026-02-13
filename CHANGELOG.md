@@ -2,6 +2,21 @@
 
 All notable changes to the Sky1 kernel patch set.
 
+## [6.18.10-2] - 2026-02-13
+
+### Added
+- drm/panthor: ACE-Lite bus coherency on Sky1 — GPU L2 evictions now route through the CHI fabric Home Node (HN-F) and System Level Cache (SLC), restoring write-back caching while maintaining display correctness. Matches vendor kbase driver configuration.
+- drm/panthor: Shareable Cache Support (AMBA_ENABLE bit 5) enabled when hardware reports support
+- soc: cix: ACPI scan handler to override GPU `_CCA` to non-coherent on Sky1 (DT parity)
+
+### Fixed
+- drm/panthor: Upstream coherency register bug — `GPU_COHERENCY_PROT_BIT(ACE_LITE)` expanded to BIT(0)=1 (ACE) instead of 0 (ACE_LITE). Fixed by writing protocol index directly.
+- drm: linlon-dp: DPU render node removed (conflicted with Panthor GPU), fbdev always enabled, pm_restore uses device_property API for ACPI, reset controls acquired in ACPI parse path
+
+### Notes
+- The previous NC memattr workaround (forcing all GPU memory non-cacheable) is superseded by ACE-Lite enablement. With ACE-Lite, GPU write-back data is visible to the non-snooping DPU via the SLC convergence point, so NC is no longer needed.
+- LTS: 118 patches (up from 114), Latest: 119 patches (up from 115)
+
 ## [6.18.10-1] - 2026-02-12
 
 ### Changed

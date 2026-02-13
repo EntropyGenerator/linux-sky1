@@ -113,3 +113,7 @@
 0113-phy-cix-usbdp-enable-full-PHY-reset-under-ACPI.patch
 0114-scripts-move-Sky1-dev-tools-to-sky1-linux-build-repo.patch
 0115-dmaengine-arm-dma350-fix-ACPI-probe-missing-address-.patch
+0116-soc-cix-add-ACPI-scan-handler-to-override-GPU-_CCA-o.patch
+0117-drm-linlon-dp-harden-DPU-for-ACPI-boot-and-Panthor-c.patch
+0118-drm-panthor-force-non-coherent-GPU-mode-and-NC-memat.patch
+0119-drm-panthor-enable-ACE-Lite-bus-coherency-on-Sky1.patch

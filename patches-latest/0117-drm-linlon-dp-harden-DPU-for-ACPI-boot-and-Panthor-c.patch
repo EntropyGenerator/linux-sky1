@@ -1,0 +1,142 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Entrpi <entrpi@proton.me>
+Date: Fri, 13 Feb 2026 16:38:47 +1100
+Subject: [PATCH] drm: linlon-dp: harden DPU for ACPI boot and Panthor
+ coexistence
+
+Three DPU driver fixes for ACPI boot reliability:
+
+- linlondp_kms.c: Remove enable_render module parameter and never
+  expose a render node. The DPU is display-only; exposing a render
+  node conflicts with the Panthor GPU render node, causing compositors
+  to pick the wrong device for rendering.
+
+- linlondp_drv.c: Remove enable_fb module parameter and always enable
+  fbdev emulation (required for console and boot splash). Switch
+  pm_restore from of_property_read_u32 to device_property_read_u32
+  so it works under both DT and ACPI.
+
+- linlondp_dev.c: Acquire reset controls in the ACPI parse path via
+  devm_reset_control_get_optional, matching the DT path.
+---
+ drivers/gpu/drm/cix/linlon-dp/linlondp_dev.c | 13 +++++++++++++
+ drivers/gpu/drm/cix/linlon-dp/linlondp_drv.c | 17 +++++++++--------
+ drivers/gpu/drm/cix/linlon-dp/linlondp_kms.c | 11 +++++------
+ 3 files changed, 27 insertions(+), 14 deletions(-)
+
+diff --git a/drivers/gpu/drm/cix/linlon-dp/linlondp_dev.c b/drivers/gpu/drm/cix/linlon-dp/linlondp_dev.c
+index 16412dcd678a7..d6c0f148bea68 100644
+--- a/drivers/gpu/drm/cix/linlon-dp/linlondp_dev.c
++++ b/drivers/gpu/drm/cix/linlon-dp/linlondp_dev.c
+@@ -12,6 +12,7 @@
+ #include <linux/platform_device.h>
+ #include <linux/pm_runtime.h>
+ #include <linux/dma-mapping.h>
++#include <linux/reset.h>
+ #ifdef CONFIG_DEBUG_FS
+ #include <linux/debugfs.h>
+ #include <linux/seq_file.h>
+@@ -537,6 +538,18 @@ static int linlondp_parse_acpi(struct device *dev, struct linlondp_dev *mdev)
+         return mdev->irq;
+     }
+ 
++    /* Acquire reset controls via RSTL (optional — don't fail probe) */
++    mdev->ip_rst = devm_reset_control_get_optional(dev, "ip_reset");
++    if (IS_ERR(mdev->ip_rst)) {
++        dev_warn(dev, "failed to get reset ip_reset: %pe\n", mdev->ip_rst);
++        mdev->ip_rst = NULL;
++    }
++    mdev->rcsu_rst = devm_reset_control_get_optional(dev, "rcsu_reset");
++    if (IS_ERR(mdev->rcsu_rst)) {
++        dev_warn(dev, "failed to get reset rcsu_reset: %pe\n", mdev->rcsu_rst);
++        mdev->rcsu_rst = NULL;
++    }
++
+     ret = 0;
+     fwnode_for_each_child_node(np, child) {
+         tmp_name = child->ops->get_name(child);
+diff --git a/drivers/gpu/drm/cix/linlon-dp/linlondp_drv.c b/drivers/gpu/drm/cix/linlon-dp/linlondp_drv.c
+index dd647f8a7935a..f3464a63c4265 100644
+--- a/drivers/gpu/drm/cix/linlon-dp/linlondp_drv.c
++++ b/drivers/gpu/drm/cix/linlon-dp/linlondp_drv.c
+@@ -9,6 +9,7 @@
+ #include <linux/platform_device.h>
+ #include <linux/component.h>
+ #include <linux/pm_runtime.h>
++#include <linux/property.h>
+ #include <drm/drm_fb_helper.h>
+ #include <drm/drm_module.h>
+ #include <drm/drm_of.h>
+@@ -16,9 +17,10 @@
+ #include "linlondp_dev.h"
+ #include "linlondp_kms.h"
+ 
+-static bool enable_fb = true;
+-module_param_named(enable_fb, enable_fb, bool, 0644);
+-MODULE_PARM_DESC(enable_fb, "Enable/Disable drm framebuffer support");
++/* Framebuffer emulation (fbdev) is always enabled — required for console
++ * and boot splash.  Previously a module parameter; hardcoded to avoid
++ * accidental misconfiguration.
++ */
+ 
+ struct linlondp_drv {
+ 	struct linlondp_dev *mdev;
+@@ -78,8 +80,7 @@ static int linlondp_bind(struct device *dev)
+ 	}
+ 
+ 	dev_set_drvdata(dev, mdrv);
+-	if (enable_fb)
+-		drm_client_setup(&mdrv->kms->base, NULL);
++	drm_client_setup(&mdrv->kms->base, NULL);
+ 
+ 	if (mdrv->mdev->enabled_by_gop)
+ 		pm_runtime_set_active(dev);
+@@ -164,7 +165,7 @@ static int linlondp_platform_probe(struct platform_device *pdev)
+ 	struct device_node *of_child;
+ 	const char *tmp_name = NULL;
+ 
+-	dev_dbg(dev, "probe enter, enable_fb=%d\n", enable_fb);
++	dev_dbg(dev, "probe enter\n");
+ #if !IS_ENABLED(CONFIG_DRM_CIX_COMPONENT_BIND_BYPASSED)
+ 	if (has_acpi_companion(dev)) {
+ 		dev_dbg(dev, "probe via ACPI\n");
+@@ -313,8 +314,8 @@ static int __maybe_unused linlondp_pm_restore(struct device *dev)
+ {
+ 	struct linlondp_drv *mdrv = dev_get_drvdata(dev);
+ 
+-	of_property_read_u32(dev->of_node, "enabled_by_gop",
+-			     (u32 *)&mdrv->mdev->enabled_by_gop);
++	device_property_read_u32(dev, "enabled_by_gop",
++				(u32 *)&mdrv->mdev->enabled_by_gop);
+ 
+ 	if (!pm_runtime_status_suspended(dev))
+ 		linlondp_dev_resume(mdrv->mdev);
+diff --git a/drivers/gpu/drm/cix/linlon-dp/linlondp_kms.c b/drivers/gpu/drm/cix/linlon-dp/linlondp_kms.c
+index 83904c1628ba5..0f1e17fa45e1c 100644
+--- a/drivers/gpu/drm/cix/linlon-dp/linlondp_kms.c
++++ b/drivers/gpu/drm/cix/linlon-dp/linlondp_kms.c
+@@ -25,9 +25,11 @@
+ 
+ DEFINE_DRM_GEM_DMA_FOPS(linlondp_cma_fops);
+ 
+-static bool enable_render = false;
+-module_param(enable_render, bool, 0644);
+-MODULE_PARM_DESC(enable_render, "Enable render node support (default: false, conflicts with Panthor)");
++/*
++ * The DPU is a display-only device and must NOT expose a render node.
++ * Doing so conflicts with the Panthor GPU render node, causing userspace
++ * compositors to pick the wrong device for rendering.
++ */
+ 
+ static int linlondp_gem_dma_dumb_create(struct drm_file *file,
+ 					struct drm_device *dev,
+@@ -332,9 +334,6 @@ struct linlondp_kms_dev *linlondp_kms_attach(struct linlondp_dev *mdev)
+ 	struct drm_device *drm;
+ 	int err;
+ 
+-	if(enable_render)
+-		linlondp_kms_driver.driver_features |= DRIVER_RENDER;
+-
+ 	kms = devm_drm_dev_alloc(mdev->dev, &linlondp_kms_driver,
+ 				 struct linlondp_kms_dev, base);
+ 	if (IS_ERR(kms))
