@@ -114,5 +114,4 @@
 0114-dmaengine-arm-dma350-fix-ACPI-probe-missing-address-.patch
 0115-soc-cix-add-ACPI-scan-handler-to-override-GPU-_CCA-o.patch
 0116-drm-linlon-dp-harden-DPU-for-ACPI-boot-and-Panthor-c.patch
-0117-drm-panthor-force-non-coherent-GPU-mode-and-NC-memat.patch
-0118-drm-panthor-enable-ACE-Lite-bus-coherency-on-Sky1.patch
+0117-drm-panthor-add-ACE-Lite-coherency-and-NC-memattr-fa.patch
