@@ -1,0 +1,24 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Entrpi <entrpi@proton.me>
+Date: Mon, 16 Feb 2026 18:47:02 +1100
+Subject: [PATCH] Makefile: Set EXTRAVERSION for 7.0 merge window snapshot
+
+Mark this as a 7.0 pre-release kernel based on origin/master
+commit 0f2acd3148e0 (v6.19-10446).
+---
+ Makefile | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/Makefile b/Makefile
+index 13107aa0a5fb1..5acee87e0041f 100644
+--- a/Makefile
++++ b/Makefile
+@@ -2,7 +2,7 @@
+ VERSION = 6
+ PATCHLEVEL = 19
+ SUBLEVEL = 0
+-EXTRAVERSION =
++EXTRAVERSION = -7.0-git-0f2acd3148e0
+ NAME = Baby Opossum Posse
+ 
+ # *DOCUMENTATION*
