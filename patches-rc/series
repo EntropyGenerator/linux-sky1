@@ -28,3 +28,4 @@
 0028-phy-cix-usbdp-Default-to-DP-mode-for-static-outputs-.patch
 0029-drm-trilin-dptx-tear-down-DP-core-on-HPD-disconnect-.patch
 0030-drm-trilin-dptx-reset-active_stream_cnt-on-HPD-disco.patch
+0031-media-linlon-add-missing-VIDEOBUF2_DMA_SG-and-VIDEOB.patch

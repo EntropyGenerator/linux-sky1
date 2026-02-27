@@ -125,3 +125,4 @@
 0125-phy-cix-usbdp-Default-to-DP-mode-for-static-outputs-.patch
 0126-drm-trilin-dptx-tear-down-DP-core-on-HPD-disconnect-.patch
 0127-drm-trilin-dptx-reset-active_stream_cnt-on-HPD-disco.patch
+0128-media-linlon-add-missing-VIDEOBUF2_DMA_SG-and-VIDEOB.patch
