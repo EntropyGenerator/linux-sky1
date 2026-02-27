@@ -1,8 +1,8 @@
-From ee9cc9df160777517906dfb76c4969677b4677a0 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sat, 7 Feb 2026 22:55:52 +1100
-Subject: [PATCH 089/118] PCI: Silence I/O BAR assignment failures when no I/O
- windows exist
+Subject: [PATCH] PCI: Silence I/O BAR assignment failures when no I/O windows
+ exist
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
@@ -22,6 +22,9 @@ I/O windows — modern devices use MMIO BARs for actual operation.
 Downgrade I/O assignment failure messages to debug level when the
 host bridge has no I/O windows, keeping them at info level on
 platforms where I/O space is available and failures are unexpected.
+---
+ drivers/pci/setup-res.c | 35 +++++++++++++++++++++++++++++++++--
+ 1 file changed, 33 insertions(+), 2 deletions(-)
 
 diff --git a/drivers/pci/setup-res.c b/drivers/pci/setup-res.c
 index e5fcadfc58b01..7d65d33de1dfe 100644
@@ -80,6 +83,3 @@ index e5fcadfc58b01..7d65d33de1dfe 100644
  		return ret;
  	}
  
--- 
-2.51.0
-

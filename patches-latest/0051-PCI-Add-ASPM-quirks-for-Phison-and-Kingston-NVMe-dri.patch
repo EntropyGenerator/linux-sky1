@@ -1,15 +1,17 @@
-From a2b208148760c2750918ff2e213d331f3ef7b260 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Thu, 5 Feb 2026 23:07:44 +1100
-Subject: [PATCH 051/118] PCI: Add ASPM quirks for Phison and Kingston NVMe
- drives
+Subject: [PATCH] PCI: Add ASPM quirks for Phison and Kingston NVMe drives
 
 Some Phison E13T (1987:5013) and Kingston (2646:501d) NVMe drives
 experience link instability when ASPM L0s/L1 is enabled. Disable
 ASPM for these devices to prevent link training failures.
+---
+ drivers/pci/quirks.c | 4 ++++
+ 1 file changed, 4 insertions(+)
 
 diff --git a/drivers/pci/quirks.c b/drivers/pci/quirks.c
-index 146d8dc7ecc42..a155b8e867e23 100644
+index 68e83a843d221..0ea6686f5b5ab 100644
 --- a/drivers/pci/quirks.c
 +++ b/drivers/pci/quirks.c
 @@ -2526,6 +2526,10 @@ DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_ASMEDIA, 0x1080, quirk_disable_aspm_l0s_l
@@ -23,6 +25,3 @@ index 146d8dc7ecc42..a155b8e867e23 100644
  
  /*
   * Some Pericom PCIe-to-PCI bridges in reverse mode need the PCIe Retrain
--- 
-2.51.0
-

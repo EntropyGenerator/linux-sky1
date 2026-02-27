@@ -1,7 +1,7 @@
-From 5966ff3007da1c71f19adae1404516a02d9ed699 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Mon, 9 Feb 2026 11:08:15 +1100
-Subject: [PATCH 093/118] PCI: sky1: Fix ACPI probe with proper RSTL reset and
+Subject: [PATCH] PCI: sky1: Fix ACPI probe with proper RSTL reset and
  regulator support
 
 The scan handler creates CIXH2020 platform devices without fwnode to
@@ -21,6 +21,12 @@ to probe and satisfy fw_devlink.
 Also fix root bus config space access to always use reg_base (matching
 mainline cdns_pci_map_bus), reorder probe to parse properties before bus
 allocation, and make internal functions static.
+---
+ .../pci/controller/cadence/pci-sky1-acpi.c    | 26 +++++++--
+ .../pci/controller/cadence/pci-sky1-acpi.h    |  6 +-
+ drivers/pci/controller/cadence/pci-sky1.c     | 50 ++++++++--------
+ drivers/regulator/fixed.c                     | 57 +++++++++++++++++++
+ 4 files changed, 107 insertions(+), 32 deletions(-)
 
 diff --git a/drivers/pci/controller/cadence/pci-sky1-acpi.c b/drivers/pci/controller/cadence/pci-sky1-acpi.c
 index 1ad1318035904..1032a73cc7ad6 100644
@@ -272,6 +278,3 @@ index 3c0255ca03133..61917ea611ed3 100644
  	} else {
  		config = dev_get_platdata(&pdev->dev);
  	}
--- 
-2.51.0
-

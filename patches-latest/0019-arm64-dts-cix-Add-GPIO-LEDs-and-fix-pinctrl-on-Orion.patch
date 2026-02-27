@@ -1,8 +1,8 @@
-From 16020851479a6bc18b160d779f43ca75b9241273 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Mon, 2 Feb 2026 23:59:01 +1100
-Subject: [PATCH 019/118] arm64: dts: cix: Add GPIO LEDs and fix pinctrl on
- Orion O6 and O6N
+Subject: [PATCH] arm64: dts: cix: Add GPIO LEDs and fix pinctrl on Orion O6
+ and O6N
 
 O6: Add gpio-leds node with power LED (GPIO015, default-on), state LED
 (GPIO008, heartbeat), and SSD activity LED (GPIO016, disk-activity).
@@ -12,6 +12,10 @@ O6N: Add explicit pinctrl for power-led and status-led to match
 user-led pattern. Move orphaned pinctrl-names from parent gpio-leds
 node to individual LED nodes. Fix comment typos: usbc0_gpio pad was
 mislabeled as GPIO009, vgfx_poweren_gpio pad was mislabeled as GPIO0-01.
+---
+ arch/arm64/boot/dts/cix/sky1-orion-o6.dts  | 46 ++++++++++++++++++++++
+ arch/arm64/boot/dts/cix/sky1-orion-o6n.dts | 22 +++++++++--
+ 2 files changed, 64 insertions(+), 4 deletions(-)
 
 diff --git a/arch/arm64/boot/dts/cix/sky1-orion-o6.dts b/arch/arm64/boot/dts/cix/sky1-orion-o6.dts
 index 674fb0944f7fa..aec8305638231 100644
@@ -139,6 +143,3 @@ index 7d2ccf31434a4..66eedd8a16845 100644
  		>;
  	};
  };
--- 
-2.51.0
-

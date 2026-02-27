@@ -1,8 +1,8 @@
-From 2330ee16018564256cdda0de2027cae99e468a0e Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Mon, 9 Feb 2026 14:22:51 +1100
-Subject: [PATCH 095/118] pmdomain: Enable SCMI power and perf domain
- registration under ACPI
+Subject: [PATCH] pmdomain: Enable SCMI power and perf domain registration
+ under ACPI
 
 The SCMI power domain and perf domain drivers bail out early when
 booting without device tree, preventing genpd registration on ACPI
@@ -22,6 +22,12 @@ scmi_perf_domain:
 pmdomain core:
 - Add pm_genpd_lookup_by_name() for ACPI consumers to find genpds
   by firmware name instead of DT phandle
+---
+ drivers/pmdomain/arm/scmi_perf_domain.c | 27 +++++++++++++++++-------
+ drivers/pmdomain/arm/scmi_pm_domain.c   | 28 +++++++++++++++----------
+ drivers/pmdomain/core.c                 | 27 ++++++++++++++++++++++++
+ include/linux/pm_domain.h               |  6 ++++++
+ 4 files changed, 70 insertions(+), 18 deletions(-)
 
 diff --git a/drivers/pmdomain/arm/scmi_perf_domain.c b/drivers/pmdomain/arm/scmi_perf_domain.c
 index 3693423459c9c..9b93a4ca948a5 100644
@@ -197,6 +203,3 @@ index 93ba0143ca476..a99b06776b758 100644
  
  static inline void pm_genpd_inc_rejected(struct generic_pm_domain *genpd,
  					 unsigned int state_idx)
--- 
-2.51.0
-

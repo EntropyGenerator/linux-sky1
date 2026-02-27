@@ -1,12 +1,162 @@
-From 11f41c5c490108344b21933a04a1250c8534d47e Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sun, 1 Feb 2026 00:41:04 +1100
-Subject: [PATCH 005/118] drm: cix: Add Sky1 display drivers
+Subject: [PATCH] drm: cix: Add Sky1 display drivers
 
 Add Linlon Display Processor (DPU), Trilinear DisplayPort TX, HDCP,
 eDP panel support, and virtual display connector for CIX Sky1 SoC.
 Supports 5 independent display controllers with DisplayPort audio,
 MST daisy-chaining, and writeback connector.
+---
+ drivers/gpu/drm/Kconfig                       |    2 +
+ drivers/gpu/drm/Makefile                      |    1 +
+ drivers/gpu/drm/cix/Kconfig                   |   55 +
+ drivers/gpu/drm/cix/Makefile                  |    5 +
+ drivers/gpu/drm/cix/cix_display.c             |  204 +
+ drivers/gpu/drm/cix/cix_virtual.c             |  312 ++
+ drivers/gpu/drm/cix/dptx/Kconfig              |   27 +
+ drivers/gpu/drm/cix/dptx/Makefile             |   11 +
+ drivers/gpu/drm/cix/dptx/cix_edp_panel.c      |  880 +++++
+ drivers/gpu/drm/cix/dptx/cix_edp_panel.h      |   26 +
+ drivers/gpu/drm/cix/dptx/dptx_infoframe.c     |  359 ++
+ drivers/gpu/drm/cix/dptx/dptx_infoframe.h     |   46 +
+ drivers/gpu/drm/cix/dptx/hdcp/cix_hdcp.c      |  396 ++
+ drivers/gpu/drm/cix/dptx/hdcp/cix_hdcp.h      |  141 +
+ .../gpu/drm/cix/dptx/hdcp/cix_hdcp_ioctl.c    |  183 +
+ .../gpu/drm/cix/dptx/hdcp/cix_hdcp_ioctl.h    |   22 +
+ .../drm/cix/dptx/hdcp/cix_hdcp_ioctl_cmd.h    |  116 +
+ drivers/gpu/drm/cix/dptx/hdcp/dptx_aux_reg.h  |  126 +
+ drivers/gpu/drm/cix/dptx/hdcp/dptx_reg.h      |  483 +++
+ drivers/gpu/drm/cix/dptx/hdcp/hdcp2_hw_tx.c   |  920 +++++
+ drivers/gpu/drm/cix/dptx/hdcp/hdcp2_hw_tx.h   |   62 +
+ .../gpu/drm/cix/dptx/hdcp/hdcp2_key_drvn_tx.c |  246 ++
+ .../gpu/drm/cix/dptx/hdcp/hdcp2_key_drvn_tx.h |   46 +
+ .../gpu/drm/cix/dptx/hdcp/hdcp2_tx_state.c    |  126 +
+ .../gpu/drm/cix/dptx/hdcp/hdcp2_tx_state.h    |   31 +
+ drivers/gpu/drm/cix/dptx/hdcp/hdcp2_tx_tmr.c  |  189 +
+ drivers/gpu/drm/cix/dptx/hdcp/hdcp2_tx_tmr.h  |   19 +
+ drivers/gpu/drm/cix/dptx/trilin_dptx.c        | 3293 +++++++++++++++++
+ drivers/gpu/drm/cix/dptx/trilin_dptx.h        |  580 +++
+ drivers/gpu/drm/cix/dptx/trilin_dptx_audio.c  |  178 +
+ drivers/gpu/drm/cix/dptx/trilin_dptx_audio.h  |   51 +
+ drivers/gpu/drm/cix/dptx/trilin_dptx_cix.c    |  414 +++
+ drivers/gpu/drm/cix/dptx/trilin_dptx_reg.h    |  452 +++
+ drivers/gpu/drm/cix/dptx/trilin_drm.c         | 1184 ++++++
+ drivers/gpu/drm/cix/dptx/trilin_drm.h         |   27 +
+ drivers/gpu/drm/cix/dptx/trilin_drm_mst.c     |  935 +++++
+ drivers/gpu/drm/cix/dptx/trilin_drm_mst.h     |   29 +
+ drivers/gpu/drm/cix/dptx/trilin_edp_phy.c     | 1185 ++++++
+ drivers/gpu/drm/cix/dptx/trilin_edp_phy.h     |  746 ++++
+ drivers/gpu/drm/cix/dptx/trilin_host_tmr.c    |  254 ++
+ drivers/gpu/drm/cix/dptx/trilin_host_tmr.h    |   62 +
+ drivers/gpu/drm/cix/dptx/trilin_phy.h         |  126 +
+ drivers/gpu/drm/cix/dptx/trilin_usbdp_phy.c   |  595 +++
+ drivers/gpu/drm/cix/dptx/trilin_usbdp_phy.h   |   66 +
+ drivers/gpu/drm/cix/linlon-dp/Makefile        |   24 +
+ drivers/gpu/drm/cix/linlon-dp/hw/dp_axi.c     |  261 ++
+ .../gpu/drm/cix/linlon-dp/hw/dp_component.c   | 1696 +++++++++
+ drivers/gpu/drm/cix/linlon-dp/hw/dp_dev.c     |  694 ++++
+ drivers/gpu/drm/cix/linlon-dp/hw/dp_dev.h     |   63 +
+ drivers/gpu/drm/cix/linlon-dp/hw/dp_regs.h    |  562 +++
+ .../gpu/drm/cix/linlon-dp/linlondp_coeffs.c   |  120 +
+ .../gpu/drm/cix/linlon-dp/linlondp_coeffs.h   |   75 +
+ .../drm/cix/linlon-dp/linlondp_color_mgmt.c   |  270 ++
+ .../drm/cix/linlon-dp/linlondp_color_mgmt.h   |   48 +
+ drivers/gpu/drm/cix/linlon-dp/linlondp_crtc.c | 1015 +++++
+ drivers/gpu/drm/cix/linlon-dp/linlondp_dev.c  |  832 +++++
+ drivers/gpu/drm/cix/linlon-dp/linlondp_dev.h  |  307 ++
+ drivers/gpu/drm/cix/linlon-dp/linlondp_drm.h  |   26 +
+ drivers/gpu/drm/cix/linlon-dp/linlondp_drv.c  |  360 ++
+ .../gpu/drm/cix/linlon-dp/linlondp_event.c    |  159 +
+ .../drm/cix/linlon-dp/linlondp_format_caps.c  |  149 +
+ .../drm/cix/linlon-dp/linlondp_format_caps.h  |  101 +
+ .../drm/cix/linlon-dp/linlondp_framebuffer.c  |  290 ++
+ .../drm/cix/linlon-dp/linlondp_framebuffer.h  |   49 +
+ drivers/gpu/drm/cix/linlon-dp/linlondp_io.h   |   46 +
+ drivers/gpu/drm/cix/linlon-dp/linlondp_kms.c  |  414 +++
+ drivers/gpu/drm/cix/linlon-dp/linlondp_kms.h  |  339 ++
+ .../gpu/drm/cix/linlon-dp/linlondp_pipeline.c |  464 +++
+ .../gpu/drm/cix/linlon-dp/linlondp_pipeline.h |  597 +++
+ .../cix/linlon-dp/linlondp_pipeline_state.c   | 1733 +++++++++
+ .../gpu/drm/cix/linlon-dp/linlondp_plane.c    |  652 ++++
+ .../drm/cix/linlon-dp/linlondp_private_obj.c  |  433 +++
+ .../gpu/drm/cix/linlon-dp/linlondp_product.h  |   37 +
+ .../gpu/drm/cix/linlon-dp/linlondp_utils.h    |   43 +
+ .../drm/cix/linlon-dp/linlondp_wb_connector.c |  391 ++
+ 75 files changed, 27461 insertions(+)
+ create mode 100644 drivers/gpu/drm/cix/Kconfig
+ create mode 100644 drivers/gpu/drm/cix/Makefile
+ create mode 100644 drivers/gpu/drm/cix/cix_display.c
+ create mode 100644 drivers/gpu/drm/cix/cix_virtual.c
+ create mode 100644 drivers/gpu/drm/cix/dptx/Kconfig
+ create mode 100644 drivers/gpu/drm/cix/dptx/Makefile
+ create mode 100644 drivers/gpu/drm/cix/dptx/cix_edp_panel.c
+ create mode 100755 drivers/gpu/drm/cix/dptx/cix_edp_panel.h
+ create mode 100644 drivers/gpu/drm/cix/dptx/dptx_infoframe.c
+ create mode 100644 drivers/gpu/drm/cix/dptx/dptx_infoframe.h
+ create mode 100644 drivers/gpu/drm/cix/dptx/hdcp/cix_hdcp.c
+ create mode 100644 drivers/gpu/drm/cix/dptx/hdcp/cix_hdcp.h
+ create mode 100644 drivers/gpu/drm/cix/dptx/hdcp/cix_hdcp_ioctl.c
+ create mode 100644 drivers/gpu/drm/cix/dptx/hdcp/cix_hdcp_ioctl.h
+ create mode 100644 drivers/gpu/drm/cix/dptx/hdcp/cix_hdcp_ioctl_cmd.h
+ create mode 100644 drivers/gpu/drm/cix/dptx/hdcp/dptx_aux_reg.h
+ create mode 100644 drivers/gpu/drm/cix/dptx/hdcp/dptx_reg.h
+ create mode 100644 drivers/gpu/drm/cix/dptx/hdcp/hdcp2_hw_tx.c
+ create mode 100644 drivers/gpu/drm/cix/dptx/hdcp/hdcp2_hw_tx.h
+ create mode 100644 drivers/gpu/drm/cix/dptx/hdcp/hdcp2_key_drvn_tx.c
+ create mode 100644 drivers/gpu/drm/cix/dptx/hdcp/hdcp2_key_drvn_tx.h
+ create mode 100644 drivers/gpu/drm/cix/dptx/hdcp/hdcp2_tx_state.c
+ create mode 100644 drivers/gpu/drm/cix/dptx/hdcp/hdcp2_tx_state.h
+ create mode 100644 drivers/gpu/drm/cix/dptx/hdcp/hdcp2_tx_tmr.c
+ create mode 100644 drivers/gpu/drm/cix/dptx/hdcp/hdcp2_tx_tmr.h
+ create mode 100644 drivers/gpu/drm/cix/dptx/trilin_dptx.c
+ create mode 100644 drivers/gpu/drm/cix/dptx/trilin_dptx.h
+ create mode 100644 drivers/gpu/drm/cix/dptx/trilin_dptx_audio.c
+ create mode 100644 drivers/gpu/drm/cix/dptx/trilin_dptx_audio.h
+ create mode 100644 drivers/gpu/drm/cix/dptx/trilin_dptx_cix.c
+ create mode 100644 drivers/gpu/drm/cix/dptx/trilin_dptx_reg.h
+ create mode 100644 drivers/gpu/drm/cix/dptx/trilin_drm.c
+ create mode 100644 drivers/gpu/drm/cix/dptx/trilin_drm.h
+ create mode 100644 drivers/gpu/drm/cix/dptx/trilin_drm_mst.c
+ create mode 100755 drivers/gpu/drm/cix/dptx/trilin_drm_mst.h
+ create mode 100644 drivers/gpu/drm/cix/dptx/trilin_edp_phy.c
+ create mode 100644 drivers/gpu/drm/cix/dptx/trilin_edp_phy.h
+ create mode 100644 drivers/gpu/drm/cix/dptx/trilin_host_tmr.c
+ create mode 100644 drivers/gpu/drm/cix/dptx/trilin_host_tmr.h
+ create mode 100644 drivers/gpu/drm/cix/dptx/trilin_phy.h
+ create mode 100644 drivers/gpu/drm/cix/dptx/trilin_usbdp_phy.c
+ create mode 100644 drivers/gpu/drm/cix/dptx/trilin_usbdp_phy.h
+ create mode 100644 drivers/gpu/drm/cix/linlon-dp/Makefile
+ create mode 100644 drivers/gpu/drm/cix/linlon-dp/hw/dp_axi.c
+ create mode 100644 drivers/gpu/drm/cix/linlon-dp/hw/dp_component.c
+ create mode 100644 drivers/gpu/drm/cix/linlon-dp/hw/dp_dev.c
+ create mode 100644 drivers/gpu/drm/cix/linlon-dp/hw/dp_dev.h
+ create mode 100644 drivers/gpu/drm/cix/linlon-dp/hw/dp_regs.h
+ create mode 100644 drivers/gpu/drm/cix/linlon-dp/linlondp_coeffs.c
+ create mode 100644 drivers/gpu/drm/cix/linlon-dp/linlondp_coeffs.h
+ create mode 100644 drivers/gpu/drm/cix/linlon-dp/linlondp_color_mgmt.c
+ create mode 100644 drivers/gpu/drm/cix/linlon-dp/linlondp_color_mgmt.h
+ create mode 100644 drivers/gpu/drm/cix/linlon-dp/linlondp_crtc.c
+ create mode 100644 drivers/gpu/drm/cix/linlon-dp/linlondp_dev.c
+ create mode 100644 drivers/gpu/drm/cix/linlon-dp/linlondp_dev.h
+ create mode 100644 drivers/gpu/drm/cix/linlon-dp/linlondp_drm.h
+ create mode 100644 drivers/gpu/drm/cix/linlon-dp/linlondp_drv.c
+ create mode 100644 drivers/gpu/drm/cix/linlon-dp/linlondp_event.c
+ create mode 100644 drivers/gpu/drm/cix/linlon-dp/linlondp_format_caps.c
+ create mode 100644 drivers/gpu/drm/cix/linlon-dp/linlondp_format_caps.h
+ create mode 100644 drivers/gpu/drm/cix/linlon-dp/linlondp_framebuffer.c
+ create mode 100644 drivers/gpu/drm/cix/linlon-dp/linlondp_framebuffer.h
+ create mode 100644 drivers/gpu/drm/cix/linlon-dp/linlondp_io.h
+ create mode 100644 drivers/gpu/drm/cix/linlon-dp/linlondp_kms.c
+ create mode 100644 drivers/gpu/drm/cix/linlon-dp/linlondp_kms.h
+ create mode 100644 drivers/gpu/drm/cix/linlon-dp/linlondp_pipeline.c
+ create mode 100644 drivers/gpu/drm/cix/linlon-dp/linlondp_pipeline.h
+ create mode 100644 drivers/gpu/drm/cix/linlon-dp/linlondp_pipeline_state.c
+ create mode 100644 drivers/gpu/drm/cix/linlon-dp/linlondp_plane.c
+ create mode 100644 drivers/gpu/drm/cix/linlon-dp/linlondp_private_obj.c
+ create mode 100644 drivers/gpu/drm/cix/linlon-dp/linlondp_product.h
+ create mode 100644 drivers/gpu/drm/cix/linlon-dp/linlondp_utils.h
+ create mode 100644 drivers/gpu/drm/cix/linlon-dp/linlondp_wb_connector.c
 
 diff --git a/drivers/gpu/drm/Kconfig b/drivers/gpu/drm/Kconfig
 index ed85d0ceee3ba..dcb476f9a9582 100644
@@ -27931,6 +28081,3 @@ index 0000000000000..82b9efdcd42cb
 +
 +	return 0;
 +}
--- 
-2.51.0
-

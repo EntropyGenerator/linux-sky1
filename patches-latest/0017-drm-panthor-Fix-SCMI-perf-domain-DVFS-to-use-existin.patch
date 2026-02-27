@@ -1,8 +1,8 @@
-From 682f0b42653e409a6ea4b240cd5bf835a2102bd6 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Mon, 2 Feb 2026 01:42:30 +1100
-Subject: [PATCH 017/118] drm/panthor: Fix SCMI perf domain DVFS to use
- existing virtual device
+Subject: [PATCH] drm/panthor: Fix SCMI perf domain DVFS to use existing
+ virtual device
 
 The previous SCMI DVFS code used dev_pm_domain_attach_by_name() to
 create a new virtual device for the "perf" power domain. This fails
@@ -20,6 +20,11 @@ When dev_pm_opp_set_rate() is called on this virtual device, the OPP
 framework routes through _set_opp_level() which calls
 dev_pm_domain_set_performance_state(), allowing the SCMI firmware to
 manage both frequency and voltage together.
+---
+ drivers/gpu/drm/panthor/panthor_devfreq.c | 69 +++++-----------
+ drivers/gpu/drm/panthor/panthor_device.c  | 98 ++++++++++++++++++-----
+ drivers/gpu/drm/panthor/panthor_device.h  |  6 ++
+ 3 files changed, 105 insertions(+), 68 deletions(-)
 
 diff --git a/drivers/gpu/drm/panthor/panthor_devfreq.c b/drivers/gpu/drm/panthor/panthor_devfreq.c
 index c8a47aa3b77e5..7a632f9161485 100644
@@ -324,6 +329,3 @@ index 22aca55e58ea0..cfdef628e0d39 100644
  	/** @gpu_reset: Reset control for GPU (optional, Sky1). */
  	struct reset_control *gpu_reset;
  
--- 
-2.51.0
-

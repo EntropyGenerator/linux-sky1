@@ -1,8 +1,7 @@
-From 05060cc2f834734d9aee99b560d1222181e3331f Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Fri, 13 Feb 2026 16:38:33 +1100
-Subject: [PATCH 116/118] soc: cix: add ACPI scan handler to override GPU _CCA
- on Sky1
+Subject: [PATCH] soc: cix: add ACPI scan handler to override GPU _CCA on Sky1
 
 The Sky1 DSDT declares the GPU (CIXH5000) with _CCA=1 (coherent), but
 the SoC was designed for non-coherent GPU operation. The GPU shares
@@ -15,6 +14,12 @@ Add an ACPI scan handler that intercepts CIXH5000 during enumeration
 and clears the coherent_dma flag before the platform device and its
 DMA/IOMMU domain are configured. Scoped to Sky1 firmware via MCFG
 OEM ID CIXTEK / table ID SKY1EDK2.
+---
+ drivers/soc/cix/Kconfig             | 14 ++++++
+ drivers/soc/cix/Makefile            |  1 +
+ drivers/soc/cix/cix-acpi-gpu-scan.c | 78 +++++++++++++++++++++++++++++
+ 3 files changed, 93 insertions(+)
+ create mode 100644 drivers/soc/cix/cix-acpi-gpu-scan.c
 
 diff --git a/drivers/soc/cix/Kconfig b/drivers/soc/cix/Kconfig
 index 831b909787cc6..01acdfdebd33d 100644
@@ -134,6 +139,3 @@ index 0000000000000..b971828d18410
 +arch_initcall(sky1_gpu_acpi_init);
 +
 +#endif /* CONFIG_ACPI */
--- 
-2.51.0
-

@@ -2024,7 +2024,7 @@ index 5bb1416c26a50..9cd5e8ffd4e62 100644
 -MODULE_LICENSE("GPL");
 +MODULE_LICENSE("GPL v2");
 diff --git a/drivers/nvmem/Kconfig b/drivers/nvmem/Kconfig
-index e0d88d3199c11..4c82593bff2f0 100644
+index 11b098705ec62..688e4b349d823 100644
 --- a/drivers/nvmem/Kconfig
 +++ b/drivers/nvmem/Kconfig
 @@ -364,6 +364,17 @@ config NVMEM_SPMI_SDAM
@@ -3644,7 +3644,7 @@ index b5e2ffd5ea64c..fcce7b7a1bccb 100644
  MODULE_AUTHOR("Sudeep Holla <sudeep.holla@arm.com>");
  MODULE_DESCRIPTION("ARM SCMI power domain driver");
 diff --git a/drivers/reset/Kconfig b/drivers/reset/Kconfig
-index 78b7078478d46..8bc1af280b77d 100644
+index b3b9e0f9d8c48..51f4e679b57ab 100644
 --- a/drivers/reset/Kconfig
 +++ b/drivers/reset/Kconfig
 @@ -398,4 +398,21 @@ source "drivers/reset/sti/Kconfig"

@@ -1143,10 +1143,10 @@ index 13b0d59223aa9..46e96678befae 100644
  	if (!pcie)
  		return -ENOMEM;
 diff --git a/drivers/pci/pci-acpi.c b/drivers/pci/pci-acpi.c
-index 13fb63c85a3a8..7915b4dcc7fea 100644
+index 423efb06fc608..6b6f2c6796198 100644
 --- a/drivers/pci/pci-acpi.c
 +++ b/drivers/pci/pci-acpi.c
-@@ -1598,185 +1598,6 @@ int pcibios_root_bridge_prepare(struct pci_host_bridge *bridge)
+@@ -1587,185 +1587,6 @@ int pcibios_root_bridge_prepare(struct pci_host_bridge *bridge)
  	return 0;
  }
  
@@ -1332,7 +1332,7 @@ index 13fb63c85a3a8..7915b4dcc7fea 100644
  static int pci_acpi_root_prepare_resources(struct acpi_pci_root_info *ci)
  {
  	struct resource_entry *entry, *tmp;
-@@ -1788,8 +1609,6 @@ static int pci_acpi_root_prepare_resources(struct acpi_pci_root_info *ci)
+@@ -1777,8 +1598,6 @@ static int pci_acpi_root_prepare_resources(struct acpi_pci_root_info *ci)
  			resource_list_destroy_entry(entry);
  	}
  

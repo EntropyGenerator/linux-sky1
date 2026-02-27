@@ -19,4 +19,12 @@
 0019-remoteproc-cix-Add-DSP-remoteproc-and-rpmsg-support.patch
 0020-docs-Add-Sky1-platform-porting-status-and-build-guid.patch
 0021-arm64-cix-Add-missing-Sky1-firmware-and-pinctrl-ACPI.patch
-0022-Makefile-Set-EXTRAVERSION-for-7.0-merge-window-snaps.patch
+0022-iommu-arm-smmu-v3-Add-ACPI-boot-active-bypass-STEs-f.patch
+0023-drm-add-sky1-drm-render-node-bridge-for-CIX-Sky1-SoC.patch
+0024-drm-sky1-switch-from-faux_device-to-platform_device.patch
+0025-mm-add-Mali-GPU-movable_ops-page-type-support.patch
+0026-pmdomain-arm-scmi_perf_domain-export-helpers-for-EM-.patch
+0027-drm-linlon-dp-add-diagnostic-knobs-for-AFBC-and-10bp.patch
+0028-phy-cix-usbdp-Default-to-DP-mode-for-static-outputs-.patch
+0029-drm-trilin-dptx-tear-down-DP-core-on-HPD-disconnect-.patch
+0030-drm-trilin-dptx-reset-active_stream_cnt-on-HPD-disco.patch

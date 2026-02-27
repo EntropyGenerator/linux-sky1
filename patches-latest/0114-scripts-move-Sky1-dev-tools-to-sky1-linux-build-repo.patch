@@ -1,13 +1,27 @@
-From dab4cfd71473d3b25f3307ecf08c0088629676ef Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Thu, 12 Feb 2026 13:08:38 +1100
-Subject: [PATCH 114/118] scripts: move Sky1 dev tools to sky1-linux-build repo
+Subject: [PATCH] scripts: move Sky1 dev tools to sky1-linux-build repo
 
 Move build-install.py, build-test.py, kernel-track-status.py,
 update-dev-boot.py, reconcile-configs.py, and sky1_lib.py to the
 sky1-linux-build repository alongside the existing build scripts.
 
 Symlinks in scripts/ provide transparent access from the kernel tree.
+---
+ scripts/build-install.py       | 205 --------------------
+ scripts/build-test.py          | 189 ------------------
+ scripts/kernel-track-status.py | 226 ----------------------
+ scripts/reconcile-configs.py   | 331 --------------------------------
+ scripts/sky1_lib.py            | 170 -----------------
+ scripts/update-dev-boot.py     | 340 ---------------------------------
+ 6 files changed, 1461 deletions(-)
+ delete mode 100755 scripts/build-install.py
+ delete mode 100755 scripts/build-test.py
+ delete mode 100755 scripts/kernel-track-status.py
+ delete mode 100755 scripts/reconcile-configs.py
+ delete mode 100755 scripts/sky1_lib.py
+ delete mode 100755 scripts/update-dev-boot.py
 
 diff --git a/scripts/build-install.py b/scripts/build-install.py
 deleted file mode 100755
@@ -1506,6 +1520,3 @@ index 6aa71d19e93a3..0000000000000
 -
 -if __name__ == "__main__":
 -    main()
--- 
-2.51.0
-

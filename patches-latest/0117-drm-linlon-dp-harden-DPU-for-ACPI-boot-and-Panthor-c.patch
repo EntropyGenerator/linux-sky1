@@ -1,7 +1,7 @@
-From 6932704748c16a8242beecb7977bd773021cc88f Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Fri, 13 Feb 2026 16:38:47 +1100
-Subject: [PATCH 117/118] drm: linlon-dp: harden DPU for ACPI boot and Panthor
+Subject: [PATCH] drm: linlon-dp: harden DPU for ACPI boot and Panthor
  coexistence
 
 Three DPU driver fixes for ACPI boot reliability:
@@ -18,6 +18,11 @@ Three DPU driver fixes for ACPI boot reliability:
 
 - linlondp_dev.c: Acquire reset controls in the ACPI parse path via
   devm_reset_control_get_optional, matching the DT path.
+---
+ drivers/gpu/drm/cix/linlon-dp/linlondp_dev.c | 13 +++++++++++++
+ drivers/gpu/drm/cix/linlon-dp/linlondp_drv.c | 17 +++++++++--------
+ drivers/gpu/drm/cix/linlon-dp/linlondp_kms.c | 11 +++++------
+ 3 files changed, 27 insertions(+), 14 deletions(-)
 
 diff --git a/drivers/gpu/drm/cix/linlon-dp/linlondp_dev.c b/drivers/gpu/drm/cix/linlon-dp/linlondp_dev.c
 index 16412dcd678a7..d6c0f148bea68 100644
@@ -135,6 +140,3 @@ index 83904c1628ba5..0f1e17fa45e1c 100644
  	kms = devm_drm_dev_alloc(mdev->dev, &linlondp_kms_driver,
  				 struct linlondp_kms_dev, base);
  	if (IS_ERR(kms))
--- 
-2.51.0
-

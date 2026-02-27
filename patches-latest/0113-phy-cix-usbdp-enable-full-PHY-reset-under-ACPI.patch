@@ -1,7 +1,7 @@
-From ccd47ef0b780b0b02873243c4f6c14801c789e0b Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Thu, 12 Feb 2026 12:45:48 +1100
-Subject: [PATCH 113/118] phy: cix: usbdp: enable full PHY reset under ACPI
+Subject: [PATCH] phy: cix: usbdp: enable full PHY reset under ACPI
 
 The ACPI path previously skipped PHY reset on the assumption that
 firmware-initialized PHY state could be preserved.  Now that
@@ -10,6 +10,9 @@ controller hardware), the PHY must be fully reinitialized to match.
 
 Set phy_reset=true under ACPI, matching the DT ROLE_NONE behavior:
 full reset and initialization when the consumer calls phy_set_mode().
+---
+ drivers/phy/cix/phy-cix-usbdp.c | 11 +++++++++--
+ 1 file changed, 9 insertions(+), 2 deletions(-)
 
 diff --git a/drivers/phy/cix/phy-cix-usbdp.c b/drivers/phy/cix/phy-cix-usbdp.c
 index b9887d3e4e7f7..91dbc14473d03 100644
@@ -33,6 +36,3 @@ index b9887d3e4e7f7..91dbc14473d03 100644
  	} else {
  		g_status = ioremap(GOP_STATUS_ADDRESS, GOP_STATUS_SIZE);
  		if (g_status) {
--- 
-2.51.0
-

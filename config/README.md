@@ -81,8 +81,8 @@ These are required for Sky1 hardware to function:
 | `CLK_SKY1_ACPI` | bool | ACPI clock bridge (bridges SCMI clocks to ACPI consumers) |
 | `CIX_MBOX` | bool | SCMI mailbox (power/thermal) |
 | `GPIO_CADENCE` | bool | Cadence GPIO IP |
-| `SKY1_GPT_TIMER` | module | Sky1 general-purpose timer |
-| `SENSORS_CIX_FAN` | module | ACPI-based fan control |
+| `SKY1_GPT_TIMER` | bool | CIX Sky1 GPT timer |
+| `SENSORS_CIX_FAN` | module | CIX Sky1 fan controller |
 
 ## Thermal & Power Management
 

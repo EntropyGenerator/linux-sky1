@@ -163,7 +163,7 @@ index 43471babff86c..792709838a84e 100644
  
  	panthor_gem_debugfs_bo_init(obj);
 diff --git a/drivers/gpu/drm/panthor/panthor_gpu.c b/drivers/gpu/drm/panthor/panthor_gpu.c
-index 041088e296a1a..c796d5163aacf 100644
+index 247024991a418..e98a92a3048b1 100644
 --- a/drivers/gpu/drm/panthor/panthor_gpu.c
 +++ b/drivers/gpu/drm/panthor/panthor_gpu.c
 @@ -49,8 +49,16 @@ struct panthor_gpu {
@@ -171,7 +171,7 @@ index 041088e296a1a..c796d5163aacf 100644
  static void panthor_gpu_coherency_set(struct panthor_device *ptdev)
  {
 -	gpu_write(ptdev, GPU_COHERENCY_PROTOCOL,
--		ptdev->coherent ? GPU_COHERENCY_PROT_BIT(ACE_LITE) : GPU_COHERENCY_NONE);
+-		  ptdev->coherent ? GPU_COHERENCY_ACE_LITE : GPU_COHERENCY_NONE);
 +	u32 val = ptdev->coherency_mode;
 +
 +	if (val != PANTHOR_COHERENCY_NONE) {
@@ -186,7 +186,7 @@ index 041088e296a1a..c796d5163aacf 100644
  
  static void panthor_gpu_irq_handler(struct panthor_device *ptdev, u32 status)
 diff --git a/drivers/gpu/drm/panthor/panthor_mmu.c b/drivers/gpu/drm/panthor/panthor_mmu.c
-index 8a89c8f05d25f..c95814e530ac4 100644
+index 95ef5469628d2..9de34e6d31c52 100644
 --- a/drivers/gpu/drm/panthor/panthor_mmu.c
 +++ b/drivers/gpu/drm/panthor/panthor_mmu.c
 @@ -786,7 +786,7 @@ int panthor_vm_active(struct panthor_vm *vm)
@@ -198,7 +198,7 @@ index 8a89c8f05d25f..c95814e530ac4 100644
  		transcfg |= AS_TRANSCFG_PTW_SH_OS;
  
  	/* If the VM is re-activated, we clear the fault. */
-@@ -2001,7 +2001,8 @@ void panthor_vm_heaps_sizes(struct panthor_file *pfile, struct drm_memory_stats
+@@ -2005,7 +2005,8 @@ void panthor_vm_heaps_sizes(struct panthor_file *pfile, struct drm_memory_stats
  	xa_unlock(&pfile->vms->xa);
  }
  
@@ -208,7 +208,7 @@ index 8a89c8f05d25f..c95814e530ac4 100644
  {
  	u64 memattr = 0;
  	u32 i;
-@@ -2019,19 +2020,27 @@ static u64 mair_to_memattr(u64 mair, bool coherent)
+@@ -2023,19 +2024,27 @@ static u64 mair_to_memattr(u64 mair, bool coherent)
  			out_attr = AS_MEMATTR_AARCH64_INNER_OUTER_NC |
  				   AS_MEMATTR_AARCH64_SH_MIDGARD_INNER |
  				   AS_MEMATTR_AARCH64_INNER_ALLOC_EXPL(false, false);
@@ -244,7 +244,7 @@ index 8a89c8f05d25f..c95814e530ac4 100644
  				out_attr |= AS_MEMATTR_AARCH64_SH_MIDGARD_INNER;
  			else
  				out_attr |= AS_MEMATTR_AARCH64_SH_CPU_INNER;
-@@ -2398,7 +2407,7 @@ panthor_vm_create(struct panthor_device *ptdev, bool for_mcu,
+@@ -2402,7 +2411,7 @@ panthor_vm_create(struct panthor_device *ptdev, bool for_mcu,
  		.pgsize_bitmap	= SZ_4K | SZ_2M,
  		.ias		= va_bits,
  		.oas		= pa_bits,
@@ -253,7 +253,7 @@ index 8a89c8f05d25f..c95814e530ac4 100644
  		.tlb		= &mmu_tlb_ops,
  		.iommu_dev	= ptdev->base.dev,
  		.alloc		= alloc_pt,
-@@ -2421,7 +2430,8 @@ panthor_vm_create(struct panthor_device *ptdev, bool for_mcu,
+@@ -2425,7 +2434,8 @@ panthor_vm_create(struct panthor_device *ptdev, bool for_mcu,
  		goto err_sched_fini;
  
  	mair = io_pgtable_ops_to_pgtable(vm->pgtbl_ops)->cfg.arm_lpae_s1_cfg.mair;

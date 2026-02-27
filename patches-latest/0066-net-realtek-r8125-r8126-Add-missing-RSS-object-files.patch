@@ -1,14 +1,18 @@
-From 63f09be41ba8cf279bae9b8194c187b80ff9f7db Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Fri, 6 Feb 2026 02:12:38 +1100
-Subject: [PATCH 066/118] net: realtek: r8125/r8126: Add missing RSS object
- files to Makefile
+Subject: [PATCH] net: realtek: r8125/r8126: Add missing RSS object files to
+ Makefile
 
 Both drivers enable ENABLE_RSS_SUPPORT in ccflags but don't include the
 RSS object files in the module. This causes build failures with undefined
 symbol errors for rtl8125_*_rss and rtl8126_rx_hash functions.
 
 Add r8125_rss.o and r8126_rss.o to the respective Makefiles.
+---
+ drivers/net/ethernet/realtek/r8125/Makefile | 2 +-
+ drivers/net/ethernet/realtek/r8126/Makefile | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
 
 diff --git a/drivers/net/ethernet/realtek/r8125/Makefile b/drivers/net/ethernet/realtek/r8125/Makefile
 index a18ac30b1a5ec..74eecbdd67f33 100644
@@ -34,6 +38,3 @@ index 8f0ccddb3abf6..03009d3b095ee 100644
  
  ccflags-y += -DCONFIG_R8126_NAPI
  ccflags-y += -DCONFIG_R8126_VLAN
--- 
-2.51.0
-

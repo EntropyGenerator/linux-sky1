@@ -1,8 +1,8 @@
-From df5fcdc8524d33a265650500b5e67cb2a5154ce1 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Thu, 12 Feb 2026 12:45:40 +1100
-Subject: [PATCH 112/118] usb: cdnsp: sky1: unify DT and ACPI init paths with
- PHY probe ordering
+Subject: [PATCH] usb: cdnsp: sky1: unify DT and ACPI init paths with PHY probe
+ ordering
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
@@ -28,6 +28,9 @@ generic xHCI from claiming the hardware, so no conflict exists.
 
 Tested on Radxa Orion O6: ORICO USB 3.1 Gen 2 enclosure detected at
 SuperSpeed Plus (10 Gbps), dd write throughput 687 MB/s with UAS.
+---
+ drivers/usb/cdns3/cdnsp-sky1.c | 109 +++++++++++++++++++++++----------
+ 1 file changed, 78 insertions(+), 31 deletions(-)
 
 diff --git a/drivers/usb/cdns3/cdnsp-sky1.c b/drivers/usb/cdns3/cdnsp-sky1.c
 index 85330fe524087..ed61e2a928b14 100644
@@ -179,6 +182,3 @@ index 85330fe524087..ed61e2a928b14 100644
  	data->oc_gpio = devm_gpiod_get_optional(data->dev, "oc", GPIOD_IN);
  	if (IS_ERR(data->oc_gpio)) {
  		dev_err(data->dev, "[%s:%d] can not get oc_gpio\n", __func__, __LINE__);
--- 
-2.51.0
-

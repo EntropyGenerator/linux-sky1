@@ -1,8 +1,8 @@
-From 435089887dc551cd176d208972aec10986700fbe Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Mon, 9 Feb 2026 17:09:42 +1100
-Subject: [PATCH 101/118] pmdomain: add fwnode-based genpd provider for ACPI
- power domain consumers
+Subject: [PATCH] pmdomain: add fwnode-based genpd provider for ACPI power
+ domain consumers
 
 The generic power domain (genpd) subsystem only supports OF-based
 provider registration.  Under ACPI, consumers that reference power
@@ -26,6 +26,11 @@ Key changes:
 - SCMI perf domain driver registers as fwnode provider under ACPI,
   using the protocol-specific ACPI child node (which may have
   _STA=0) as the provider fwnode that consumers reference
+---
+ drivers/pmdomain/arm/scmi_perf_domain.c |  84 +++++++-
+ drivers/pmdomain/core.c                 | 245 ++++++++++++++++++++++--
+ include/linux/pm_domain.h               |  11 ++
+ 3 files changed, 320 insertions(+), 20 deletions(-)
 
 diff --git a/drivers/pmdomain/arm/scmi_perf_domain.c b/drivers/pmdomain/arm/scmi_perf_domain.c
 index 9b93a4ca948a5..db4e49bb2f2cf 100644
@@ -498,6 +503,3 @@ index a99b06776b758..1e7cb9df90f9d 100644
  static inline int of_genpd_add_device(const struct of_phandle_args *args,
  				      struct device *dev)
  {
--- 
-2.51.0
-

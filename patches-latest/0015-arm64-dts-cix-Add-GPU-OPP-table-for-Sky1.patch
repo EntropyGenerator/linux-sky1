@@ -1,7 +1,7 @@
-From be22b5075cb96dfd1ea0f5a6046e076dced24d14 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sun, 1 Feb 2026 23:21:49 +1100
-Subject: [PATCH 015/118] arm64: dts: cix: Add GPU OPP table for Sky1
+Subject: [PATCH] arm64: dts: cix: Add GPU OPP table for Sky1
 
 Add operating-points-v2 table documenting the GPU frequency levels from
 the CIX P1 GPU Development Guide: 350, 600, 800, and 1000 MHz.
@@ -13,6 +13,9 @@ documentation and fallback for configurations without SCMI DVFS.
 The vendor guide also defines 72 MHz (2 cores) and 216 MHz (6 cores)
 DCS levels, but Panthor does not support Dynamic Core Scaling so
 those are omitted.
+---
+ arch/arm64/boot/dts/cix/sky1.dtsi | 27 +++++++++++++++++++++++++++
+ 1 file changed, 27 insertions(+)
 
 diff --git a/arch/arm64/boot/dts/cix/sky1.dtsi b/arch/arm64/boot/dts/cix/sky1.dtsi
 index a6b034ba46e4d..b4cc5c43bce08 100644
@@ -59,6 +62,3 @@ index a6b034ba46e4d..b4cc5c43bce08 100644
  			power-domains = <&smc_devpd SKY1_PD_GPU>, <&scmi_dvfs 0>;
  			power-domain-names = "pd_gpu", "perf";
  			clocks = <&scmi_clk CLK_TREE_GPU_CLK_CORE>, <&scmi_clk CLK_TREE_GPU_CLK_STACKS>,
--- 
-2.51.0
-

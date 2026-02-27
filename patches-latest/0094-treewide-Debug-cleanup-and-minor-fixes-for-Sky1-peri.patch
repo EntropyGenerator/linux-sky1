@@ -1,8 +1,7 @@
-From 7d22452e75da014ea85aafee9572efe2ad2d1a5f Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Mon, 9 Feb 2026 14:22:34 +1100
-Subject: [PATCH 094/118] treewide: Debug cleanup and minor fixes for Sky1
- peripherals
+Subject: [PATCH] treewide: Debug cleanup and minor fixes for Sky1 peripherals
 
 arm-dma350:
 - Convert probe dev_info messages to dev_dbg
@@ -15,6 +14,12 @@ clk-sky1-audss:
 
 sof: cix:
 - Add missing MODULE_DESCRIPTION to silence build warnings
+---
+ drivers/clk/cix/clk-sky1-audss.c |  5 -----
+ drivers/dma/arm-dma350.c         | 36 ++++++++++++++++++++++----------
+ sound/soc/sof/cix/cix-common.c   |  1 +
+ sound/soc/sof/cix/cix-sky1.c     |  1 +
+ 4 files changed, 27 insertions(+), 16 deletions(-)
 
 diff --git a/drivers/clk/cix/clk-sky1-audss.c b/drivers/clk/cix/clk-sky1-audss.c
 index 9de133e6c2275..1edaf6a70827a 100644
@@ -141,6 +146,3 @@ index a2e226cccf749..fcd1ec131a6dd 100644
  MODULE_AUTHOR("Joakim Zhang <joakim.zhang@cixtech.com>");
 +MODULE_DESCRIPTION("SOF support for CIX Sky1");
  MODULE_LICENSE("Dual BSD/GPL");
--- 
-2.51.0
-

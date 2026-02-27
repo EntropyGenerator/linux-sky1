@@ -1,8 +1,8 @@
-From ef40c89eac39dfe2e421093f839226af889f1847 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Tue, 3 Feb 2026 19:11:44 +1100
-Subject: [PATCH 026/118] arm64: dts: cix: Enable USB-C DisplayPort alt mode on
- Orion O6
+Subject: [PATCH] arm64: dts: cix: Enable USB-C DisplayPort alt mode on Orion
+ O6
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
@@ -24,6 +24,11 @@ RTS5453 layout on the O6.
 Together these changes enable the full USB-C DP alt mode signal chain:
 USB-C connector -> RTS5453 PD controller -> USBDP combo PHY -> DPTX ->
 linlondp DPU -> monitor.
+---
+ arch/arm64/boot/dts/cix/sky1-orion-o6.dts  |  4 +-
+ arch/arm64/boot/dts/cix/sky1-orion-o6n.dts | 66 +---------------------
+ arch/arm64/boot/dts/cix/sky1.dtsi          | 25 ++++----
+ 3 files changed, 13 insertions(+), 82 deletions(-)
 
 diff --git a/arch/arm64/boot/dts/cix/sky1-orion-o6.dts b/arch/arm64/boot/dts/cix/sky1-orion-o6.dts
 index aec8305638231..c9692116d1576 100644
@@ -188,6 +193,3 @@ index a199d58f8f36f..9779c6aea9fc7 100644
  			power-domains = <&smc_devpd SKY1_PD_DPU4>;
  			power-domain-names = "dpu_pd";
  			clocks = <&scmi_clk CLK_TREE_DPU4_ACLK>;
--- 
-2.51.0
-

@@ -1,7 +1,7 @@
-From 17b3849cc30a164282293c34e5845466d64b1f7b Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Tue, 3 Feb 2026 00:16:14 +1100
-Subject: [PATCH 020/118] arm64: dts: cix: Add Orange Pi 6 Plus device tree
+Subject: [PATCH] arm64: dts: cix: Add Orange Pi 6 Plus device tree
 
 Add board DTS for the Orange Pi 6 Plus (CIX Sky1 SoC), adapted from
 community contribution (PR #1 by Entrpi). Uses the shared sky1.dtsi
@@ -13,6 +13,12 @@ hardware documentation.
 
 Also fix missing #sound-dai-cells on ipb_hda node in sky1.dtsi which
 caused a dtc warning for any board enabling HDA audio.
+---
+ arch/arm64/boot/dts/cix/Makefile              |    1 +
+ .../boot/dts/cix/sky1-orangepi-6-plus.dts     | 2270 +++++++++++++++++
+ arch/arm64/boot/dts/cix/sky1.dtsi             |    1 +
+ 3 files changed, 2272 insertions(+)
+ create mode 100644 arch/arm64/boot/dts/cix/sky1-orangepi-6-plus.dts
 
 diff --git a/arch/arm64/boot/dts/cix/Makefile b/arch/arm64/boot/dts/cix/Makefile
 index 4618f7a6655ce..a6af900ae70f1 100644
@@ -2311,6 +2317,3 @@ index b4cc5c43bce08..a199d58f8f36f 100644
  				status = "disabled";
  			};
  		};
--- 
-2.51.0
-

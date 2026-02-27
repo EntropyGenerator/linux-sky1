@@ -1,7 +1,7 @@
-From 5358839c6ad141f577da35080dbdc34e8f314571 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Fri, 6 Feb 2026 02:06:37 +1100
-Subject: [PATCH 064/118] hwmon: Add CIX Sky1 fan controller driver
+Subject: [PATCH] hwmon: Add CIX Sky1 fan controller driver
 
 Add driver for the CIX Sky1 SoC fan controller which provides:
 - PWM-based fan speed control via hwmon interface
@@ -10,6 +10,12 @@ Add driver for the CIX Sky1 SoC fan controller which provides:
 
 The controller is enumerated via ACPI (CIXHA024) and integrates
 with the kernel's hwmon subsystem for thermal management.
+---
+ drivers/hwmon/Kconfig   |  13 +++
+ drivers/hwmon/Makefile  |   1 +
+ drivers/hwmon/cix-fan.c | 171 ++++++++++++++++++++++++++++++++++++++++
+ 3 files changed, 185 insertions(+)
+ create mode 100644 drivers/hwmon/cix-fan.c
 
 diff --git a/drivers/hwmon/Kconfig b/drivers/hwmon/Kconfig
 index 157678b821fc5..0f0ea7f814670 100644
@@ -224,6 +230,3 @@ index 0000000000000..3b6766f893b25
 +MODULE_AUTHOR("CIX Technology Group Co., Ltd.");
 +MODULE_DESCRIPTION("CIX Sky1 fan control driver");
 +MODULE_LICENSE("GPL");
--- 
-2.51.0
-

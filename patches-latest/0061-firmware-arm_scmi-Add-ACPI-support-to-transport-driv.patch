@@ -1,8 +1,8 @@
-From ee239cc779c158b525278c981b45719dafe65b9d Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Fri, 6 Feb 2026 02:06:16 +1100
-Subject: [PATCH 061/118] firmware: arm_scmi: Add ACPI support to transport
- driver macro
+Subject: [PATCH] firmware: arm_scmi: Add ACPI support to transport driver
+ macro
 
 Extend DEFINE_SCMI_TRANSPORT_DRIVER macro to accept an ACPI match table
 parameter, allowing SCMI transports to be enumerated via ACPI in addition
@@ -14,6 +14,13 @@ require ACPI enumeration.
 
 This enables SCMI-based clock and cpufreq drivers to work on ACPI-booted
 systems without requiring platform-specific ACPI clock infrastructure.
+---
+ drivers/firmware/arm_scmi/common.h             |  7 +++++--
+ drivers/firmware/arm_scmi/transports/mailbox.c | 13 ++++++++++++-
+ drivers/firmware/arm_scmi/transports/optee.c   |  2 +-
+ drivers/firmware/arm_scmi/transports/smc.c     |  2 +-
+ drivers/firmware/arm_scmi/transports/virtio.c  |  2 +-
+ 5 files changed, 20 insertions(+), 6 deletions(-)
 
 diff --git a/drivers/firmware/arm_scmi/common.h b/drivers/firmware/arm_scmi/common.h
 index 7c35c95fddbaf..d86babb90b4f8 100644
@@ -111,6 +118,3 @@ index 326c4a93e44b9..bd806e79ccff6 100644
  
  static int scmi_vio_probe(struct virtio_device *vdev)
  {
--- 
-2.51.0
-

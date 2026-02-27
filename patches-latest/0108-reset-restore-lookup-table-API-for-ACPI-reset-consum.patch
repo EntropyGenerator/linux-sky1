@@ -1,8 +1,7 @@
-From 199accb6756808ce6997ed6c67360d81f4eb2e67 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Wed, 11 Feb 2026 01:58:25 +1100
-Subject: [PATCH 108/118] reset: restore lookup table API for ACPI reset
- consumers
+Subject: [PATCH] reset: restore lookup table API for ACPI reset consumers
 
 The reset_control_lookup mechanism was removed in upstream commit
 8bffbfdc01dff ("reset: remove legacy reset lookup code") because
@@ -18,6 +17,10 @@ __reset_control_get() is restored so non-DT devices go through
 lookup table resolution instead of returning -ENOENT.
 
 Users: reset-sky1-audss.c and cix-acpi-resource-lookup.c
+---
+ drivers/reset/core.c             | 97 +++++++++++++++++++++++++++++++-
+ include/linux/reset-controller.h | 25 ++++++++
+ 2 files changed, 120 insertions(+), 2 deletions(-)
 
 diff --git a/drivers/reset/core.c b/drivers/reset/core.c
 index 0135dd0ae2049..16edbc4e5f628 100644
@@ -196,6 +199,3 @@ index 46514cb1b9e06..f92229d827a2c 100644
  #endif
  
  #endif
--- 
-2.51.0
-

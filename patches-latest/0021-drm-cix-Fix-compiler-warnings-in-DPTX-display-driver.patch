@@ -1,7 +1,7 @@
-From cc1ac32be7ee7a011ca91df0a8f332d09d7491dd Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Tue, 3 Feb 2026 13:04:17 +1100
-Subject: [PATCH 021/118] drm/cix: Fix compiler warnings in DPTX display driver
+Subject: [PATCH] drm/cix: Fix compiler warnings in DPTX display driver
 
 Fix all compiler warnings in the Trilinear DPTX module:
 
@@ -19,6 +19,14 @@ Fix all compiler warnings in the Trilinear DPTX module:
   (cix_hdcp_ioctl.h, hdcp2_tx_tmr.h)
 - Mark unused edp_volt_high_cfg and tmr_hdcp_autoreload
   as __maybe_unused
+---
+ drivers/gpu/drm/cix/dptx/hdcp/cix_hdcp_ioctl.c |  1 +
+ drivers/gpu/drm/cix/dptx/hdcp/hdcp2_tx_tmr.c   | 11 ++++++-----
+ drivers/gpu/drm/cix/dptx/trilin_dptx.c         | 12 +++---------
+ drivers/gpu/drm/cix/dptx/trilin_dptx_cix.c     | 11 ++---------
+ drivers/gpu/drm/cix/dptx/trilin_drm.c          |  2 +-
+ drivers/gpu/drm/cix/dptx/trilin_edp_phy.c      |  2 +-
+ 6 files changed, 14 insertions(+), 25 deletions(-)
 
 diff --git a/drivers/gpu/drm/cix/dptx/hdcp/cix_hdcp_ioctl.c b/drivers/gpu/drm/cix/dptx/hdcp/cix_hdcp_ioctl.c
 index afc975e083b55..fa7d763744b6d 100644
@@ -204,6 +212,3 @@ index bdf3acf588168..84319eee3c23d 100644
  	{ 0x08A4, 0x0003, 0x0027, 0x0000 }, // swing level == 0
  	{ 0x08A4, 0x0003, 0x0023, 0x0009 },
  	{ 0x08A4, 0x0003, 0x001E, 0x0010 },
--- 
-2.51.0
-

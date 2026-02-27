@@ -1,8 +1,7 @@
-From 4eece6450889f4b5b3fa12525326c7ff2de0157e Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Fri, 6 Feb 2026 17:46:12 +1100
-Subject: [PATCH 072/118] firmware: arm_scmi: shmem: Add ACPI shared memory
- discovery
+Subject: [PATCH] firmware: arm_scmi: shmem: Add ACPI shared memory discovery
 
 shmem_setup_iomap() uses of_parse_phandle() to find shared memory nodes,
 which only works with Device Tree. In ACPI mode, the SCMI device's _DSD
@@ -18,6 +17,9 @@ SCMI shmem devices (CIXHA004/CIXHA005).
 
 Also remove debug pr_info/pr_err prints that were added during
 development.
+---
+ drivers/firmware/arm_scmi/shmem.c | 89 +++++++++++++++++++++++++++++--
+ 1 file changed, 84 insertions(+), 5 deletions(-)
 
 diff --git a/drivers/firmware/arm_scmi/shmem.c b/drivers/firmware/arm_scmi/shmem.c
 index 4f1b2b65b1950..da61234b77fd4 100644
@@ -141,6 +143,3 @@ index 4f1b2b65b1950..da61234b77fd4 100644
  
  	if (!of_device_is_compatible(shmem, "arm,scmi-shmem"))
  		return IOMEM_ERR_PTR(-ENXIO);
--- 
-2.51.0
-

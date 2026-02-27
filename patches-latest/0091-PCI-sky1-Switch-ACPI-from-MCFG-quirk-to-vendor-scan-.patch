@@ -1,8 +1,8 @@
-From e99022be9919c19b1613c1e8849ee1b4fb11cd21 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sun, 8 Feb 2026 21:44:46 +1100
-Subject: [PATCH 091/118] PCI: sky1: Switch ACPI from MCFG quirk to vendor scan
- handler approach
+Subject: [PATCH] PCI: sky1: Switch ACPI from MCFG quirk to vendor scan handler
+ approach
 
 Replace the MCFG quirk + companion driver approach with the vendor
 kernel's pattern: block PNP0A08 root bridges with an ACPI scan handler
@@ -35,6 +35,18 @@ Supporting changes:
 - phy-cix-pcie: Skip OF provider under ACPI (use lookup tables)
 - Remove MCFG quirk, sky1_pcie_ecam_ops, CIXH2020 forbidden_id_list
   entry, and pci_acpi_cadence_sky1_fixups()
+---
+ drivers/acpi/acpi_platform.c                  |   1 -
+ drivers/acpi/pci_mcfg.c                       |   5 -
+ .../pci/controller/cadence/pci-sky1-acpi.c    | 716 +++---------------
+ .../pci/controller/cadence/pci-sky1-acpi.h    |  18 +
+ drivers/pci/controller/cadence/pci-sky1.c     | 147 +++-
+ drivers/pci/pci-acpi.c                        | 181 -----
+ drivers/phy/cix/phy-cix-pcie.c                |  14 +-
+ drivers/pinctrl/cix/pinctrl-sky1-base.c       |  28 +-
+ include/linux/pci-ecam.h                      |   1 -
+ 9 files changed, 273 insertions(+), 838 deletions(-)
+ create mode 100644 drivers/pci/controller/cadence/pci-sky1-acpi.h
 
 diff --git a/drivers/acpi/acpi_platform.c b/drivers/acpi/acpi_platform.c
 index 7631935ba2ae4..48d15dd785f6e 100644
@@ -1131,10 +1143,10 @@ index 1e76d5b12115b..6db46657df989 100644
  	if (!pcie)
  		return -ENOMEM;
 diff --git a/drivers/pci/pci-acpi.c b/drivers/pci/pci-acpi.c
-index 13fb63c85a3a8..7915b4dcc7fea 100644
+index 423efb06fc608..6b6f2c6796198 100644
 --- a/drivers/pci/pci-acpi.c
 +++ b/drivers/pci/pci-acpi.c
-@@ -1598,185 +1598,6 @@ int pcibios_root_bridge_prepare(struct pci_host_bridge *bridge)
+@@ -1587,185 +1587,6 @@ int pcibios_root_bridge_prepare(struct pci_host_bridge *bridge)
  	return 0;
  }
  
@@ -1320,7 +1332,7 @@ index 13fb63c85a3a8..7915b4dcc7fea 100644
  static int pci_acpi_root_prepare_resources(struct acpi_pci_root_info *ci)
  {
  	struct resource_entry *entry, *tmp;
-@@ -1788,8 +1609,6 @@ static int pci_acpi_root_prepare_resources(struct acpi_pci_root_info *ci)
+@@ -1777,8 +1598,6 @@ static int pci_acpi_root_prepare_resources(struct acpi_pci_root_info *ci)
  			resource_list_destroy_entry(entry);
  	}
  
@@ -1414,6 +1426,3 @@ index 4b2bb1bb3fa9c..d930651473b4d 100644
 -extern const struct pci_ecam_ops sky1_pcie_ecam_ops; /* CIX Sky1 Cadence PCIe */
  #endif
  #endif
--- 
-2.51.0
-

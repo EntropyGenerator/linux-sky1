@@ -1,8 +1,7 @@
-From f4aa60c20818428cc0478d78186b272001b681f1 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Thu, 5 Feb 2026 21:40:02 +1100
-Subject: [PATCH 043/118] PCI: cadence: sky1: Add ASPM control and wakeup
- improvements
+Subject: [PATCH] PCI: cadence: sky1: Add ASPM control and wakeup improvements
 
 Port several PCIe improvements from CIX 6.6.89 kernel:
 
@@ -23,6 +22,10 @@ Port several PCIe improvements from CIX 6.6.89 kernel:
 
 These changes improve power management flexibility and compatibility
 with various PCIe endpoint devices.
+---
+ drivers/pci/controller/cadence/pci-sky1.c | 84 +++++++++++++++++++----
+ drivers/pci/controller/cadence/pci-sky1.h |  1 +
+ 2 files changed, 72 insertions(+), 13 deletions(-)
 
 diff --git a/drivers/pci/controller/cadence/pci-sky1.c b/drivers/pci/controller/cadence/pci-sky1.c
 index 0e898f8364b75..1e76d5b12115b 100644
@@ -180,6 +183,3 @@ index bfa1052b43812..368d359dba78c 100644
  	spinlock_t aer_lock;
  	struct work_struct pme_work;
  	bool is_aer_uncor_panic;
--- 
-2.51.0
-

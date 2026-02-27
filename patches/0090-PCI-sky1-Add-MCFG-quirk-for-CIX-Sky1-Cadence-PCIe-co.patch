@@ -722,7 +722,7 @@ index 0000000000000..2880b5656c01c
 +
 +#endif /* CONFIG_ACPI && CONFIG_PCI_QUIRKS */
 diff --git a/drivers/pci/pci-acpi.c b/drivers/pci/pci-acpi.c
-index 9369377725fa0..13fb63c85a3a8 100644
+index 0162acfb57896..423efb06fc608 100644
 --- a/drivers/pci/pci-acpi.c
 +++ b/drivers/pci/pci-acpi.c
 @@ -9,8 +9,10 @@
@@ -736,7 +736,7 @@ index 9369377725fa0..13fb63c85a3a8 100644
  #include <linux/msi.h>
  #include <linux/pci_hotplug.h>
  #include <linux/module.h>
-@@ -1596,6 +1598,185 @@ int pcibios_root_bridge_prepare(struct pci_host_bridge *bridge)
+@@ -1585,6 +1587,185 @@ int pcibios_root_bridge_prepare(struct pci_host_bridge *bridge)
  	return 0;
  }
  
@@ -922,7 +922,7 @@ index 9369377725fa0..13fb63c85a3a8 100644
  static int pci_acpi_root_prepare_resources(struct acpi_pci_root_info *ci)
  {
  	struct resource_entry *entry, *tmp;
-@@ -1606,6 +1787,9 @@ static int pci_acpi_root_prepare_resources(struct acpi_pci_root_info *ci)
+@@ -1595,6 +1776,9 @@ static int pci_acpi_root_prepare_resources(struct acpi_pci_root_info *ci)
  		if (!(entry->res->flags & IORESOURCE_WINDOW))
  			resource_list_destroy_entry(entry);
  	}
@@ -933,10 +933,10 @@ index 9369377725fa0..13fb63c85a3a8 100644
  }
  
 diff --git a/drivers/pci/quirks.c b/drivers/pci/quirks.c
-index b86b17304c1d0..43ca6b172a8c8 100644
+index 968b8ff9229eb..b4bbc4ca14b3f 100644
 --- a/drivers/pci/quirks.c
 +++ b/drivers/pci/quirks.c
-@@ -6366,3 +6366,41 @@ static void pci_mask_replay_timer_timeout(struct pci_dev *pdev)
+@@ -6371,3 +6371,41 @@ static void pci_mask_replay_timer_timeout(struct pci_dev *pdev)
  DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_GLI, 0x9750, pci_mask_replay_timer_timeout);
  DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_GLI, 0x9755, pci_mask_replay_timer_timeout);
  #endif

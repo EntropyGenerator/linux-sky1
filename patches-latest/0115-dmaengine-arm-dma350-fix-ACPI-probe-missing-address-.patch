@@ -1,7 +1,7 @@
-From e393f2cc8e3962e78d6fd523639d6b3744d00473 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Thu, 12 Feb 2026 19:06:10 +1100
-Subject: [PATCH 115/118] dmaengine: arm-dma350: fix ACPI probe missing address
+Subject: [PATCH] dmaengine: arm-dma350: fix ACPI probe missing address
  translation and IRQ routing
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
@@ -27,6 +27,9 @@ fwnode_find_reference(), finds the corresponding syscon platform
 device, and obtains its regmap.
 
 This fixes HDMI audio output under ACPI boot on Sky1/Orion O6.
+---
+ drivers/dma/arm-dma350.c | 32 ++++++++++++++++++++++++++------
+ 1 file changed, 26 insertions(+), 6 deletions(-)
 
 diff --git a/drivers/dma/arm-dma350.c b/drivers/dma/arm-dma350.c
 index 4dcc7868fa534..463258bffa135 100644
@@ -99,6 +102,3 @@ index 4dcc7868fa534..463258bffa135 100644
  
  	dev_dbg(dev, "DMA-350 r%dp%d with %d channels, %d requests\n", r, p, dmac->nchan, dmac->nreq);
  
--- 
-2.51.0
-

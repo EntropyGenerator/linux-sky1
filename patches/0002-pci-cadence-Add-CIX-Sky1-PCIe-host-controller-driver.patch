@@ -5035,7 +5035,7 @@ index e2a853d2c0ab0..5da4c36b25aa3 100644
  
  /**
 diff --git a/drivers/pci/quirks.c b/drivers/pci/quirks.c
-index b9c252aa6fe08..ac8a17e88bda4 100644
+index 9e073321b2dd2..a96b2eb1fc3af 100644
 --- a/drivers/pci/quirks.c
 +++ b/drivers/pci/quirks.c
 @@ -2906,6 +2906,27 @@ DECLARE_PCI_FIXUP_CLASS_EARLY(PCI_VENDOR_ID_NVIDIA, 0x229e,

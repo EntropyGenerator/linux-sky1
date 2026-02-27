@@ -1,7 +1,7 @@
-From dd90d135f0967601a153c82049c18fcf08039e57 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sat, 7 Feb 2026 22:50:12 +1100
-Subject: [PATCH 087/118] phy: cix-usbdp: Skip PHY reset under ACPI boot
+Subject: [PATCH] phy: cix-usbdp: Skip PHY reset under ACPI boot
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
@@ -15,6 +15,9 @@ already have active USB connections through the xHCI layer.
 Skip the PHY reset entirely under ACPI to avoid killing active USB
 connections.  The GOP-based reset logic remains for DT boot where
 PHY initialization ordering is controlled by the device tree.
+---
+ drivers/phy/cix/phy-cix-usbdp.c | 56 ++++++++++++++++++++-------------
+ 1 file changed, 35 insertions(+), 21 deletions(-)
 
 diff --git a/drivers/phy/cix/phy-cix-usbdp.c b/drivers/phy/cix/phy-cix-usbdp.c
 index 548b2b856f769..9b1eb5afe3a6a 100644
@@ -88,6 +91,3 @@ index 548b2b856f769..9b1eb5afe3a6a 100644
  	}
  
  	dev_info(dev, "get phy-status:[%d]%d\n", id, gop_value);
--- 
-2.51.0
-

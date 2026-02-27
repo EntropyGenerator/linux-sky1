@@ -1,7 +1,7 @@
-From ec0a216cd5bffbb95428000baf4272448b376f96 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Thu, 5 Feb 2026 09:28:19 +1100
-Subject: [PATCH 040/118] update-dev-boot: fix DTB sort key to use full path
+Subject: [PATCH] update-dev-boot: fix DTB sort key to use full path
 
 The DTB glob matches produce paths like:
   /usr/lib/linux-image-6.18.2-sky1/cix/sky1-orion-o6.dtb
@@ -11,6 +11,9 @@ Sorting by p.name gives identical values (sky1-orion-o6.dtb) for all
 matches, so the sort was unstable and could pick the wrong version.
 Sort by str(p) instead so the parent directory name breaks the tie
 and the latest kernel version is selected.
+---
+ scripts/update-dev-boot.py | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
 
 diff --git a/scripts/update-dev-boot.py b/scripts/update-dev-boot.py
 index fe5256a1bf5c8..5db9e92c07112 100755
@@ -31,6 +34,3 @@ index fe5256a1bf5c8..5db9e92c07112 100755
              reverse=True,
          )
  
--- 
-2.51.0
-

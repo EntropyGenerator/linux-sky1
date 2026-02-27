@@ -1,8 +1,8 @@
-From 3d133572632507a93b73166726b497a42da1abe0 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Thu, 5 Feb 2026 09:41:18 +1100
-Subject: [PATCH 037/118] arm64: dts: cix: Add missing DPU SIDs and enable GOP
- RMR from IORT
+Subject: [PATCH] arm64: dts: cix: Add missing DPU SIDs and enable GOP RMR from
+ IORT
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
@@ -20,6 +20,9 @@ mappings so the SMMU doesn't block display DMA during the handoff from
 firmware to the display driver.
 
 IORT source: hw-extract-o6-acpi/acpi/IORT (decompiled with iasl)
+---
+ arch/arm64/boot/dts/cix/sky1.dtsi | 35 ++++++++++++++++---------------
+ 1 file changed, 18 insertions(+), 17 deletions(-)
 
 diff --git a/arch/arm64/boot/dts/cix/sky1.dtsi b/arch/arm64/boot/dts/cix/sky1.dtsi
 index 3eaca2bee81e6..e21458f9f4810 100644
@@ -147,6 +150,3 @@ index 3eaca2bee81e6..e21458f9f4810 100644
  			enabled_by_gop = <0>;
  			status = "disabled";
  
--- 
-2.51.0
-

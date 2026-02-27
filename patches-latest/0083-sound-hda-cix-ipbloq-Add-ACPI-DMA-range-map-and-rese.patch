@@ -1,8 +1,8 @@
-From b0a4475b1fdccf1a8386b8ac3fd0f8167b879cc1 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sat, 7 Feb 2026 21:21:29 +1100
-Subject: [PATCH 083/118] sound: hda: cix-ipbloq: Add ACPI DMA range map and
- reserved memory support
+Subject: [PATCH] sound: hda: cix-ipbloq: Add ACPI DMA range map and reserved
+ memory support
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
@@ -20,6 +20,10 @@ frees it with kfree(), not devm-managed free.
 Export dma_declare_coherent_memory for module use, and allow memremap
 to fall back from WC to WB for RAM regions not removed from the
 linear map by firmware.
+---
+ kernel/dma/coherent.c              |  10 +-
+ sound/hda/controllers/cix-ipbloq.c | 148 +++++++++++++++++++++++++++--
+ 2 files changed, 151 insertions(+), 7 deletions(-)
 
 diff --git a/kernel/dma/coherent.c b/kernel/dma/coherent.c
 index 77c8d9487a9ab..308a43111d440 100644
@@ -247,6 +251,3 @@ index 4133556c2c732..b453ab4102727 100644
  	hda->resets[hda->nresets++].id = "hda";
  	err = devm_reset_control_bulk_get_exclusive(&pdev->dev, hda->nresets,
  						    hda->resets);
--- 
-2.51.0
-

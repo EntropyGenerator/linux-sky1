@@ -1,8 +1,8 @@
-From ed91707b0c07c00be05487ac62ae667a17b5299b Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Thu, 12 Feb 2026 12:43:44 +1100
-Subject: [PATCH 111/118] usb: cdnsp: add ACPI device matching and PHY
- reference resolution
+Subject: [PATCH] usb: cdnsp: add ACPI device matching and PHY reference
+ resolution
 
 Add CIXH2031 ACPI device ID to cdnsp-plat so the Cadence USBSSP
 controller probes under ACPI boot.
@@ -14,6 +14,9 @@ that follows the ACPI _DSD reference, finds the parent PHY provider,
 and looks up the PHY via the provider's lookup table.  This gives
 the controller its USB2/USB3 PHY handles for proper SuperSpeed
 link training.
+---
+ drivers/usb/cdns3/cdnsp-plat.c | 84 ++++++++++++++++++++++++++++++++++
+ 1 file changed, 84 insertions(+)
 
 diff --git a/drivers/usb/cdns3/cdnsp-plat.c b/drivers/usb/cdns3/cdnsp-plat.c
 index 0132aa18ee063..b58cc37cf0971 100644
@@ -148,6 +151,3 @@ index 0132aa18ee063..b58cc37cf0971 100644
  		.pm	= &cdnsp_pm_ops,
  	},
  };
--- 
-2.51.0
-

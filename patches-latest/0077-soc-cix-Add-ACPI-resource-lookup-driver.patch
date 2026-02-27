@@ -1,7 +1,7 @@
-From a145d195f1795d6234462997a153aa9eefc0051d Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sat, 7 Feb 2026 18:16:29 +1100
-Subject: [PATCH 077/118] soc: cix: Add ACPI resource lookup driver
+Subject: [PATCH] soc: cix: Add ACPI resource lookup driver
 
 Add driver for CIX ACPI device CIXA1019 that processes custom DSDT
 tables to bridge the firmware with Linux kernel resource frameworks:
@@ -14,6 +14,12 @@ These tables are the CIX ACPI equivalent of DT phandle-based reset,
 resource naming, and dependency mechanisms. Uses
 DL_FLAG_AUTOREMOVE_CONSUMER for device links to enforce proper
 supplier-before-consumer probe ordering.
+---
+ drivers/soc/cix/Kconfig                    |  15 +
+ drivers/soc/cix/Makefile                   |   1 +
+ drivers/soc/cix/cix-acpi-resource-lookup.c | 394 +++++++++++++++++++++
+ 3 files changed, 410 insertions(+)
+ create mode 100644 drivers/soc/cix/cix-acpi-resource-lookup.c
 
 diff --git a/drivers/soc/cix/Kconfig b/drivers/soc/cix/Kconfig
 index 40c57dde7d53f..2da33995eb9a2 100644
@@ -450,6 +456,3 @@ index 0000000000000..0abe62febd504
 +
 +MODULE_DESCRIPTION("CIX ACPI resource lookup driver");
 +MODULE_LICENSE("GPL");
--- 
-2.51.0
-

@@ -1,8 +1,7 @@
-From ff665d4a7ac8355520f2c7138e08d861e0dd5662 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sat, 7 Feb 2026 18:16:51 +1100
-Subject: [PATCH 079/118] clk: cix: Add ACPI support for sky1-audss clock and
- reset
+Subject: [PATCH] clk: cix: Add ACPI support for sky1-audss clock and reset
 
 Three changes for audio subsystem ACPI boot:
 
@@ -21,6 +20,11 @@ Three changes for audio subsystem ACPI boot:
    the device's CLKA table to create clkdev entries mapping internal
    audss clocks to consumer devices (HDA, I2S, DMA). This is the ACPI
    equivalent of devm_of_clk_add_hw_provider for DT consumers.
+---
+ drivers/clk/cix/clk-sky1-audss.c | 113 ++++++++++++++++++++++++++++++-
+ drivers/clk/clkdev.c             |   2 +-
+ drivers/reset/reset-sky1-audss.c |  20 ++++++
+ 3 files changed, 133 insertions(+), 2 deletions(-)
 
 diff --git a/drivers/clk/cix/clk-sky1-audss.c b/drivers/clk/cix/clk-sky1-audss.c
 index 378d2ff4d6e32..9de133e6c2275 100644
@@ -228,6 +232,3 @@ index 2ec4e015911ab..35d66e16f619e 100644
  	if (IS_ERR(regmap))
  		return dev_err_probe(dev, PTR_ERR(regmap),
  				     "failed to get parent regmap\n");
--- 
-2.51.0
-

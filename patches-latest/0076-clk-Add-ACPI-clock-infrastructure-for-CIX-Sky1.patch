@@ -1,7 +1,7 @@
-From a121a1c6f213e0b9aaa70e6c462f3bda9723230b Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sat, 7 Feb 2026 18:16:18 +1100
-Subject: [PATCH 076/118] clk: Add ACPI clock infrastructure for CIX Sky1
+Subject: [PATCH] clk: Add ACPI clock infrastructure for CIX Sky1
 
 Add two components for ACPI clock support on CIX Sky1 SoCs:
 
@@ -12,6 +12,13 @@ Add two components for ACPI clock support on CIX Sky1 SoCs:
    to parse CLKT tables on each device node, creating clkdev entries
    that connect SCMI-provided clocks to their consumer devices. This
    is the ACPI equivalent of DT phandle-based clock references.
+---
+ drivers/clk/cix/Kconfig         |  10 ++
+ drivers/clk/cix/Makefile        |   1 +
+ drivers/clk/cix/clk-sky1-acpi.c | 173 ++++++++++++++++++++++++++++++++
+ drivers/clk/clk-scmi.c          |  23 ++++-
+ 4 files changed, 205 insertions(+), 2 deletions(-)
+ create mode 100644 drivers/clk/cix/clk-sky1-acpi.c
 
 diff --git a/drivers/clk/cix/Kconfig b/drivers/clk/cix/Kconfig
 index d572e14db5bb5..76934ca4330d5 100644
@@ -262,6 +269,3 @@ index 6b286ea6f1218..0f125c450e76e 100644
  }
  
  static const struct scmi_device_id scmi_id_table[] = {
--- 
-2.51.0
-

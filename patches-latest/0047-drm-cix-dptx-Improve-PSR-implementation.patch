@@ -1,7 +1,7 @@
-From 7ca4ac07ce5c0144ceba5b75ac223d596bbbcb1b Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Thu, 5 Feb 2026 22:38:06 +1100
-Subject: [PATCH 047/118] drm: cix: dptx: Improve PSR implementation
+Subject: [PATCH] drm: cix: dptx: Improve PSR implementation
 
 Port PSR improvements from CIX 6.6.89:
 
@@ -17,6 +17,11 @@ Port PSR improvements from CIX 6.6.89:
 - Update self_refresh_aware based on psr_config_on state
 
 These changes improve PSR reliability and power savings for eDP panels.
+---
+ drivers/gpu/drm/cix/dptx/trilin_dptx.c | 78 +++++++++++++++++++-------
+ drivers/gpu/drm/cix/dptx/trilin_dptx.h |  2 +
+ drivers/gpu/drm/cix/dptx/trilin_drm.c  | 16 +++++-
+ 3 files changed, 74 insertions(+), 22 deletions(-)
 
 diff --git a/drivers/gpu/drm/cix/dptx/trilin_dptx.c b/drivers/gpu/drm/cix/dptx/trilin_dptx.c
 index 6093fe19a7da2..93d0cf511749e 100644
@@ -249,6 +254,3 @@ index 2b9e4a939eaa1..ba40774524ce3 100644
  }
  
  static const struct drm_encoder_helper_funcs trilin_dp_encoder_helper_funcs = {
--- 
-2.51.0
-

@@ -1,8 +1,7 @@
-From 88cb37d2d81081585618ffe7214d3e2f3dafa8b0 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Thu, 5 Feb 2026 23:07:36 +1100
-Subject: [PATCH 050/118] iommu/arm-smmu-v3: Add PCIe ATS override option for
- Sky1
+Subject: [PATCH] iommu/arm-smmu-v3: Add PCIe ATS override option for Sky1
 
 Sky1's PCIe controller has a DTI (Distributed Translation Interface)
 ATS Master that can send translated TLP messages to the SMMU even when
@@ -15,6 +14,11 @@ transactions regardless of endpoint ATS capability.
 
 The option is enabled via "cix,pcie-ats-override" DT property on the
 SMMU node. Enable it for smmu_pciehub on Sky1 platforms.
+---
+ arch/arm64/boot/dts/cix/sky1.dtsi           |  7 +++++++
+ drivers/iommu/arm/arm-smmu-v3/arm-smmu-v3.c | 11 +++++++++--
+ drivers/iommu/arm/arm-smmu-v3/arm-smmu-v3.h |  1 +
+ 3 files changed, 17 insertions(+), 2 deletions(-)
 
 diff --git a/arch/arm64/boot/dts/cix/sky1.dtsi b/arch/arm64/boot/dts/cix/sky1.dtsi
 index 8f50e6053197f..e912f40d6bfeb 100644
@@ -82,6 +86,3 @@ index 9c9b9dd8fcce2..0ba303a065ae6 100644
  	u32				options;
  
  	struct arm_smmu_cmdq		cmdq;
--- 
-2.51.0
-

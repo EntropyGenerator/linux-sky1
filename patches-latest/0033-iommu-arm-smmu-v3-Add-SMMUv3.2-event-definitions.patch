@@ -1,7 +1,7 @@
-From 4223dfbd1929735555dfbe3dd316470ea90273cd Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Wed, 4 Feb 2026 19:40:29 +1100
-Subject: [PATCH 033/118] iommu/arm-smmu-v3: Add SMMUv3.2 event definitions
+Subject: [PATCH] iommu/arm-smmu-v3: Add SMMUv3.2 event definitions
 
 Add missing event IDs from the ARM SMMUv3.2 specification:
 
@@ -15,6 +15,10 @@ initialization before IOMMU domains are attached.
 
 The CIX Sky1 SoC uses ARM MMU-700 implementing SMMUv3.2+ features
 (BBML2, BTM, E2H, NESTING) and generates these events.
+---
+ drivers/iommu/arm/arm-smmu-v3/arm-smmu-v3.c | 3 +++
+ drivers/iommu/arm/arm-smmu-v3/arm-smmu-v3.h | 2 ++
+ 2 files changed, 5 insertions(+)
 
 diff --git a/drivers/iommu/arm/arm-smmu-v3/arm-smmu-v3.c b/drivers/iommu/arm/arm-smmu-v3/arm-smmu-v3.c
 index 693d237892e98..95b85a2ced6b9 100644
@@ -52,6 +56,3 @@ index ae23aacc38402..42bca64aab331 100644
  #define EVT_ID_BAD_SUBSTREAMID_CONFIG	0x08
  #define EVT_ID_CD_FETCH_FAULT		0x09
  #define EVT_ID_BAD_CD_CONFIG		0x0a
--- 
-2.51.0
-

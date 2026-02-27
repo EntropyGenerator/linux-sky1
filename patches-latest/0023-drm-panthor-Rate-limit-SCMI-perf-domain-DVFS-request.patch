@@ -1,8 +1,7 @@
-From 98331b4bb53d7889af8fbd43ce89c117293e55d7 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Tue, 3 Feb 2026 14:08:37 +1100
-Subject: [PATCH 023/118] drm/panthor: Rate-limit SCMI perf domain DVFS
- requests
+Subject: [PATCH] drm/panthor: Rate-limit SCMI perf domain DVFS requests
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
@@ -35,6 +34,9 @@ platforms to align with the rate limit.
 
 Non-SCMI platforms are unaffected — the new logic is gated on the
 presence of opp_dev (SCMI perf domain virtual device).
+---
+ drivers/gpu/drm/panthor/panthor_devfreq.c | 156 +++++++++++++++++++++-
+ 1 file changed, 149 insertions(+), 7 deletions(-)
 
 diff --git a/drivers/gpu/drm/panthor/panthor_devfreq.c b/drivers/gpu/drm/panthor/panthor_devfreq.c
 index 7a632f9161485..c006aa99fbf2f 100644
@@ -244,6 +246,3 @@ index 7a632f9161485..c006aa99fbf2f 100644
  	drm_WARN_ON(&ptdev->base, devfreq_resume_device(pdevfreq->devfreq));
  }
  
--- 
-2.51.0
-

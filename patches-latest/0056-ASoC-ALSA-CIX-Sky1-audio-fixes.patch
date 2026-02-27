@@ -1,7 +1,7 @@
-From 10d5993e9b9bc5f381ecfbbb077f443ba5248dd0 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Thu, 5 Feb 2026 23:32:47 +1100
-Subject: [PATCH 056/118] ASoC/ALSA: CIX Sky1 audio fixes
+Subject: [PATCH] ASoC/ALSA: CIX Sky1 audio fixes
 
 HDA:
 - Add CIX Phecda board fixup (SSID 0x10ec:0x129e) to disable
@@ -12,9 +12,14 @@ I2S-SC:
 - Drain TX FIFO before disable to fix residue data in full-duplex
 - Fix 192KHz mclk_fs from 128 to 256 for proper codec operation
 - Set trigger ordering for DMA vs I2S sequencing
+---
+ sound/hda/codecs/realtek/alc269.c | 22 ++++++++++++++++++++++
+ sound/soc/cix/card-utils.c        |  6 +++++-
+ sound/soc/cix/cdns_i2s_sc.c       | 28 ++++++++++++++++++----------
+ 3 files changed, 45 insertions(+), 11 deletions(-)
 
 diff --git a/sound/hda/codecs/realtek/alc269.c b/sound/hda/codecs/realtek/alc269.c
-index b66965a521076..8378d2f66e4a7 100644
+index 15203c5855eb5..119bf8fd01268 100644
 --- a/sound/hda/codecs/realtek/alc269.c
 +++ b/sound/hda/codecs/realtek/alc269.c
 @@ -3816,6 +3816,7 @@ enum {
@@ -162,6 +167,3 @@ index d117c14c83157..59e9b98ca7fac 100644
  	.trigger = cdns_i2s_sc_trigger,
  };
  
--- 
-2.51.0
-

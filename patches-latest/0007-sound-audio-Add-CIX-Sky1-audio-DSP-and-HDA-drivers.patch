@@ -1,8 +1,7 @@
-From f86c9b22174e70b2f6d2a34e475782cba1b82fc2 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sun, 1 Feb 2026 01:10:44 +1100
-Subject: [PATCH 007/118] sound: audio: Add CIX Sky1 audio, DSP, and HDA
- drivers
+Subject: [PATCH] sound: audio: Add CIX Sky1 audio, DSP, and HDA drivers
 
 Add I2S multi/single-channel drivers, Sky1 sound card, SOF DSP support,
 CIX DSP remoteproc driver, DSP firmware loader, DMA-BUF DSP heap,
@@ -10,6 +9,65 @@ SCMI/mailbox enhancements, and CIX IPBLOQ HDA controller.
 
 HDA driver adopts mainline filename convention (cix-ipbloq.c) and
 removes duplicate Kconfig/Makefile entries from v6.19-rc7 overlap.
+---
+ drivers/dma-buf/heaps/Kconfig              |   19 +
+ drivers/dma-buf/heaps/Makefile             |    1 +
+ drivers/dma-buf/heaps/dsp_heap.c           |  174 +++
+ drivers/dma/arm-dma350.c                   |  955 +++++++++++++++-
+ drivers/firmware/Kconfig                   |    1 +
+ drivers/firmware/Makefile                  |    1 +
+ drivers/firmware/arm_scmi/shmem.c          |    7 +-
+ drivers/firmware/arm_scmi/transports/smc.c |   14 +-
+ drivers/firmware/cix/Kconfig               |   12 +
+ drivers/firmware/cix/Makefile              |    3 +
+ drivers/firmware/cix/cix-dsp.c             |  175 +++
+ drivers/mailbox/Kconfig                    |    2 +-
+ drivers/mailbox/cix-mailbox.c              |  510 +++++----
+ drivers/remoteproc/Kconfig                 |   11 +
+ drivers/remoteproc/Makefile                |    3 +-
+ drivers/remoteproc/cix_dsp_rproc.c         | 1106 ++++++++++++++++++
+ drivers/remoteproc/remoteproc_internal.h   |    1 +
+ drivers/remoteproc/remoteproc_virtio.c     |   37 +-
+ drivers/rpmsg/rpmsg_char.c                 |    2 +
+ drivers/rpmsg/virtio_rpmsg_bus.c           |  353 +++++-
+ include/linux/firmware/cix/dsp.h           |   86 ++
+ sound/hda/controllers/Kconfig              |   30 +-
+ sound/hda/controllers/cix-ipbloq.c         |  717 +++++++++---
+ sound/soc/Kconfig                          |    1 +
+ sound/soc/Makefile                         |    1 +
+ sound/soc/cix/Kconfig                      |   37 +
+ sound/soc/cix/Makefile                     |   10 +
+ sound/soc/cix/card-utils.c                 |  636 +++++++++++
+ sound/soc/cix/card-utils.h                 |   72 ++
+ sound/soc/cix/cdns_i2s_mc.c                | 1146 +++++++++++++++++++
+ sound/soc/cix/cdns_i2s_sc.c                | 1196 ++++++++++++++++++++
+ sound/soc/cix/sky1-card.c                  |   61 +
+ sound/soc/sof/Kconfig                      |    1 +
+ sound/soc/sof/Makefile                     |    1 +
+ sound/soc/sof/cix/Kconfig                  |   34 +
+ sound/soc/sof/cix/Makefile                 |    7 +
+ sound/soc/sof/cix/cix-common.c             |  108 ++
+ sound/soc/sof/cix/cix-common.h             |   34 +
+ sound/soc/sof/cix/cix-sky1.c               |  578 ++++++++++
+ 39 files changed, 7686 insertions(+), 457 deletions(-)
+ create mode 100644 drivers/dma-buf/heaps/dsp_heap.c
+ create mode 100644 drivers/firmware/cix/Kconfig
+ create mode 100644 drivers/firmware/cix/Makefile
+ create mode 100644 drivers/firmware/cix/cix-dsp.c
+ create mode 100644 drivers/remoteproc/cix_dsp_rproc.c
+ create mode 100644 include/linux/firmware/cix/dsp.h
+ create mode 100644 sound/soc/cix/Kconfig
+ create mode 100644 sound/soc/cix/Makefile
+ create mode 100644 sound/soc/cix/card-utils.c
+ create mode 100644 sound/soc/cix/card-utils.h
+ create mode 100644 sound/soc/cix/cdns_i2s_mc.c
+ create mode 100644 sound/soc/cix/cdns_i2s_sc.c
+ create mode 100644 sound/soc/cix/sky1-card.c
+ create mode 100644 sound/soc/sof/cix/Kconfig
+ create mode 100644 sound/soc/sof/cix/Makefile
+ create mode 100644 sound/soc/sof/cix/cix-common.c
+ create mode 100644 sound/soc/sof/cix/cix-common.h
+ create mode 100644 sound/soc/sof/cix/cix-sky1.c
 
 diff --git a/drivers/dma-buf/heaps/Kconfig b/drivers/dma-buf/heaps/Kconfig
 index a5eef06c42264..c7c1cf41cafb8 100644
@@ -9400,6 +9458,3 @@ index 0000000000000..a2e226cccf749
 +MODULE_IMPORT_NS("SND_SOC_SOF_XTENSA");
 +MODULE_AUTHOR("Joakim Zhang <joakim.zhang@cixtech.com>");
 +MODULE_LICENSE("Dual BSD/GPL");
--- 
-2.51.0
-

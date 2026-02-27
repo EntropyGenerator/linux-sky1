@@ -1,11 +1,41 @@
-From 0e04273846bb9ec45cdf2f072325f3bc1bd4a608 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sun, 1 Feb 2026 00:40:28 +1100
-Subject: [PATCH 004/118] usb: phy: Add CIX Sky1 USB and PHY drivers
+Subject: [PATCH] usb: phy: Add CIX Sky1 USB and PHY drivers
 
 Add CDNSP Sky1 glue driver with 10-port support, CDNSP platform driver,
 RTS5453 USB-PD Type-C controller, and CIX PHY drivers (USB2, USB3,
 USBDP combo PHY, PCIe PHY).
+---
+ drivers/phy/Kconfig             |    1 +
+ drivers/phy/Makefile            |    1 +
+ drivers/phy/cix/Kconfig         |   36 +
+ drivers/phy/cix/Makefile        |    5 +
+ drivers/phy/cix/phy-cix-pcie.c  |  631 ++++++++++++
+ drivers/phy/cix/phy-cix-usb2.c  |   58 ++
+ drivers/phy/cix/phy-cix-usb3.c  |  477 +++++++++
+ drivers/phy/cix/phy-cix-usbdp.c | 1616 +++++++++++++++++++++++++++++++
+ drivers/phy/cix/phy-cix-usbdp.h |  347 +++++++
+ drivers/usb/cdns3/Kconfig       |   47 +-
+ drivers/usb/cdns3/Makefile      |   24 +-
+ drivers/usb/cdns3/cdnsp-plat.c  |  346 +++++++
+ drivers/usb/cdns3/cdnsp-sky1.c  |  797 +++++++++++++++
+ drivers/usb/cdns3/cdnsp-sky1.h  |  123 +++
+ drivers/usb/typec/Kconfig       |   13 +
+ drivers/usb/typec/Makefile      |    1 +
+ drivers/usb/typec/rts5453.c     |  611 ++++++++++++
+ 17 files changed, 5124 insertions(+), 10 deletions(-)
+ create mode 100644 drivers/phy/cix/Kconfig
+ create mode 100644 drivers/phy/cix/Makefile
+ create mode 100644 drivers/phy/cix/phy-cix-pcie.c
+ create mode 100644 drivers/phy/cix/phy-cix-usb2.c
+ create mode 100644 drivers/phy/cix/phy-cix-usb3.c
+ create mode 100644 drivers/phy/cix/phy-cix-usbdp.c
+ create mode 100644 drivers/phy/cix/phy-cix-usbdp.h
+ create mode 100644 drivers/usb/cdns3/cdnsp-plat.c
+ create mode 100644 drivers/usb/cdns3/cdnsp-sky1.c
+ create mode 100644 drivers/usb/cdns3/cdnsp-sky1.h
+ create mode 100644 drivers/usb/typec/rts5453.c
 
 diff --git a/drivers/phy/Kconfig b/drivers/phy/Kconfig
 index 678dd0452f0aa..97e0c4af5f0eb 100644
@@ -5296,6 +5326,3 @@ index 0000000000000..f71b7a632b6c4
 +MODULE_AUTHOR("Chao Zeng <Chao.Zeng@cixtech.com>");
 +MODULE_DESCRIPTION("Realtek RTS5453 USB Type-C PD Controller Driver");
 +MODULE_LICENSE("GPL");
--- 
-2.51.0
-

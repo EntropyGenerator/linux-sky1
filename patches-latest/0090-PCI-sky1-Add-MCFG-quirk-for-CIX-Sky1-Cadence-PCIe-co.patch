@@ -1,7 +1,7 @@
-From 8300803080c5c6c74719ce32ad3737d99d94d182 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sun, 8 Feb 2026 13:10:25 +1100
-Subject: [PATCH 090/118] PCI: sky1: Add MCFG quirk for CIX Sky1 Cadence PCIe
+Subject: [PATCH] PCI: sky1: Add MCFG quirk for CIX Sky1 Cadence PCIe
  controllers
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
@@ -27,6 +27,17 @@ Includes supporting changes:
 
 Known issue: link quiesce/retrain cycle causes WiFi (x2 controller)
 link instability — needs further investigation.
+---
+ drivers/acpi/pci_mcfg.c                       |   6 +
+ drivers/pci/controller/cadence/Makefile       |   1 +
+ .../pci/controller/cadence/pci-sky1-acpi.c    | 650 ++++++++++++++++++
+ drivers/pci/pci-acpi.c                        | 184 +++++
+ drivers/pci/quirks.c                          |  38 +
+ drivers/pci/setup-res.c                       |  23 +-
+ drivers/phy/cix/phy-cix-usbdp.c               |   6 +-
+ include/linux/pci-ecam.h                      |   1 +
+ 8 files changed, 901 insertions(+), 8 deletions(-)
+ create mode 100644 drivers/pci/controller/cadence/pci-sky1-acpi.c
 
 diff --git a/drivers/acpi/pci_mcfg.c b/drivers/acpi/pci_mcfg.c
 index 58e10a9801148..72afd41d40e18 100644
@@ -711,7 +722,7 @@ index 0000000000000..2880b5656c01c
 +
 +#endif /* CONFIG_ACPI && CONFIG_PCI_QUIRKS */
 diff --git a/drivers/pci/pci-acpi.c b/drivers/pci/pci-acpi.c
-index 9369377725fa0..13fb63c85a3a8 100644
+index 0162acfb57896..423efb06fc608 100644
 --- a/drivers/pci/pci-acpi.c
 +++ b/drivers/pci/pci-acpi.c
 @@ -9,8 +9,10 @@
@@ -725,7 +736,7 @@ index 9369377725fa0..13fb63c85a3a8 100644
  #include <linux/msi.h>
  #include <linux/pci_hotplug.h>
  #include <linux/module.h>
-@@ -1596,6 +1598,185 @@ int pcibios_root_bridge_prepare(struct pci_host_bridge *bridge)
+@@ -1585,6 +1587,185 @@ int pcibios_root_bridge_prepare(struct pci_host_bridge *bridge)
  	return 0;
  }
  
@@ -911,7 +922,7 @@ index 9369377725fa0..13fb63c85a3a8 100644
  static int pci_acpi_root_prepare_resources(struct acpi_pci_root_info *ci)
  {
  	struct resource_entry *entry, *tmp;
-@@ -1606,6 +1787,9 @@ static int pci_acpi_root_prepare_resources(struct acpi_pci_root_info *ci)
+@@ -1595,6 +1776,9 @@ static int pci_acpi_root_prepare_resources(struct acpi_pci_root_info *ci)
  		if (!(entry->res->flags & IORESOURCE_WINDOW))
  			resource_list_destroy_entry(entry);
  	}
@@ -922,10 +933,10 @@ index 9369377725fa0..13fb63c85a3a8 100644
  }
  
 diff --git a/drivers/pci/quirks.c b/drivers/pci/quirks.c
-index a155b8e867e23..c4091bca2baad 100644
+index 0ea6686f5b5ab..0d6e907b969c8 100644
 --- a/drivers/pci/quirks.c
 +++ b/drivers/pci/quirks.c
-@@ -6365,3 +6365,41 @@ static void pci_mask_replay_timer_timeout(struct pci_dev *pdev)
+@@ -6370,3 +6370,41 @@ static void pci_mask_replay_timer_timeout(struct pci_dev *pdev)
  DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_GLI, 0x9750, pci_mask_replay_timer_timeout);
  DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_GLI, 0x9755, pci_mask_replay_timer_timeout);
  #endif
@@ -1064,6 +1075,3 @@ index d930651473b4d..4b2bb1bb3fa9c 100644
 +extern const struct pci_ecam_ops sky1_pcie_ecam_ops; /* CIX Sky1 Cadence PCIe */
  #endif
  #endif
--- 
-2.51.0
-

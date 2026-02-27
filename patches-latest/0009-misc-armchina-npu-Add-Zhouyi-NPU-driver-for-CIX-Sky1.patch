@@ -1,12 +1,103 @@
-From ead9267e883a1fc3f949f88117767963c9cc3cd1 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sun, 1 Feb 2026 01:19:16 +1100
-Subject: [PATCH 009/118] misc: armchina-npu: Add Zhouyi NPU driver for CIX
- Sky1
+Subject: [PATCH] misc: armchina-npu: Add Zhouyi NPU driver for CIX Sky1
 
 Add ARM China Zhouyi AI accelerator (NPU) driver. Supports the Z2/Z3
 neural processing unit found in the CIX CD8180 SoC for machine learning
 inference workloads.
+---
+ drivers/misc/Kconfig                          |    1 +
+ drivers/misc/Makefile                         |    1 +
+ drivers/misc/armchina-npu/Kconfig             |   69 +
+ drivers/misc/armchina-npu/Makefile            |   18 +
+ drivers/misc/armchina-npu/aipu.c              |  465 ++++
+ drivers/misc/armchina-npu/aipu_common.c       |  315 +++
+ drivers/misc/armchina-npu/aipu_common.h       |   41 +
+ drivers/misc/armchina-npu/aipu_dma_buf.c      |  332 +++
+ drivers/misc/armchina-npu/aipu_dma_buf.h      |   34 +
+ drivers/misc/armchina-npu/aipu_io.c           |   82 +
+ drivers/misc/armchina-npu/aipu_io.h           |   27 +
+ drivers/misc/armchina-npu/aipu_irq.c          |  126 +
+ drivers/misc/armchina-npu/aipu_irq.h          |   43 +
+ drivers/misc/armchina-npu/aipu_job_manager.c  | 1747 +++++++++++++
+ drivers/misc/armchina-npu/aipu_job_manager.h  |  238 ++
+ drivers/misc/armchina-npu/aipu_mm.c           | 2218 +++++++++++++++++
+ drivers/misc/armchina-npu/aipu_mm.h           |  267 ++
+ drivers/misc/armchina-npu/aipu_partition.h    |  151 ++
+ drivers/misc/armchina-npu/aipu_priv.c         |  309 +++
+ drivers/misc/armchina-npu/aipu_priv.h         |   89 +
+ drivers/misc/armchina-npu/aipu_tcb.c          |   63 +
+ drivers/misc/armchina-npu/aipu_tcb.h          |  139 ++
+ drivers/misc/armchina-npu/config.h            |   18 +
+ drivers/misc/armchina-npu/default/Makefile    |    5 +
+ drivers/misc/armchina-npu/default/default.c   |   88 +
+ .../misc/armchina-npu/include/armchina_aipu.h |  699 ++++++
+ .../armchina-npu/include/armchina_aipu_soc.h  |   54 +
+ .../misc/armchina-npu/include/cix_sky1_soc.h  |   25 +
+ drivers/misc/armchina-npu/r329/Makefile       |    5 +
+ drivers/misc/armchina-npu/r329/r329.c         |  160 ++
+ drivers/misc/armchina-npu/sky1/Makefile       |    5 +
+ drivers/misc/armchina-npu/sky1/sky1.c         |  549 ++++
+ drivers/misc/armchina-npu/zhouyi/Makefile     |   12 +
+ drivers/misc/armchina-npu/zhouyi/v1.c         |  271 ++
+ drivers/misc/armchina-npu/zhouyi/v1.h         |   34 +
+ drivers/misc/armchina-npu/zhouyi/v1v2_priv.c  |  232 ++
+ drivers/misc/armchina-npu/zhouyi/v2.c         |  407 +++
+ drivers/misc/armchina-npu/zhouyi/v2.h         |   54 +
+ drivers/misc/armchina-npu/zhouyi/v3.c         |  523 ++++
+ drivers/misc/armchina-npu/zhouyi/v3.h         |  427 ++++
+ drivers/misc/armchina-npu/zhouyi/v3_1.c       |  374 +++
+ drivers/misc/armchina-npu/zhouyi/v3_1.h       |  456 ++++
+ drivers/misc/armchina-npu/zhouyi/v3_1_priv.c  |  159 ++
+ drivers/misc/armchina-npu/zhouyi/v3_priv.c    |  229 ++
+ drivers/misc/armchina-npu/zhouyi/zhouyi.c     |  181 ++
+ drivers/misc/armchina-npu/zhouyi/zhouyi.h     |  104 +
+ 46 files changed, 11846 insertions(+)
+ create mode 100644 drivers/misc/armchina-npu/Kconfig
+ create mode 100755 drivers/misc/armchina-npu/Makefile
+ create mode 100644 drivers/misc/armchina-npu/aipu.c
+ create mode 100755 drivers/misc/armchina-npu/aipu_common.c
+ create mode 100755 drivers/misc/armchina-npu/aipu_common.h
+ create mode 100755 drivers/misc/armchina-npu/aipu_dma_buf.c
+ create mode 100755 drivers/misc/armchina-npu/aipu_dma_buf.h
+ create mode 100755 drivers/misc/armchina-npu/aipu_io.c
+ create mode 100755 drivers/misc/armchina-npu/aipu_io.h
+ create mode 100755 drivers/misc/armchina-npu/aipu_irq.c
+ create mode 100755 drivers/misc/armchina-npu/aipu_irq.h
+ create mode 100755 drivers/misc/armchina-npu/aipu_job_manager.c
+ create mode 100755 drivers/misc/armchina-npu/aipu_job_manager.h
+ create mode 100755 drivers/misc/armchina-npu/aipu_mm.c
+ create mode 100755 drivers/misc/armchina-npu/aipu_mm.h
+ create mode 100755 drivers/misc/armchina-npu/aipu_partition.h
+ create mode 100755 drivers/misc/armchina-npu/aipu_priv.c
+ create mode 100755 drivers/misc/armchina-npu/aipu_priv.h
+ create mode 100755 drivers/misc/armchina-npu/aipu_tcb.c
+ create mode 100755 drivers/misc/armchina-npu/aipu_tcb.h
+ create mode 100755 drivers/misc/armchina-npu/config.h
+ create mode 100755 drivers/misc/armchina-npu/default/Makefile
+ create mode 100755 drivers/misc/armchina-npu/default/default.c
+ create mode 100755 drivers/misc/armchina-npu/include/armchina_aipu.h
+ create mode 100755 drivers/misc/armchina-npu/include/armchina_aipu_soc.h
+ create mode 100644 drivers/misc/armchina-npu/include/cix_sky1_soc.h
+ create mode 100755 drivers/misc/armchina-npu/r329/Makefile
+ create mode 100755 drivers/misc/armchina-npu/r329/r329.c
+ create mode 100755 drivers/misc/armchina-npu/sky1/Makefile
+ create mode 100644 drivers/misc/armchina-npu/sky1/sky1.c
+ create mode 100755 drivers/misc/armchina-npu/zhouyi/Makefile
+ create mode 100755 drivers/misc/armchina-npu/zhouyi/v1.c
+ create mode 100755 drivers/misc/armchina-npu/zhouyi/v1.h
+ create mode 100755 drivers/misc/armchina-npu/zhouyi/v1v2_priv.c
+ create mode 100755 drivers/misc/armchina-npu/zhouyi/v2.c
+ create mode 100755 drivers/misc/armchina-npu/zhouyi/v2.h
+ create mode 100755 drivers/misc/armchina-npu/zhouyi/v3.c
+ create mode 100755 drivers/misc/armchina-npu/zhouyi/v3.h
+ create mode 100755 drivers/misc/armchina-npu/zhouyi/v3_1.c
+ create mode 100755 drivers/misc/armchina-npu/zhouyi/v3_1.h
+ create mode 100755 drivers/misc/armchina-npu/zhouyi/v3_1_priv.c
+ create mode 100644 drivers/misc/armchina-npu/zhouyi/v3_priv.c
+ create mode 100755 drivers/misc/armchina-npu/zhouyi/zhouyi.c
+ create mode 100755 drivers/misc/armchina-npu/zhouyi/zhouyi.h
 
 diff --git a/drivers/misc/Kconfig b/drivers/misc/Kconfig
 index d7d41b054b982..4772335a2afa9 100644
@@ -12140,6 +12231,3 @@ index 0000000000000..83ac0102f5311
 +int get_qos(u32 exec_flag);
 +
 +#endif /* __AIPU_ZHOUYI_H__ */
--- 
-2.51.0
-

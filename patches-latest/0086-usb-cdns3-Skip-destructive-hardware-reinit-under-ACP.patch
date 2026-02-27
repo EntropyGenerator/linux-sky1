@@ -1,8 +1,7 @@
-From fa5840d444b76e5696a02364df97fda8a3d94329 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sat, 7 Feb 2026 22:50:03 +1100
-Subject: [PATCH 086/118] usb: cdns3: Skip destructive hardware reinit under
- ACPI boot
+Subject: [PATCH] usb: cdns3: Skip destructive hardware reinit under ACPI boot
 
 Under ACPI, firmware has already initialized USB controller clocks,
 resets, and mode configuration.  The xHCI register space is driven by
@@ -19,6 +18,9 @@ Under ACPI, skip drd_init entirely.  Instead, just acquire clock
 references (for PM framework refcounting) and write the AXI cache
 configuration.  The full hardware reset sequence remains for DT boot
 where cdnsp-sky1 probes before xHCI.
+---
+ drivers/usb/cdns3/cdnsp-sky1.c | 47 ++++++++++++++++++++++------------
+ 1 file changed, 31 insertions(+), 16 deletions(-)
 
 diff --git a/drivers/usb/cdns3/cdnsp-sky1.c b/drivers/usb/cdns3/cdnsp-sky1.c
 index 2649d8af20c2b..85330fe524087 100644
@@ -86,6 +88,3 @@ index 2649d8af20c2b..85330fe524087 100644
  
  	data->oc_gpio = devm_gpiod_get_optional(data->dev, "oc", GPIOD_IN);
  	if (IS_ERR(data->oc_gpio)) {
--- 
-2.51.0
-

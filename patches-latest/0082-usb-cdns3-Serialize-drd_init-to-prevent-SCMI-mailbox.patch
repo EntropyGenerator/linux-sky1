@@ -1,13 +1,16 @@
-From 879d35776410edde0e290e62cf6d2cbf3a4ef558 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sat, 7 Feb 2026 21:21:17 +1100
-Subject: [PATCH 082/118] usb: cdns3: Serialize drd_init to prevent SCMI
- mailbox flooding
+Subject: [PATCH] usb: cdns3: Serialize drd_init to prevent SCMI mailbox
+ flooding
 
 Each USB controller's drd_init disables and re-enables 4 clocks via
 SCMI. With 10 controllers probing in parallel, 80+ SCMI messages
 compete for a single shared mailbox channel, causing timeouts and
 SErrors. Serialize the drd_init calls with a static mutex.
+---
+ drivers/usb/cdns3/cdnsp-sky1.c | 12 ++++++++++++
+ 1 file changed, 12 insertions(+)
 
 diff --git a/drivers/usb/cdns3/cdnsp-sky1.c b/drivers/usb/cdns3/cdnsp-sky1.c
 index 023c1fa937dc1..2649d8af20c2b 100644
@@ -47,6 +50,3 @@ index 023c1fa937dc1..2649d8af20c2b 100644
  	if (ret == -ETIMEDOUT)
  		return -EPROBE_DEFER;
  	else if (ret)
--- 
-2.51.0
-

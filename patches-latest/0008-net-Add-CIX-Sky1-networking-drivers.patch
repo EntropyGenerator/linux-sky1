@@ -1,12 +1,93 @@
-From 9cdb44e3f6bc44ec743d32e0b7d15f8f35df5410 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sun, 1 Feb 2026 01:18:45 +1100
-Subject: [PATCH 008/118] net: Add CIX Sky1 networking drivers
+Subject: [PATCH] net: Add CIX Sky1 networking drivers
 
 Add Realtek r8125 (2.5GbE) and r8126 (5GbE) vendor drivers for the
 onboard Ethernet controllers on the Radxa Orion O6. Add Cadence GMAC
 DMA burst length fix for Sky1. Include rtw89 WiFi firmware loading
 and power-save fixes for RTL8852BE.
+---
+ drivers/net/ethernet/cadence/macb_main.c      |     1 +
+ drivers/net/ethernet/realtek/Kconfig          |     3 +
+ drivers/net/ethernet/realtek/Makefile         |     2 +
+ drivers/net/ethernet/realtek/r8125/Kconfig    |    10 +
+ drivers/net/ethernet/realtek/r8125/Makefile   |    12 +
+ drivers/net/ethernet/realtek/r8125/r8125.h    |  3052 +++
+ .../net/ethernet/realtek/r8125/r8125_dash.c   |   573 +
+ .../net/ethernet/realtek/r8125/r8125_dash.h   |   196 +
+ .../net/ethernet/realtek/r8125/r8125_fiber.c  |   464 +
+ .../net/ethernet/realtek/r8125/r8125_fiber.h  |    63 +
+ .../ethernet/realtek/r8125/r8125_firmware.c   |   264 +
+ .../ethernet/realtek/r8125/r8125_firmware.h   |    68 +
+ drivers/net/ethernet/realtek/r8125/r8125_n.c  | 21312 ++++++++++++++++
+ .../net/ethernet/realtek/r8125/r8125_ptp.c    |  1472 ++
+ .../net/ethernet/realtek/r8125/r8125_ptp.h    |   159 +
+ .../ethernet/realtek/r8125/r8125_realwow.h    |   118 +
+ .../net/ethernet/realtek/r8125/r8125_rss.c    |   583 +
+ .../net/ethernet/realtek/r8125/r8125_rss.h    |    76 +
+ .../net/ethernet/realtek/r8125/rtl_eeprom.c   |   284 +
+ .../net/ethernet/realtek/r8125/rtl_eeprom.h   |    53 +
+ drivers/net/ethernet/realtek/r8125/rtltool.c  |   312 +
+ drivers/net/ethernet/realtek/r8125/rtltool.h  |    89 +
+ drivers/net/ethernet/realtek/r8126/Kconfig    |    10 +
+ drivers/net/ethernet/realtek/r8126/Makefile   |    12 +
+ drivers/net/ethernet/realtek/r8126/r8126.h    |  2976 +++
+ .../net/ethernet/realtek/r8126/r8126_dash.h   |   261 +
+ .../net/ethernet/realtek/r8126/r8126_fiber.c  |   466 +
+ .../net/ethernet/realtek/r8126/r8126_fiber.h  |    63 +
+ .../ethernet/realtek/r8126/r8126_firmware.c   |   264 +
+ .../ethernet/realtek/r8126/r8126_firmware.h   |    68 +
+ drivers/net/ethernet/realtek/r8126/r8126_n.c  | 17257 +++++++++++++
+ .../net/ethernet/realtek/r8126/r8126_ptp.c    |   954 +
+ .../net/ethernet/realtek/r8126/r8126_ptp.h    |   207 +
+ .../ethernet/realtek/r8126/r8126_realwow.h    |   118 +
+ .../net/ethernet/realtek/r8126/r8126_rss.c    |   583 +
+ .../net/ethernet/realtek/r8126/r8126_rss.h    |    76 +
+ .../net/ethernet/realtek/r8126/rtl_eeprom.c   |   285 +
+ .../net/ethernet/realtek/r8126/rtl_eeprom.h   |    58 +
+ drivers/net/ethernet/realtek/r8126/rtltool.c  |   293 +
+ drivers/net/ethernet/realtek/r8126/rtltool.h  |    89 +
+ drivers/net/wireless/realtek/rtw89/fw.c       |    29 +
+ drivers/net/wireless/realtek/rtw89/ps.c       |    32 +-
+ 42 files changed, 53253 insertions(+), 14 deletions(-)
+ create mode 100644 drivers/net/ethernet/realtek/r8125/Kconfig
+ create mode 100644 drivers/net/ethernet/realtek/r8125/Makefile
+ create mode 100755 drivers/net/ethernet/realtek/r8125/r8125.h
+ create mode 100755 drivers/net/ethernet/realtek/r8125/r8125_dash.c
+ create mode 100755 drivers/net/ethernet/realtek/r8125/r8125_dash.h
+ create mode 100755 drivers/net/ethernet/realtek/r8125/r8125_fiber.c
+ create mode 100755 drivers/net/ethernet/realtek/r8125/r8125_fiber.h
+ create mode 100755 drivers/net/ethernet/realtek/r8125/r8125_firmware.c
+ create mode 100755 drivers/net/ethernet/realtek/r8125/r8125_firmware.h
+ create mode 100755 drivers/net/ethernet/realtek/r8125/r8125_n.c
+ create mode 100755 drivers/net/ethernet/realtek/r8125/r8125_ptp.c
+ create mode 100755 drivers/net/ethernet/realtek/r8125/r8125_ptp.h
+ create mode 100755 drivers/net/ethernet/realtek/r8125/r8125_realwow.h
+ create mode 100755 drivers/net/ethernet/realtek/r8125/r8125_rss.c
+ create mode 100755 drivers/net/ethernet/realtek/r8125/r8125_rss.h
+ create mode 100755 drivers/net/ethernet/realtek/r8125/rtl_eeprom.c
+ create mode 100755 drivers/net/ethernet/realtek/r8125/rtl_eeprom.h
+ create mode 100755 drivers/net/ethernet/realtek/r8125/rtltool.c
+ create mode 100755 drivers/net/ethernet/realtek/r8125/rtltool.h
+ create mode 100644 drivers/net/ethernet/realtek/r8126/Kconfig
+ create mode 100644 drivers/net/ethernet/realtek/r8126/Makefile
+ create mode 100644 drivers/net/ethernet/realtek/r8126/r8126.h
+ create mode 100644 drivers/net/ethernet/realtek/r8126/r8126_dash.h
+ create mode 100644 drivers/net/ethernet/realtek/r8126/r8126_fiber.c
+ create mode 100644 drivers/net/ethernet/realtek/r8126/r8126_fiber.h
+ create mode 100644 drivers/net/ethernet/realtek/r8126/r8126_firmware.c
+ create mode 100644 drivers/net/ethernet/realtek/r8126/r8126_firmware.h
+ create mode 100644 drivers/net/ethernet/realtek/r8126/r8126_n.c
+ create mode 100644 drivers/net/ethernet/realtek/r8126/r8126_ptp.c
+ create mode 100644 drivers/net/ethernet/realtek/r8126/r8126_ptp.h
+ create mode 100644 drivers/net/ethernet/realtek/r8126/r8126_realwow.h
+ create mode 100644 drivers/net/ethernet/realtek/r8126/r8126_rss.c
+ create mode 100644 drivers/net/ethernet/realtek/r8126/r8126_rss.h
+ create mode 100644 drivers/net/ethernet/realtek/r8126/rtl_eeprom.c
+ create mode 100644 drivers/net/ethernet/realtek/r8126/rtl_eeprom.h
+ create mode 100644 drivers/net/ethernet/realtek/r8126/rtltool.c
+ create mode 100644 drivers/net/ethernet/realtek/r8126/rtltool.h
 
 diff --git a/drivers/net/ethernet/cadence/macb_main.c b/drivers/net/ethernet/cadence/macb_main.c
 index 6511ecd5856bd..5867c23802fa8 100644
@@ -53570,6 +53651,3 @@ index 3f69dd4361c36..95023dca515fa 100644
  void __rtw89_enter_ps_mode(struct rtw89_dev *rtwdev)
  {
  	if (!rtwdev->ps_mode)
--- 
-2.51.0
-

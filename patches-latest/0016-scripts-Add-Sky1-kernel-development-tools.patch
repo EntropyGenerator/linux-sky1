@@ -1,10 +1,28 @@
-From 0389f87fd2b7783361c6c3c0eb9306e539238908 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sun, 1 Feb 2026 23:27:33 +1100
-Subject: [PATCH 016/118] scripts: Add Sky1 kernel development tools
+Subject: [PATCH] scripts: Add Sky1 kernel development tools
 
 Replace build-install.sh with Python 3.14 build scripts that support
 multi-track builds (LTS/Latest/RC/Next) with auto-detection.
+---
+ README.md                      |  76 ++++++++
+ scripts/build-install.py       | 205 ++++++++++++++++++++
+ scripts/build-install.sh       |  72 -------
+ scripts/build-test.py          | 189 +++++++++++++++++++
+ scripts/kernel-track-status.py | 222 ++++++++++++++++++++++
+ scripts/reconcile-configs.py   | 331 +++++++++++++++++++++++++++++++++
+ scripts/sky1_lib.py            | 149 +++++++++++++++
+ scripts/update-dev-boot.py     | 229 +++++++++++++++++++++++
+ 8 files changed, 1401 insertions(+), 72 deletions(-)
+ create mode 100644 README.md
+ create mode 100755 scripts/build-install.py
+ delete mode 100755 scripts/build-install.sh
+ create mode 100755 scripts/build-test.py
+ create mode 100755 scripts/kernel-track-status.py
+ create mode 100755 scripts/reconcile-configs.py
+ create mode 100755 scripts/sky1_lib.py
+ create mode 100755 scripts/update-dev-boot.py
 
 diff --git a/README.md b/README.md
 new file mode 100644
@@ -1527,6 +1545,3 @@ index 0000000000000..86a8bf841ab1d
 +
 +if __name__ == "__main__":
 +    main()
--- 
-2.51.0
-

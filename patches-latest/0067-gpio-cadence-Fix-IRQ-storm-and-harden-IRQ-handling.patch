@@ -1,7 +1,7 @@
-From 4838a3ae45556766a2350d8ba5e7a7fa50686a4a Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Fri, 6 Feb 2026 13:44:50 +1100
-Subject: [PATCH 067/118] gpio: cadence: Fix IRQ storm and harden IRQ handling
+Subject: [PATCH] gpio: cadence: Fix IRQ storm and harden IRQ handling
 
 Fix 6 issues in the Cadence GPIO IRQ support added in a8e7200785d82:
 
@@ -23,6 +23,9 @@ Fix 6 issues in the Cadence GPIO IRQ support added in a8e7200785d82:
    for correct PDC wake SMC calls.
 
 6. Document irq_set_wake locking safety.
+---
+ drivers/gpio/gpio-cadence.c | 41 +++++++++++++++++++++++++++++++++----
+ 1 file changed, 37 insertions(+), 4 deletions(-)
 
 diff --git a/drivers/gpio/gpio-cadence.c b/drivers/gpio/gpio-cadence.c
 index e2ca7b20fa776..5c11aceedeb82 100644
@@ -145,6 +148,3 @@ index e2ca7b20fa776..5c11aceedeb82 100644
  	platform_set_drvdata(pdev, cgpio);
  	return 0;
  
--- 
-2.51.0
-

@@ -1,8 +1,7 @@
-From 1f278cbf6906e7ceafd953b5b61817ede312b1bb Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Thu, 5 Feb 2026 23:14:33 +1100
-Subject: [PATCH 054/118] usb: Enable runtime PM by default for Sky1 USB
- controllers
+Subject: [PATCH] usb: Enable runtime PM by default for Sky1 USB controllers
 
 Enable runtime power management by default for Sky1 USB controllers:
 - Set CDNS3_DEFAULT_PM_RUNTIME_ALLOW quirk for cdnsp-sky1
@@ -11,6 +10,10 @@ Enable runtime power management by default for Sky1 USB controllers:
 
 This allows the USB controllers to enter low power states automatically
 when no devices are connected, improving power efficiency.
+---
+ drivers/usb/cdns3/cdnsp-sky1.c | 3 ++-
+ drivers/usb/host/xhci-plat.c   | 5 ++++-
+ 2 files changed, 6 insertions(+), 2 deletions(-)
 
 diff --git a/drivers/usb/cdns3/cdnsp-sky1.c b/drivers/usb/cdns3/cdnsp-sky1.c
 index 01fa58510ff3e..33ace97ae8dd4 100644
@@ -49,6 +52,3 @@ index 074d9c731639f..6b3235d5a4849 100644
  
  	return 0;
  
--- 
-2.51.0
-

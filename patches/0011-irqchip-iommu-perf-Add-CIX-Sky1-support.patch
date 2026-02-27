@@ -412,10 +412,10 @@ index 0000000000000..044aff2015c0f
 +MODULE_DESCRIPTION("Cix Sky1 irq pdc driver");
 +MODULE_LICENSE("GPL v2");
 diff --git a/drivers/perf/arm_spe_pmu.c b/drivers/perf/arm_spe_pmu.c
-index fa50645feddad..fade9b93f615f 100644
+index e4e4e63c64c42..41f1904f08c25 100644
 --- a/drivers/perf/arm_spe_pmu.c
 +++ b/drivers/perf/arm_spe_pmu.c
-@@ -1191,6 +1191,15 @@ static void __arm_spe_pmu_dev_probe(void *info)
+@@ -1197,6 +1197,15 @@ static void __arm_spe_pmu_dev_probe(void *info)
  	spe_pmu->features |= SPE_PMU_FEAT_DEV_PROBED;
  }
  
@@ -431,7 +431,7 @@ index fa50645feddad..fade9b93f615f 100644
  static void __arm_spe_pmu_reset_local(void)
  {
  	/*
-@@ -1212,6 +1221,10 @@ static void __arm_spe_pmu_setup_one(void *info)
+@@ -1218,6 +1227,10 @@ static void __arm_spe_pmu_setup_one(void *info)
  {
  	struct arm_spe_pmu *spe_pmu = info;
  
@@ -442,7 +442,7 @@ index fa50645feddad..fade9b93f615f 100644
  	__arm_spe_pmu_reset_local();
  	enable_percpu_irq(spe_pmu->irq, IRQ_TYPE_NONE);
  }
-@@ -1220,6 +1233,10 @@ static void __arm_spe_pmu_stop_one(void *info)
+@@ -1226,6 +1239,10 @@ static void __arm_spe_pmu_stop_one(void *info)
  {
  	struct arm_spe_pmu *spe_pmu = info;
  

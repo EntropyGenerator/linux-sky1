@@ -1,8 +1,8 @@
-From fabc8e07e08ceebc7a75a7ea9b95f792eec40b9c Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Tue, 3 Feb 2026 20:16:23 +1100
-Subject: [PATCH 028/118] arm64: dts: cix: Fix PCIe power supply GPIO
- assignments on Orion O6/O6N
+Subject: [PATCH] arm64: dts: cix: Fix PCIe power supply GPIO assignments on
+ Orion O6/O6N
 
 Fix several vendor DTS bugs in PCIe power supply GPIO mappings,
 verified against board schematics:
@@ -22,6 +22,10 @@ verified against board schematics:
 The s5_gpio0 offset mapping (s5_gpio0[N] = GPIO(N+1) for pins 0-13)
 was confirmed by cross-referencing with the Orange Pi 6 Plus DTS which
 correctly uses s5_gpio0[11] for GPIO012 and s5_gpio0[12] for GPIO013.
+---
+ arch/arm64/boot/dts/cix/sky1-orion-o6.dts  | 58 +++++++++++++++-------
+ arch/arm64/boot/dts/cix/sky1-orion-o6n.dts | 58 +++++++++++++++-------
+ 2 files changed, 78 insertions(+), 38 deletions(-)
 
 diff --git a/arch/arm64/boot/dts/cix/sky1-orion-o6.dts b/arch/arm64/boot/dts/cix/sky1-orion-o6.dts
 index c9692116d1576..20ad40d084c08 100644
@@ -303,6 +307,3 @@ index 3f3e88a7a31ab..43ec9b8355155 100644
  	vcc-pcie-supply = <&gbe2_power_3v3>;
  	status = "okay";
  };
--- 
-2.51.0
-

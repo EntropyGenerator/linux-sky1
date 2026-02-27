@@ -1,7 +1,7 @@
-From 71edb306eaa1bdd31a388f65d7270aa5302ee8a4 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Fri, 6 Feb 2026 02:06:31 +1100
-Subject: [PATCH 063/118] clocksource: Add CIX Sky1 GPT timer driver
+Subject: [PATCH] clocksource: Add CIX Sky1 GPT timer driver
 
 Add driver for the CIX Sky1 General Purpose Timer which provides both
 clocksource and clock event functionality.
@@ -17,6 +17,12 @@ Features:
 
 The driver registers both a clocksource for timekeeping and a clock
 event device for scheduling timer interrupts.
+---
+ drivers/clocksource/Kconfig          |   9 +
+ drivers/clocksource/Makefile         |   1 +
+ drivers/clocksource/timer-sky1-gpt.c | 293 +++++++++++++++++++++++++++
+ 3 files changed, 303 insertions(+)
+ create mode 100644 drivers/clocksource/timer-sky1-gpt.c
 
 diff --git a/drivers/clocksource/Kconfig b/drivers/clocksource/Kconfig
 index aa59e5b133510..05e47821e97f1 100644
@@ -349,6 +355,3 @@ index 0000000000000..775a981ed8c77
 +MODULE_AUTHOR("Cix Technology Group Co., Ltd.");
 +MODULE_DESCRIPTION("CIX Sky1 General Purpose Timer");
 +MODULE_LICENSE("GPL");
--- 
-2.51.0
-

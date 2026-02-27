@@ -1,8 +1,7 @@
-From 58bcc41b7e30baa862779bd3d41ff3bfb1061f89 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Fri, 6 Feb 2026 17:42:52 +1100
-Subject: [PATCH 070/118] mailbox: cix-mailbox: Remove use_shmem register
- offset hack
+Subject: [PATCH] mailbox: cix-mailbox: Remove use_shmem register offset hack
 
 The use_shmem mechanism detected when a DT register address overlapped
 with SCMI shared memory (bit 7 set) and adjusted all register accesses
@@ -14,6 +13,9 @@ Remove the CIX_SHMEM_OFFSET define, use_shmem struct field, and the
 conditional offset logic in cix_mbox_read/write. Simplify probe to use
 devm_platform_ioremap_resource() directly. Clean up the probe dev_info
 to remove use_shmem reporting and raw kernel pointer leaking via %px.
+---
+ drivers/mailbox/cix-mailbox.c | 41 +++++------------------------------
+ 1 file changed, 5 insertions(+), 36 deletions(-)
 
 diff --git a/drivers/mailbox/cix-mailbox.c b/drivers/mailbox/cix-mailbox.c
 index 4043466683a61..4725288c87571 100644
@@ -106,6 +108,3 @@ index 4043466683a61..4725288c87571 100644
  
  	platform_set_drvdata(pdev, priv);
  	ret = devm_mbox_controller_register(dev, &priv->mbox);
--- 
-2.51.0
-

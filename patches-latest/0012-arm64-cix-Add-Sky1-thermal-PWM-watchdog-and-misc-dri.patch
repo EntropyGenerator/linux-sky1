@@ -1,8 +1,7 @@
-From f725f0439bbfa90e11b2930fbeee367e3408a379 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sun, 1 Feb 2026 01:24:42 +1100
-Subject: [PATCH 012/118] arm64: cix: Add Sky1 thermal, PWM, watchdog, and misc
- drivers
+Subject: [PATCH] arm64: cix: Add Sky1 thermal, PWM, watchdog, and misc drivers
 
 Add Sky1 PWM controller driver, watchdog timer driver, and CPU IPA
 thermal driver. Add topology_update_freq_ref() so schedutil sees
@@ -11,6 +10,29 @@ domain state verification and early init for Sky1 GPU power domain
 ordering. Fix gpio_keys to respect DT-specified interrupt trigger
 type for GPIO controllers without edge trigger support. Include
 kernel build-install convenience script.
+---
+ drivers/base/arch_topology.c          |  20 ++
+ drivers/cpufreq/cpufreq.c             |   4 +
+ drivers/input/keyboard/gpio_keys.c    |  16 +-
+ drivers/pmdomain/arm/scmi_pm_domain.c |  41 ++-
+ drivers/pwm/Kconfig                   |  11 +-
+ drivers/pwm/Makefile                  |   1 +
+ drivers/pwm/pwm-sky1.c                | 291 +++++++++++++++++
+ drivers/thermal/Kconfig               |  14 +
+ drivers/thermal/Makefile              |   1 +
+ drivers/thermal/cix/Makefile          |   2 +
+ drivers/thermal/cix/cix_cpu_ipa.c     | 131 ++++++++
+ drivers/watchdog/Kconfig              |  10 +
+ drivers/watchdog/Makefile             |   1 +
+ drivers/watchdog/sky1_wdt.c           | 431 ++++++++++++++++++++++++++
+ include/linux/arch_topology.h         |  10 +-
+ scripts/build-install.sh              |  72 +++++
+ 16 files changed, 1052 insertions(+), 4 deletions(-)
+ create mode 100644 drivers/pwm/pwm-sky1.c
+ create mode 100644 drivers/thermal/cix/Makefile
+ create mode 100644 drivers/thermal/cix/cix_cpu_ipa.c
+ create mode 100644 drivers/watchdog/sky1_wdt.c
+ create mode 100755 scripts/build-install.sh
 
 diff --git a/drivers/base/arch_topology.c b/drivers/base/arch_topology.c
 index 84ec92bff642c..090184a55aea7 100644
@@ -1227,6 +1249,3 @@ index 0000000000000..8237cf03c0991
 +echo
 +echo "Verified: EFI files match build artifacts."
 +echo "Ready to reboot. Use menu entry 3 (dev) for latest build."
--- 
-2.51.0
-

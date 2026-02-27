@@ -1,7 +1,7 @@
-From 071b7fea10a5a3731c938bf3bda90e07c4abf850 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sun, 1 Feb 2026 00:39:45 +1100
-Subject: [PATCH 003/118] arm64: cix: Add Sky1 infrastructure drivers
+Subject: [PATCH] arm64: cix: Add Sky1 infrastructure drivers
 
 Add pinctrl, GPIO, reset controllers, clock (AUDSS), PWM, watchdog,
 hwspinlock, NVMEM, SoC info, DDR low-power, and bus performance drivers
@@ -10,6 +10,49 @@ for CIX Sky1 SoC.
 Pinctrl uses our generic pinctrl framework implementation with ACPI
 support and PM context save/restore, replacing the mainline stub which
 uses a different register encoding model.
+---
+ drivers/clk/Kconfig                     |   1 +
+ drivers/clk/Makefile                    |   1 +
+ drivers/clk/cix/Kconfig                 |  12 +
+ drivers/clk/cix/Makefile                |   3 +
+ drivers/clk/cix/clk-sky1-audss.c        | 792 ++++++++++++++++++++
+ drivers/hwspinlock/Kconfig              |  10 +
+ drivers/hwspinlock/Makefile             |   1 +
+ drivers/hwspinlock/sky1_hwspinlock.c    | 169 +++++
+ drivers/nvmem/Kconfig                   |  11 +
+ drivers/nvmem/Makefile                  |   2 +
+ drivers/nvmem/sky1-nvmem.c              |  93 +++
+ drivers/pinctrl/Makefile                |   1 +
+ drivers/pinctrl/cix/Kconfig             |   6 +-
+ drivers/pinctrl/cix/pinctrl-sky1-base.c | 829 ++++++++++----------
+ drivers/pinctrl/cix/pinctrl-sky1.c      | 957 ++++++++++++------------
+ drivers/pinctrl/cix/pinctrl-sky1.h      |  54 +-
+ drivers/pinctrl/pinctrl-acpi.h          | 101 +++
+ drivers/reset/Kconfig                   |  17 +
+ drivers/reset/Makefile                  |   2 +
+ drivers/reset/reset-sky1-audss.c        | 142 ++++
+ drivers/reset/reset-sky1.c              | 421 +++++++++++
+ drivers/soc/Kconfig                     |   1 +
+ drivers/soc/Makefile                    |   1 +
+ drivers/soc/cix/Kconfig                 |  46 ++
+ drivers/soc/cix/Makefile                |   4 +
+ drivers/soc/cix/cix-bus-perf.c          | 202 +++++
+ drivers/soc/cix/cix-ddr-lp.c            | 172 +++++
+ drivers/soc/cix/sky1-socinfo.c          | 478 ++++++++++++
+ 28 files changed, 3631 insertions(+), 898 deletions(-)
+ create mode 100644 drivers/clk/cix/Kconfig
+ create mode 100644 drivers/clk/cix/Makefile
+ create mode 100644 drivers/clk/cix/clk-sky1-audss.c
+ create mode 100644 drivers/hwspinlock/sky1_hwspinlock.c
+ create mode 100644 drivers/nvmem/sky1-nvmem.c
+ create mode 100644 drivers/pinctrl/pinctrl-acpi.h
+ create mode 100644 drivers/reset/reset-sky1-audss.c
+ create mode 100644 drivers/reset/reset-sky1.c
+ create mode 100644 drivers/soc/cix/Kconfig
+ create mode 100644 drivers/soc/cix/Makefile
+ create mode 100644 drivers/soc/cix/cix-bus-perf.c
+ create mode 100644 drivers/soc/cix/cix-ddr-lp.c
+ create mode 100644 drivers/soc/cix/sky1-socinfo.c
 
 diff --git a/drivers/clk/Kconfig b/drivers/clk/Kconfig
 index 3a1611008e48e..4dee61242cc87 100644
@@ -1068,7 +1111,7 @@ index 0000000000000..c73ca035def8c
 +MODULE_DESCRIPTION("Sky1 Hardware Spinlock driver");
 +MODULE_AUTHOR("Cix Technology Group Co., Ltd.");
 diff --git a/drivers/nvmem/Kconfig b/drivers/nvmem/Kconfig
-index bf47a982cf629..9fa8e14bf8994 100644
+index 74ddbd0f79b0e..b6008ecb2f3f0 100644
 --- a/drivers/nvmem/Kconfig
 +++ b/drivers/nvmem/Kconfig
 @@ -373,6 +373,17 @@ config NVMEM_SPMI_SDAM
@@ -3457,7 +3500,7 @@ index 0000000000000..53d0eb919b831
 +
 +#endif
 diff --git a/drivers/reset/Kconfig b/drivers/reset/Kconfig
-index 6e5d6deffa7d3..bfceeff2ab1f5 100644
+index 52ee102621eef..830b27f87da1d 100644
 --- a/drivers/reset/Kconfig
 +++ b/drivers/reset/Kconfig
 @@ -411,4 +411,21 @@ source "drivers/reset/sti/Kconfig"
@@ -5023,6 +5066,3 @@ index 0000000000000..6e7dd9a7f036d
 +MODULE_AUTHOR("Cix Technology Group Co., Ltd.");
 +MODULE_DESCRIPTION("CIX Sky1 SoC information driver");
 +MODULE_LICENSE("GPL");
--- 
-2.51.0
-

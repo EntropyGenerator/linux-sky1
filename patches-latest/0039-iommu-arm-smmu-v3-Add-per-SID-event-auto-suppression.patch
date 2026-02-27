@@ -1,7 +1,7 @@
-From 931ef369577621aa7e2bbfddddfa12a864558c1a Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Thu, 5 Feb 2026 10:33:37 +1100
-Subject: [PATCH 039/118] iommu/arm-smmu-v3: Add per-SID event auto-suppression
+Subject: [PATCH] iommu/arm-smmu-v3: Add per-SID event auto-suppression
 
 Some SoCs have hardware blocks (e.g. PCIe DTI ATS masters) that
 continuously generate SMMU faults on stream IDs shared with real
@@ -11,6 +11,10 @@ offending hardware's control registers are in a secure-only domain.
 Add per-SID event tracking: after 10 events from the same stream ID,
 suppress further logging for that SID to avoid flooding the console
 and drowning out legitimate events from other streams.
+---
+ drivers/iommu/arm/arm-smmu-v3/arm-smmu-v3.c | 37 ++++++++++++++++++++-
+ drivers/iommu/arm/arm-smmu-v3/arm-smmu-v3.h |  8 +++++
+ 2 files changed, 44 insertions(+), 1 deletion(-)
 
 diff --git a/drivers/iommu/arm/arm-smmu-v3/arm-smmu-v3.c b/drivers/iommu/arm/arm-smmu-v3/arm-smmu-v3.c
 index 95b85a2ced6b9..3a95db118c1f9 100644
@@ -88,6 +92,3 @@ index 42bca64aab331..9c9b9dd8fcce2 100644
  };
  
  struct arm_smmu_stream {
--- 
-2.51.0
-

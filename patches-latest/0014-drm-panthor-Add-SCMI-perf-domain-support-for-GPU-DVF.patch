@@ -1,8 +1,7 @@
-From f82ff13d1d0c9bd2990652882ab93483efbf4dd9 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sun, 1 Feb 2026 23:18:49 +1100
-Subject: [PATCH 014/118] drm/panthor: Add SCMI perf domain support for GPU
- DVFS
+Subject: [PATCH] drm/panthor: Add SCMI perf domain support for GPU DVFS
 
 On platforms with multiple power domains (e.g. CIX Sky1 with pd_gpu for
 power gating and perf for SCMI DVFS), the platform bus does not
@@ -21,6 +20,9 @@ simple_ondemand governor.
 
 Falls back gracefully to the existing DT/regulator path on platforms
 without a named "perf" power domain.
+---
+ drivers/gpu/drm/panthor/panthor_devfreq.c | 136 +++++++++++++++++++++-
+ 1 file changed, 132 insertions(+), 4 deletions(-)
 
 diff --git a/drivers/gpu/drm/panthor/panthor_devfreq.c b/drivers/gpu/drm/panthor/panthor_devfreq.c
 index 8b8f91f651830..c8a47aa3b77e5 100644
@@ -212,6 +214,3 @@ index 8b8f91f651830..c8a47aa3b77e5 100644
  	dev_pm_opp_put(opp);
  	if (ret) {
  		DRM_DEV_ERROR(dev, "Couldn't set recommended OPP\n");
--- 
-2.51.0
-

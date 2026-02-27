@@ -1,7 +1,7 @@
-From 42e502880059c048ccbb5459d79e3a9e872bbcee Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Thu, 5 Feb 2026 23:21:52 +1100
-Subject: [PATCH 055/118] net: realtek: r8125/r8126: Enable WoL and RSS support
+Subject: [PATCH] net: realtek: r8125/r8126: Enable WoL and RSS support
 
 Enable additional features for Realtek r8125 and r8126 drivers:
 - ENABLE_S0_MAGIC_PACKET: Wake-on-LAN magic packet support
@@ -9,6 +9,10 @@ Enable additional features for Realtek r8125 and r8126 drivers:
 
 These features improve power management and network throughput on
 multi-core systems.
+---
+ drivers/net/ethernet/realtek/r8125/Makefile | 2 ++
+ drivers/net/ethernet/realtek/r8126/Makefile | 2 ++
+ 2 files changed, 4 insertions(+)
 
 diff --git a/drivers/net/ethernet/realtek/r8125/Makefile b/drivers/net/ethernet/realtek/r8125/Makefile
 index 1a8b367a6452e..a18ac30b1a5ec 100644
@@ -40,6 +44,3 @@ index 293c70a7a6bdf..8f0ccddb3abf6 100644
  ccflags-y += -DCONFIG_SOC_LAN
  ccflags-y += -DCONFIG_ASPM
 +ccflags-y += -DENABLE_RSS_SUPPORT
--- 
-2.51.0
-

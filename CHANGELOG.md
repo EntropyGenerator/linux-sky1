@@ -2,6 +2,21 @@
 
 All notable changes to the Sky1 kernel patch set.
 
+## [6.19.4-1] - 2026-02-27
+
+### Changed
+- Rebased LTS to Linux 6.18.14 stable (126 patches)
+- Rebased Latest to Linux 6.19.4 stable (127 patches)
+
+### Added
+- drm/trilin-dptx: Tear down DP core on HPD disconnect — calls `trilin_dp_core_off()` and clears `DP_STATE_ENABLED` in disconnect handler for clean PHY state on replug
+- drm/trilin-dptx: Reset `active_stream_cnt` on HPD disconnect — prevents stale stream count from causing DP TX misconfiguration (black screen) after USB-C replug
+- phy: cix: usbdp: Default to DP mode for static outputs without mode-switch
+
+### Notes
+- All tracks updated: LTS 126, Latest 127, RC 30, Next 30 patches
+- DP hotplug fixes cherry-picked to all tracks (main, rc, next)
+
 ## [6.18.10-2] - 2026-02-13
 
 ### Added

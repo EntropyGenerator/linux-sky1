@@ -1,8 +1,8 @@
-From e7fe20d9ed05bc8ef837687bfa699ba62ab48b95 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Wed, 4 Feb 2026 16:51:55 +1100
-Subject: [PATCH 030/118] arm64: dts: cix: Fix O6N power tree, convert USB-C PD
- to TCPCI
+Subject: [PATCH] arm64: dts: cix: Fix O6N power tree, convert USB-C PD to
+ TCPCI
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
@@ -32,6 +32,9 @@ GPIO wiring:
   not USB overcurrent)
 - Add wake-gpios to pcie_x8_rc for M.2 wake support (s5_gpio0 20)
 - Update PCIe slot comments to reflect actual hardware topology
+---
+ arch/arm64/boot/dts/cix/sky1-orion-o6n.dts | 81 ++++++++++------------
+ 1 file changed, 35 insertions(+), 46 deletions(-)
 
 diff --git a/arch/arm64/boot/dts/cix/sky1-orion-o6n.dts b/arch/arm64/boot/dts/cix/sky1-orion-o6n.dts
 index 43ec9b8355155..d03c98da843ca 100644
@@ -189,6 +192,3 @@ index 43ec9b8355155..d03c98da843ca 100644
  	status = "okay";
  };
  
--- 
-2.51.0
-

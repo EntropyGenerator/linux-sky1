@@ -1,8 +1,7 @@
-From b874374f0a29e7bd5313d343c402fe0d4ced5616 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Wed, 4 Feb 2026 18:47:31 +1100
-Subject: [PATCH 032/118] arm64: dts: cix: Set O6N DP PHY to pure DisplayPort
- mode
+Subject: [PATCH] arm64: dts: cix: Set O6N DP PHY to pure DisplayPort mode
 
 Set usbc_phy3 default_conf to UDPHY_MODE_DP (0x02) on Orion O6N.
 This port is a dedicated DP output, not USB-C combo, so the PHY
@@ -12,6 +11,9 @@ Fixes DP output not working on O6N. Same pattern as usbc_phy1 on O6
 which drives the HDMI bridge.
 
 Reported-by: community testing
+---
+ arch/arm64/boot/dts/cix/sky1-orion-o6n.dts | 1 +
+ 1 file changed, 1 insertion(+)
 
 diff --git a/arch/arm64/boot/dts/cix/sky1-orion-o6n.dts b/arch/arm64/boot/dts/cix/sky1-orion-o6n.dts
 index d03c98da843ca..443c29753432b 100644
@@ -25,6 +27,3 @@ index d03c98da843ca..443c29753432b 100644
  };
  
  &usb3_phy3 {
--- 
-2.51.0
-

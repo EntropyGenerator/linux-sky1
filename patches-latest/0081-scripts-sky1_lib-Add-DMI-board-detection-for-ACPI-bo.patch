@@ -1,14 +1,16 @@
-From 4da7236878820c083e9ccd3e795080756df1b5a7 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sat, 7 Feb 2026 18:17:14 +1100
-Subject: [PATCH 081/118] scripts: sky1_lib: Add DMI board detection for ACPI
- boot
+Subject: [PATCH] scripts: sky1_lib: Add DMI board detection for ACPI boot
 
 Under ACPI boot, /sys/firmware/devicetree/base/compatible does not
 exist. Fall back to reading /sys/class/dmi/id/board_name and mapping
 it to the corresponding DT compatible string via a DMI-to-compat
 lookup table. This allows the build scripts to correctly detect the
 board and select the right kernel image and DTB filenames.
+---
+ scripts/sky1_lib.py | 27 +++++++++++++++++++++++----
+ 1 file changed, 23 insertions(+), 4 deletions(-)
 
 diff --git a/scripts/sky1_lib.py b/scripts/sky1_lib.py
 index e1c48aae029fe..a082cdfb2acc6 100755
@@ -64,6 +66,3 @@ index e1c48aae029fe..a082cdfb2acc6 100755
      if compat not in BOARD_DTS:
          known = ", ".join(BOARD_DTS.keys())
          raise RuntimeError(f"Unknown board '{compat}'. Known boards: {known}")
--- 
-2.51.0
-

@@ -1,7 +1,7 @@
-From 1c172e04d7b39e5274494f438d5da90a5ee7c8b3 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Fri, 6 Feb 2026 02:06:23 +1100
-Subject: [PATCH 062/118] mfd: syscon: Add ACPI platform driver support
+Subject: [PATCH] mfd: syscon: Add ACPI platform driver support
 
 Add a platform driver to syscon that probes via ACPI device IDs. This
 allows syscon regmap regions to be enumerated on ACPI-booted systems.
@@ -11,6 +11,9 @@ Add CIXHA018 ACPI device ID for CIX Sky1 SoC syscon regions.
 The platform driver creates syscon regions that can be looked up by
 other drivers using syscon_regmap_lookup_by_phandle() or the device
 pointer directly.
+---
+ drivers/mfd/syscon.c | 66 ++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 66 insertions(+)
 
 diff --git a/drivers/mfd/syscon.c b/drivers/mfd/syscon.c
 index e5d5def594f6e..001b3545d741d 100644
@@ -100,6 +103,3 @@ index e5d5def594f6e..001b3545d741d 100644
 +}
 +postcore_initcall(syscon_init);
 +#endif
--- 
-2.51.0
-

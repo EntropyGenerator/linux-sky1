@@ -86,7 +86,7 @@ index 6b46e5b9f6c3a..603aa7722a447 100644
  	ret = panthor_request_job_irq(ptdev, &fw->irq, irq, 0);
  	if (ret) {
 diff --git a/drivers/gpu/drm/panthor/panthor_gpu.c b/drivers/gpu/drm/panthor/panthor_gpu.c
-index fc9964a04981f..041088e296a1a 100644
+index 7221b6cfecdd6..247024991a418 100644
 --- a/drivers/gpu/drm/panthor/panthor_gpu.c
 +++ b/drivers/gpu/drm/panthor/panthor_gpu.c
 @@ -123,13 +123,17 @@ int panthor_gpu_init(struct panthor_device *ptdev)
@@ -114,10 +114,10 @@ index fc9964a04981f..041088e296a1a 100644
  	ret = panthor_request_gpu_irq(ptdev, &ptdev->gpu->irq, irq, GPU_INTERRUPTS_MASK);
  	if (ret)
 diff --git a/drivers/gpu/drm/panthor/panthor_mmu.c b/drivers/gpu/drm/panthor/panthor_mmu.c
-index 1dee700de8f25..8a89c8f05d25f 100644
+index 99f2d11de0344..95ef5469628d2 100644
 --- a/drivers/gpu/drm/panthor/panthor_mmu.c
 +++ b/drivers/gpu/drm/panthor/panthor_mmu.c
-@@ -2797,13 +2797,17 @@ int panthor_mmu_init(struct panthor_device *ptdev)
+@@ -2801,13 +2801,17 @@ int panthor_mmu_init(struct panthor_device *ptdev)
  
  	ptdev->mmu = mmu;
  

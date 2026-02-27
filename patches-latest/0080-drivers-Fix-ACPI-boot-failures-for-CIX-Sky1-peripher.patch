@@ -1,8 +1,7 @@
-From 75a95696c42b7985b65ff2fddbb8d3dbdf674fca Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sat, 7 Feb 2026 18:17:06 +1100
-Subject: [PATCH 080/118] drivers: Fix ACPI boot failures for CIX Sky1
- peripherals
+Subject: [PATCH] drivers: Fix ACPI boot failures for CIX Sky1 peripherals
 
 Fix six drivers that fail under ACPI boot on CIX Sky1 SoCs:
 
@@ -28,6 +27,14 @@ Fix six drivers that fail under ACPI boot on CIX Sky1 SoCs:
 - reg-fixed-voltage: Change error code from -ENOMEM to -ENODEV when
   no config is found, as the PRP0001 devices hitting this path are
   not actually voltage regulators.
+---
+ drivers/clocksource/timer-sky1-gpt.c  |  6 +++++
+ drivers/pmdomain/arm/scmi_pm_domain.c |  5 ++++
+ drivers/regulator/fixed.c             |  2 +-
+ drivers/video/backlight/pwm_bl.c      | 37 +++++++++++++++------------
+ fs/pstore/ram.c                       |  5 ++--
+ sound/hda/controllers/cix-ipbloq.c    |  2 +-
+ 6 files changed, 35 insertions(+), 22 deletions(-)
 
 diff --git a/drivers/clocksource/timer-sky1-gpt.c b/drivers/clocksource/timer-sky1-gpt.c
 index 775a981ed8c77..df9db89ff087b 100644
@@ -199,6 +206,3 @@ index df1facafc75a3..4133556c2c732 100644
  		/*
  		 * if dev.dma_mem not allocated
  		 * we should try to get it from dts
--- 
-2.51.0
-

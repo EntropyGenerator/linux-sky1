@@ -1,7 +1,7 @@
-From f6d17e548831be2cf6443968a1c7a22237a4aefd Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sun, 1 Feb 2026 01:06:44 +1100
-Subject: [PATCH 006/118] drm/panthor: Add CIX Sky1 GPU support
+Subject: [PATCH] drm/panthor: Add CIX Sky1 GPU support
 
 Add Sky1-specific modifications to the Panthor GPU driver on top of
 v6.19-rc7's improved codebase (panthor_pwr, panthor_hw refactor,
@@ -16,6 +16,17 @@ Sky1-specific additions:
 - Backup clock support (gpu_clk_200M, gpu_clk_400M)
 - PHBA/cache configuration for G720 on Sky1
 - OPP table existence check with graceful ENODEV fallback
+---
+ drivers/gpu/drm/panthor/panthor_devfreq.c |  17 +++-
+ drivers/gpu/drm/panthor/panthor_device.c  | 106 ++++++++++++++++++++--
+ drivers/gpu/drm/panthor/panthor_device.h  |   9 ++
+ drivers/gpu/drm/panthor/panthor_drv.c     |   1 +
+ drivers/gpu/drm/panthor/panthor_fw.c      |  10 +-
+ drivers/gpu/drm/panthor/panthor_gpu.c     |  31 ++++++-
+ drivers/gpu/drm/panthor/panthor_hw.c      |  15 +++
+ drivers/gpu/drm/panthor/panthor_mmu.c     |  10 +-
+ drivers/gpu/drm/panthor/panthor_regs.h    |   4 +
+ 9 files changed, 182 insertions(+), 21 deletions(-)
 
 diff --git a/drivers/gpu/drm/panthor/panthor_devfreq.c b/drivers/gpu/drm/panthor/panthor_devfreq.c
 index 2249b41ca4afe..8b8f91f651830 100644
@@ -245,10 +256,10 @@ index d1d4c50da5bf6..72c69a94dd9ec 100644
  	{}
  };
 diff --git a/drivers/gpu/drm/panthor/panthor_fw.c b/drivers/gpu/drm/panthor/panthor_fw.c
-index 1a5e3c1a27fbc..6a0060d9f73c1 100644
+index 9533b1a31820e..8e017bb73e209 100644
 --- a/drivers/gpu/drm/panthor/panthor_fw.c
 +++ b/drivers/gpu/drm/panthor/panthor_fw.c
-@@ -1449,9 +1449,13 @@ int panthor_fw_init(struct panthor_device *ptdev)
+@@ -1444,9 +1444,13 @@ int panthor_fw_init(struct panthor_device *ptdev)
  	INIT_LIST_HEAD(&fw->sections);
  	INIT_DELAYED_WORK(&fw->watchdog.ping_work, panthor_fw_ping_work);
  
@@ -266,7 +277,7 @@ index 1a5e3c1a27fbc..6a0060d9f73c1 100644
  	ret = panthor_request_job_irq(ptdev, &fw->irq, irq, 0);
  	if (ret) {
 diff --git a/drivers/gpu/drm/panthor/panthor_gpu.c b/drivers/gpu/drm/panthor/panthor_gpu.c
-index 06b231b2460ab..58b4b20a42658 100644
+index ff5231269518e..5f2e355502072 100644
 --- a/drivers/gpu/drm/panthor/panthor_gpu.c
 +++ b/drivers/gpu/drm/panthor/panthor_gpu.c
 @@ -6,6 +6,7 @@
@@ -355,10 +366,10 @@ index 87ebb7ae42c4b..bb9aa3066aff9 100644
  
  static void panthor_hw_info_init(struct panthor_device *ptdev)
 diff --git a/drivers/gpu/drm/panthor/panthor_mmu.c b/drivers/gpu/drm/panthor/panthor_mmu.c
-index f6339963e4960..16ed15eb27122 100644
+index 9194bad4b6196..2262e314fc540 100644
 --- a/drivers/gpu/drm/panthor/panthor_mmu.c
 +++ b/drivers/gpu/drm/panthor/panthor_mmu.c
-@@ -2725,9 +2725,13 @@ int panthor_mmu_init(struct panthor_device *ptdev)
+@@ -2729,9 +2729,13 @@ int panthor_mmu_init(struct panthor_device *ptdev)
  
  	ptdev->mmu = mmu;
  
@@ -390,6 +401,3 @@ index 08bf06c452d69..14296e2f94a98 100644
  #define CSF_GPU_LATEST_FLUSH_ID				0x10000
  
  #define CSF_DOORBELL(i)					(0x80000 + ((i) * 0x10000))
--- 
-2.51.0
-

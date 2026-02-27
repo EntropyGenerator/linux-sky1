@@ -1,8 +1,7 @@
-From 44bdca5c200d08d0917bb02ff2f0dd2663714187 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Fri, 6 Feb 2026 02:06:53 +1100
-Subject: [PATCH 065/118] treewide: Add ACPI device IDs for CIX Sky1 SoC
- peripherals
+Subject: [PATCH] treewide: Add ACPI device IDs for CIX Sky1 SoC peripherals
 
 Add ACPI device IDs to existing drivers to support ACPI enumeration
 on CIX Sky1 SoC systems:
@@ -31,6 +30,18 @@ on CIX Sky1 SoC systems:
 
 These additions allow the respective hardware blocks to be enumerated
 and probed when booting with ACPI firmware.
+---
+ drivers/clk/cix/clk-sky1-audss.c         | 10 ++++++++++
+ drivers/dma/arm-dma350.c                 | 11 +++++++++++
+ drivers/i2c/busses/i2c-cadence.c         | 10 ++++++++++
+ drivers/i3c/master/i3c-master-cdns.c     | 10 ++++++++++
+ drivers/net/ethernet/cadence/macb_main.c | 10 ++++++++++
+ drivers/reset/reset-sky1-audss.c         | 10 ++++++++++
+ drivers/spi/spi-cadence-quadspi.c        | 10 ++++++++++
+ drivers/spi/spi-cadence.c                | 10 ++++++++++
+ drivers/usb/typec/rts5453.c              | 10 ++++++++++
+ drivers/video/backlight/pwm_bl.c         | 11 ++++++++++-
+ 10 files changed, 101 insertions(+), 1 deletion(-)
 
 diff --git a/drivers/clk/cix/clk-sky1-audss.c b/drivers/clk/cix/clk-sky1-audss.c
 index 975313767b605..378d2ff4d6e32 100644
@@ -238,7 +249,7 @@ index 62950613f199d..2ec4e015911ab 100644
  };
  module_platform_driver(sky1_audss_reset_driver);
 diff --git a/drivers/spi/spi-cadence-quadspi.c b/drivers/spi/spi-cadence-quadspi.c
-index 965b4cea3388a..5c3b1f3bfee9d 100644
+index b9a560c75c5cd..ccc249351125f 100644
 --- a/drivers/spi/spi-cadence-quadspi.c
 +++ b/drivers/spi/spi-cadence-quadspi.c
 @@ -6,6 +6,7 @@
@@ -249,7 +260,7 @@ index 965b4cea3388a..5c3b1f3bfee9d 100644
  #include <linux/clk.h>
  #include <linux/completion.h>
  #include <linux/delay.h>
-@@ -2222,6 +2223,14 @@ static const struct of_device_id cqspi_dt_ids[] = {
+@@ -2220,6 +2221,14 @@ static const struct of_device_id cqspi_dt_ids[] = {
  
  MODULE_DEVICE_TABLE(of, cqspi_dt_ids);
  
@@ -264,7 +275,7 @@ index 965b4cea3388a..5c3b1f3bfee9d 100644
  static struct platform_driver cqspi_platform_driver = {
  	.probe = cqspi_probe,
  	.remove = cqspi_remove,
-@@ -2229,6 +2238,7 @@ static struct platform_driver cqspi_platform_driver = {
+@@ -2227,6 +2236,7 @@ static struct platform_driver cqspi_platform_driver = {
  		.name = CQSPI_NAME,
  		.pm = pm_ptr(&cqspi_dev_pm_ops),
  		.of_match_table = cqspi_dt_ids,
@@ -379,6 +390,3 @@ index 237d3d3f3bb1a..1ef17e82c12d0 100644
  	},
  	.probe		= pwm_backlight_probe,
  	.remove		= pwm_backlight_remove,
--- 
-2.51.0
-

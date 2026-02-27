@@ -1,7 +1,7 @@
-From 2cdc8c957b8b73dfc0319fe9462db12a91934e60 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sun, 1 Feb 2026 01:20:21 +1100
-Subject: [PATCH 011/118] irqchip: iommu: perf: Add CIX Sky1 support
+Subject: [PATCH] irqchip: iommu: perf: Add CIX Sky1 support
 
 Add Sky1 Power Domain Controller (PDC) wakeup interrupt driver.
 Add GIC-v3 single-redistributor topology support for Sky1. Add
@@ -9,6 +9,15 @@ arm-smmu-v3 bypass STE installation for boot-active devices
 specified in device tree (e.g., display left on by bootloader).
 Skip arm_spe setup on CPUs without SPE support in heterogeneous
 big.LITTLE configurations.
+---
+ drivers/iommu/arm/arm-smmu-v3/arm-smmu-v3.c |  40 +++
+ drivers/irqchip/Kconfig                     |   8 +
+ drivers/irqchip/Makefile                    |   3 +-
+ drivers/irqchip/irq-gic-v3.c                |   5 +
+ drivers/irqchip/irq-sky1-pdc.c              | 274 ++++++++++++++++++++
+ drivers/perf/arm_spe_pmu.c                  |  17 ++
+ 6 files changed, 346 insertions(+), 1 deletion(-)
+ create mode 100644 drivers/irqchip/irq-sky1-pdc.c
 
 diff --git a/drivers/iommu/arm/arm-smmu-v3/arm-smmu-v3.c b/drivers/iommu/arm/arm-smmu-v3/arm-smmu-v3.c
 index d16d35c78c068..693d237892e98 100644
@@ -412,10 +421,10 @@ index 0000000000000..ed14b3309989c
 +MODULE_DESCRIPTION("Cix Sky1 irq pdc driver");
 +MODULE_LICENSE("GPL v2");
 diff --git a/drivers/perf/arm_spe_pmu.c b/drivers/perf/arm_spe_pmu.c
-index 4801115f2b540..4b8d5fffe946b 100644
+index 5410fb7428d0e..87db87ecc38ea 100644
 --- a/drivers/perf/arm_spe_pmu.c
 +++ b/drivers/perf/arm_spe_pmu.c
-@@ -1228,6 +1228,15 @@ static void __arm_spe_pmu_dev_probe(void *info)
+@@ -1234,6 +1234,15 @@ static void __arm_spe_pmu_dev_probe(void *info)
  	spe_pmu->features |= SPE_PMU_FEAT_DEV_PROBED;
  }
  
@@ -431,7 +440,7 @@ index 4801115f2b540..4b8d5fffe946b 100644
  static void __arm_spe_pmu_reset_local(void)
  {
  	/*
-@@ -1249,6 +1258,10 @@ static void __arm_spe_pmu_setup_one(void *info)
+@@ -1255,6 +1264,10 @@ static void __arm_spe_pmu_setup_one(void *info)
  {
  	struct arm_spe_pmu *spe_pmu = info;
  
@@ -442,7 +451,7 @@ index 4801115f2b540..4b8d5fffe946b 100644
  	__arm_spe_pmu_reset_local();
  	enable_percpu_irq(spe_pmu->irq, IRQ_TYPE_NONE);
  }
-@@ -1257,6 +1270,10 @@ static void __arm_spe_pmu_stop_one(void *info)
+@@ -1263,6 +1276,10 @@ static void __arm_spe_pmu_stop_one(void *info)
  {
  	struct arm_spe_pmu *spe_pmu = info;
  
@@ -453,6 +462,3 @@ index 4801115f2b540..4b8d5fffe946b 100644
  	disable_percpu_irq(spe_pmu->irq);
  	__arm_spe_pmu_reset_local();
  }
--- 
-2.51.0
-

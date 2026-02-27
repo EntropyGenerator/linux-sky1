@@ -1,12 +1,15 @@
-From 1d5bb0631843ac12dfd7169f11ea15e6afff0034 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Fri, 6 Feb 2026 17:43:07 +1100
-Subject: [PATCH 071/118] mailbox: cix-mailbox: Allow building with ACPI
+Subject: [PATCH] mailbox: cix-mailbox: Allow building with ACPI
 
 The CIX mailbox driver already has an ACPI match table for CIXHA001 but
 Kconfig has depends on OF which prevents it from being selected in
 ACPI-only configurations. Allow building when either OF or ACPI is
 enabled.
+---
+ drivers/mailbox/Kconfig | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
 diff --git a/drivers/mailbox/Kconfig b/drivers/mailbox/Kconfig
 index 5b719705eff25..d3f2c9e5f0ce9 100644
@@ -21,6 +24,3 @@ index 5b719705eff25..d3f2c9e5f0ce9 100644
          help
            Mailbox implementation for CIX IPC system. The controller supports
            11 mailbox channels with different operating mode and every channel
--- 
-2.51.0
-

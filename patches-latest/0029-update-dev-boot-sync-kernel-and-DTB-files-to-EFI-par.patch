@@ -1,13 +1,15 @@
-From 2ef93ee231196d40d95d7c585a69885ede23d21f Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Wed, 4 Feb 2026 02:21:54 +1100
-Subject: [PATCH 029/118] update-dev-boot: sync kernel and DTB files to EFI
- partition
+Subject: [PATCH] update-dev-boot: sync kernel and DTB files to EFI partition
 
 When kernels are installed via APT, the files land in /boot and
 /usr/lib/linux-image-* but the EFI partition copies go stale.
 Add sync_efi_files() to compare and copy mismatched files on
 every invocation.
+---
+ scripts/update-dev-boot.py | 102 ++++++++++++++++++++++++++++++++++++-
+ 1 file changed, 101 insertions(+), 1 deletion(-)
 
 diff --git a/scripts/update-dev-boot.py b/scripts/update-dev-boot.py
 index 86a8bf841ab1d..fe5256a1bf5c8 100755
@@ -157,6 +159,3 @@ index 86a8bf841ab1d..fe5256a1bf5c8 100755
      print("Done. Default boot entry is 0 (LTS).")
  
  
--- 
-2.51.0
-

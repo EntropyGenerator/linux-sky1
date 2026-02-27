@@ -1,8 +1,7 @@
-From 472de51b81d29c29d7d402a7a856daed562b486b Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Thu, 5 Feb 2026 22:38:17 +1100
-Subject: [PATCH 048/118] thermal: cix: Add IPA power integration for
- cpufreq_cooling
+Subject: [PATCH] thermal: cix: Add IPA power integration for cpufreq_cooling
 
 Export cix_get_static_power_cpus() and cix_get_dynamic_power_cpus()
 from the CIX IPA driver for use by cpufreq_cooling.
@@ -21,6 +20,12 @@ registers.
 
 The header provides inline stubs returning 0 when CONFIG_CIX_CPU_IPA
 is disabled, so there's no runtime overhead for other platforms.
+---
+ drivers/thermal/cix/cix_cpu_ipa.c | 40 +++++++++++++++++++++++++++++++
+ drivers/thermal/cpufreq_cooling.c | 29 +++++++++++++++++++---
+ include/linux/cix/cix_cpu_ipa.h   | 32 +++++++++++++++++++++++++
+ 3 files changed, 98 insertions(+), 3 deletions(-)
+ create mode 100644 include/linux/cix/cix_cpu_ipa.h
 
 diff --git a/drivers/thermal/cix/cix_cpu_ipa.c b/drivers/thermal/cix/cix_cpu_ipa.c
 index 77d656826e071..10979593d97c6 100644
@@ -188,6 +193,3 @@ index 0000000000000..7b7850ba0e953
 +#endif /* CONFIG_CIX_CPU_IPA */
 +
 +#endif /* __LINUX_CIX_CPU_IPA_H */
--- 
-2.51.0
-

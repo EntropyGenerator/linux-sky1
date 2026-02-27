@@ -1,8 +1,7 @@
-From 7133caf732132e2cf1a28bbeebf9099eaa1ac53b Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sat, 7 Feb 2026 22:11:07 +1100
-Subject: [PATCH 085/118] PCI: ACPI: Suppress cosmetic warnings on CIX Sky1
- ACPI boot
+Subject: [PATCH] PCI: ACPI: Suppress cosmetic warnings on CIX Sky1 ACPI boot
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
@@ -22,6 +21,10 @@ during PCI enumeration:
    the hardware, and PCI enumeration proceeds via the PNP0A08 root
    bridges. Add CIXH2020 to the forbidden_id_list to prevent
    unnecessary platform device creation attempts.
+---
+ drivers/acpi/acpi_platform.c | 1 +
+ drivers/pci/of.c             | 6 ++----
+ 2 files changed, 3 insertions(+), 4 deletions(-)
 
 diff --git a/drivers/acpi/acpi_platform.c b/drivers/acpi/acpi_platform.c
 index 48d15dd785f6e..7631935ba2ae4 100644
@@ -53,6 +56,3 @@ index 3579265f11984..cf54a54f27091 100644
  
  	name = kasprintf(GFP_KERNEL, "pci@%x,%x", pci_domain_nr(bridge->bus),
  			 bridge->bus->number);
--- 
-2.51.0
-

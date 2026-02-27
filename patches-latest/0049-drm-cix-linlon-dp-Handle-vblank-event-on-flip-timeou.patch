@@ -1,8 +1,7 @@
-From 7ecaf9b8def5542509f1ea0471a15d713e908212 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Thu, 5 Feb 2026 22:51:33 +1100
-Subject: [PATCH 049/118] drm: cix: linlon-dp: Handle vblank event on flip
- timeout
+Subject: [PATCH] drm: cix: linlon-dp: Handle vblank event on flip timeout
 
 Port fix from CIX 6.6.89 to handle flip timeout more gracefully:
 
@@ -13,6 +12,11 @@ Port fix from CIX 6.6.89 to handle flip timeout more gracefully:
 
 This prevents userspace from hanging indefinitely when flip
 completion is not signaled properly.
+---
+ drivers/gpu/drm/cix/linlon-dp/hw/dp_dev.c     |  9 +++++++++
+ drivers/gpu/drm/cix/linlon-dp/linlondp_crtc.c | 17 +++++++++++++++--
+ drivers/gpu/drm/cix/linlon-dp/linlondp_dev.h  |  3 +++
+ 3 files changed, 27 insertions(+), 2 deletions(-)
 
 diff --git a/drivers/gpu/drm/cix/linlon-dp/hw/dp_dev.c b/drivers/gpu/drm/cix/linlon-dp/hw/dp_dev.c
 index 8855898d4c84b..2de8eeea3e5cf 100644
@@ -91,6 +95,3 @@ index feb3f75634726..5cccc208f21b8 100644
  };
  
  /*
--- 
-2.51.0
-

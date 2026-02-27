@@ -1,12 +1,17 @@
-From 1c40d50183acf3fae16e01d69aaa6e4ae54aaab7 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Thu, 5 Feb 2026 23:40:51 +1100
-Subject: [PATCH 057/118] arm64: dts: cix: Thermal zone improvements
+Subject: [PATCH] arm64: dts: cix: Thermal zone improvements
 
 - Rename thermal zones to tz-* pattern for clarity and <20 char limit
 - Add switch_on trip point (60C) to prevent IPA governor from
   always being in passive state with single trip point zones
 - Update GPU power model thermal-zone reference to match
+---
+ arch/arm64/boot/dts/cix/sky1-orion-o6.dts  |  8 +--
+ arch/arm64/boot/dts/cix/sky1-orion-o6n.dts |  8 +--
+ arch/arm64/boot/dts/cix/sky1.dtsi          | 67 ++++++++++++++++++----
+ 3 files changed, 64 insertions(+), 19 deletions(-)
 
 diff --git a/arch/arm64/boot/dts/cix/sky1-orion-o6.dts b/arch/arm64/boot/dts/cix/sky1-orion-o6.dts
 index e8b88ad4577ae..bf58ffe54507d 100644
@@ -290,6 +295,3 @@ index e912f40d6bfeb..cb33685f4ce8f 100644
  			polling-delay-passive = <100>;
  			polling-delay = <1000>;
  			thermal-sensors = <&scmi_sensor GPU_AVERAGE_TEMP_SENSOR_ID>;
--- 
-2.51.0
-

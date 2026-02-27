@@ -1,8 +1,7 @@
-From 3123707825a2392c009d27f342a89c4520c0e55e Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sun, 1 Feb 2026 00:31:25 +1100
-Subject: [PATCH 001/118] arm64: dts: cix: Add Sky1 SoC and Radxa Orion O6
- device tree
+Subject: [PATCH] arm64: dts: cix: Add Sky1 SoC and Radxa Orion O6 device tree
 
 Add complete device tree for CIX Sky1 SoC (sky1.dtsi) and Radxa Orion O6
 board (sky1-orion-o6.dts, sky1-orion-o6n.dts). Includes dt-binding headers
@@ -13,6 +12,30 @@ Adopts v6.19-rc7 DTS conventions:
 - Lowercase CPU labels (cpu0: not CPU0:)
 - Board compatible with SoC fallback ("radxa,orion-o6", "cix,sky1")
 - Use mainline clock header (dt-bindings/clock/cix,sky1.h)
+---
+ arch/arm64/Kconfig                            |    5 +-
+ arch/arm64/boot/dts/cix/Makefile              |    1 +
+ arch/arm64/boot/dts/cix/sky1-orion-o6.dts     | 2420 ++++++++-
+ arch/arm64/boot/dts/cix/sky1-orion-o6n.dts    | 2570 +++++++++
+ arch/arm64/boot/dts/cix/sky1.dtsi             | 4799 +++++++++++++++--
+ include/dt-bindings/clock/sky1-audss.h        |   71 +
+ include/dt-bindings/phy/phy-cadence-torrent.h |   62 +
+ include/dt-bindings/pinctrl/pads-sky1.h       |  587 ++
+ include/dt-bindings/power/sky1-power.h        |   48 +
+ include/dt-bindings/reset/sky1-reset-audss.h  |   23 +
+ include/dt-bindings/reset/sky1-reset-fch.h    |   44 +
+ include/dt-bindings/reset/sky1-reset.h        |  166 +
+ include/dt-bindings/thermal/sky1-thermal.h    |   29 +
+ 13 files changed, 10399 insertions(+), 426 deletions(-)
+ create mode 100644 arch/arm64/boot/dts/cix/sky1-orion-o6n.dts
+ create mode 100644 include/dt-bindings/clock/sky1-audss.h
+ create mode 100644 include/dt-bindings/phy/phy-cadence-torrent.h
+ create mode 100644 include/dt-bindings/pinctrl/pads-sky1.h
+ create mode 100644 include/dt-bindings/power/sky1-power.h
+ create mode 100644 include/dt-bindings/reset/sky1-reset-audss.h
+ create mode 100644 include/dt-bindings/reset/sky1-reset-fch.h
+ create mode 100644 include/dt-bindings/reset/sky1-reset.h
+ create mode 100644 include/dt-bindings/thermal/sky1-thermal.h
 
 diff --git a/arch/arm64/Kconfig b/arch/arm64/Kconfig
 index 93173f0a09c7d..d5f0c9a612c45 100644
@@ -11176,6 +11199,3 @@ index 0000000000000..a13e68c3daa8a
 +#define REG_SENSOR_DEV_COUNT	32
 +
 +#endif
--- 
-2.51.0
-

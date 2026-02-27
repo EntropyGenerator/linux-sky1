@@ -1,7 +1,7 @@
-From 7cb45248504197e72799ca4ee899cf680a6d3109 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Thu, 5 Feb 2026 21:49:45 +1100
-Subject: [PATCH 045/118] cpufreq: cppc: Skip redundant frequency updates
+Subject: [PATCH] cpufreq: cppc: Skip redundant frequency updates
 
 Add an early return in cppc_cpufreq_set_target() when the requested
 performance level is already set. This avoids unnecessary CPPC mailbox
@@ -11,6 +11,9 @@ multiple times in succession.
 On systems with slow PCC (Platform Communication Channel) mailbox
 responses, this optimization reduces CPU overhead and improves
 responsiveness by eliminating redundant firmware calls.
+---
+ drivers/cpufreq/cppc_cpufreq.c | 10 ++++++++--
+ 1 file changed, 8 insertions(+), 2 deletions(-)
 
 diff --git a/drivers/cpufreq/cppc_cpufreq.c b/drivers/cpufreq/cppc_cpufreq.c
 index 9eac77c4f2944..156a0448066b9 100644
@@ -35,6 +38,3 @@ index 9eac77c4f2944..156a0448066b9 100644
  	freqs.old = policy->cur;
  	freqs.new = target_freq;
  
--- 
-2.51.0
-

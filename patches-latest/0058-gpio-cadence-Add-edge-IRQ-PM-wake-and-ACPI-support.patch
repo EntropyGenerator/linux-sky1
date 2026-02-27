@@ -1,8 +1,7 @@
-From 638b20a6e81b686b02e193c3298e95c3a269f93c Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Thu, 5 Feb 2026 23:57:33 +1100
-Subject: [PATCH 058/118] gpio: cadence: Add edge IRQ, PM, wake, and ACPI
- support
+Subject: [PATCH] gpio: cadence: Add edge IRQ, PM, wake, and ACPI support
 
 Extend the Cadence GPIO driver with features needed for Sky1 platform:
 
@@ -19,6 +18,9 @@ Use LATE_SYSTEM_SLEEP_PM_OPS for proper GPIO controller ordering
 during suspend/resume. Add IRQCHIP_MASK_ON_SUSPEND flag for correct
 IRQ handling. Sky1 PDC calls are conditional based on platform
 detection via match data.
+---
+ drivers/gpio/gpio-cadence.c | 253 +++++++++++++++++++++++++++++++-----
+ 1 file changed, 219 insertions(+), 34 deletions(-)
 
 diff --git a/drivers/gpio/gpio-cadence.c b/drivers/gpio/gpio-cadence.c
 index b75734ca22dd7..e2ca7b20fa776 100644
@@ -423,6 +425,3 @@ index b75734ca22dd7..e2ca7b20fa776 100644
  };
  module_platform_driver(cdns_gpio_driver);
  
--- 
-2.51.0
-

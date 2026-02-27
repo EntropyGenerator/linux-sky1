@@ -1,10 +1,136 @@
-From e1663f672db18ff805ba7711252418dc8f88bd93 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sun, 1 Feb 2026 01:19:36 +1100
-Subject: [PATCH 010/118] media: cix: Add Sky1 video codec (VPU) driver
+Subject: [PATCH] media: cix: Add Sky1 video codec (VPU) driver
 
 Add CIX Sky1 video processing unit driver supporting hardware-
 accelerated video encode and decode via V4L2 mem2mem interface.
+---
+ drivers/media/platform/Kconfig                |    1 +
+ drivers/media/platform/Makefile               |    1 +
+ drivers/media/platform/cix/Kbuild             |   57 +
+ drivers/media/platform/cix/Kconfig            |   21 +
+ drivers/media/platform/cix/dev/mvx_dev.c      | 1335 ++++
+ drivers/media/platform/cix/dev/mvx_dev.h      |   49 +
+ drivers/media/platform/cix/dev/mvx_hwreg.c    |  594 ++
+ drivers/media/platform/cix/dev/mvx_hwreg.h    |  383 +
+ .../media/platform/cix/dev/mvx_hwreg_v500.c   |   65 +
+ .../media/platform/cix/dev/mvx_hwreg_v500.h   |   48 +
+ .../platform/cix/dev/mvx_hwreg_v52_v76.c      |  120 +
+ .../platform/cix/dev/mvx_hwreg_v52_v76.h      |   49 +
+ .../media/platform/cix/dev/mvx_hwreg_v550.c   |   82 +
+ .../media/platform/cix/dev/mvx_hwreg_v550.h   |   48 +
+ .../media/platform/cix/dev/mvx_hwreg_v61.c    |   95 +
+ .../media/platform/cix/dev/mvx_hwreg_v61.h    |   49 +
+ drivers/media/platform/cix/dev/mvx_lsid.c     |  359 +
+ drivers/media/platform/cix/dev/mvx_lsid.h     |  175 +
+ .../media/platform/cix/dev/mvx_scheduler.c    | 1158 +++
+ .../media/platform/cix/dev/mvx_scheduler.h    |  290 +
+ .../cix/external/fw_v2/mve_protocol_def.h     | 2049 +++++
+ .../cix/external/fw_v3/mve_protocol_def.h     | 2019 +++++
+ drivers/media/platform/cix/if/mvx_bitops.h    |   91 +
+ drivers/media/platform/cix/if/mvx_buffer.c    |  649 ++
+ drivers/media/platform/cix/if/mvx_buffer.h    |  439 ++
+ drivers/media/platform/cix/if/mvx_firmware.c  |  625 ++
+ drivers/media/platform/cix/if/mvx_firmware.h  | 1163 +++
+ .../platform/cix/if/mvx_firmware_cache.c      |  783 ++
+ .../platform/cix/if/mvx_firmware_cache.h      |  247 +
+ .../media/platform/cix/if/mvx_firmware_priv.h |  165 +
+ .../media/platform/cix/if/mvx_firmware_v2.c   | 3914 ++++++++++
+ .../media/platform/cix/if/mvx_firmware_v3.c   |  173 +
+ drivers/media/platform/cix/if/mvx_if.c        |  246 +
+ drivers/media/platform/cix/if/mvx_if.h        |  590 ++
+ drivers/media/platform/cix/if/mvx_mmu.c       | 1347 ++++
+ drivers/media/platform/cix/if/mvx_mmu.h       |  481 ++
+ drivers/media/platform/cix/if/mvx_secure.c    |  412 +
+ drivers/media/platform/cix/if/mvx_secure.h    |  139 +
+ drivers/media/platform/cix/if/mvx_session.c   | 6895 +++++++++++++++++
+ drivers/media/platform/cix/if/mvx_session.h   | 1496 ++++
+ .../media/platform/cix/if/v4l2/mvx_ext_if.h   |   93 +
+ .../media/platform/cix/if/v4l2/mvx_ext_v4l2.c |  237 +
+ .../platform/cix/if/v4l2/mvx_v4l2_buffer.c    |  563 ++
+ .../platform/cix/if/v4l2/mvx_v4l2_buffer.h    |  167 +
+ .../platform/cix/if/v4l2/mvx_v4l2_ctrls.c     | 2185 ++++++
+ .../platform/cix/if/v4l2/mvx_v4l2_ctrls.h     |   75 +
+ .../platform/cix/if/v4l2/mvx_v4l2_fops.c      |  247 +
+ .../platform/cix/if/v4l2/mvx_v4l2_fops.h      |   64 +
+ .../platform/cix/if/v4l2/mvx_v4l2_session.c   | 1019 +++
+ .../platform/cix/if/v4l2/mvx_v4l2_session.h   |  264 +
+ .../platform/cix/if/v4l2/mvx_v4l2_vidioc.c    | 2102 +++++
+ .../platform/cix/if/v4l2/mvx_v4l2_vidioc.h    |  157 +
+ .../platform/cix/linux/mvx-v4l2-controls.h    |  661 ++
+ drivers/media/platform/cix/mvx_driver.c       |   72 +
+ drivers/media/platform/cix/mvx_log.c          | 1187 +++
+ drivers/media/platform/cix/mvx_log.h          |  427 +
+ drivers/media/platform/cix/mvx_log_group.c    |  383 +
+ drivers/media/platform/cix/mvx_log_group.h    |   69 +
+ drivers/media/platform/cix/mvx_log_ram.h      |  212 +
+ drivers/media/platform/cix/mvx_pm_runtime.c   |   65 +
+ drivers/media/platform/cix/mvx_pm_runtime.h   |   67 +
+ drivers/media/platform/cix/mvx_seq.c          |   95 +
+ drivers/media/platform/cix/mvx_seq.h          |   94 +
+ 63 files changed, 39407 insertions(+)
+ create mode 100755 drivers/media/platform/cix/Kbuild
+ create mode 100755 drivers/media/platform/cix/Kconfig
+ create mode 100755 drivers/media/platform/cix/dev/mvx_dev.c
+ create mode 100755 drivers/media/platform/cix/dev/mvx_dev.h
+ create mode 100755 drivers/media/platform/cix/dev/mvx_hwreg.c
+ create mode 100755 drivers/media/platform/cix/dev/mvx_hwreg.h
+ create mode 100755 drivers/media/platform/cix/dev/mvx_hwreg_v500.c
+ create mode 100755 drivers/media/platform/cix/dev/mvx_hwreg_v500.h
+ create mode 100755 drivers/media/platform/cix/dev/mvx_hwreg_v52_v76.c
+ create mode 100755 drivers/media/platform/cix/dev/mvx_hwreg_v52_v76.h
+ create mode 100755 drivers/media/platform/cix/dev/mvx_hwreg_v550.c
+ create mode 100755 drivers/media/platform/cix/dev/mvx_hwreg_v550.h
+ create mode 100755 drivers/media/platform/cix/dev/mvx_hwreg_v61.c
+ create mode 100755 drivers/media/platform/cix/dev/mvx_hwreg_v61.h
+ create mode 100755 drivers/media/platform/cix/dev/mvx_lsid.c
+ create mode 100755 drivers/media/platform/cix/dev/mvx_lsid.h
+ create mode 100755 drivers/media/platform/cix/dev/mvx_scheduler.c
+ create mode 100755 drivers/media/platform/cix/dev/mvx_scheduler.h
+ create mode 100755 drivers/media/platform/cix/external/fw_v2/mve_protocol_def.h
+ create mode 100755 drivers/media/platform/cix/external/fw_v3/mve_protocol_def.h
+ create mode 100755 drivers/media/platform/cix/if/mvx_bitops.h
+ create mode 100755 drivers/media/platform/cix/if/mvx_buffer.c
+ create mode 100755 drivers/media/platform/cix/if/mvx_buffer.h
+ create mode 100755 drivers/media/platform/cix/if/mvx_firmware.c
+ create mode 100755 drivers/media/platform/cix/if/mvx_firmware.h
+ create mode 100755 drivers/media/platform/cix/if/mvx_firmware_cache.c
+ create mode 100755 drivers/media/platform/cix/if/mvx_firmware_cache.h
+ create mode 100755 drivers/media/platform/cix/if/mvx_firmware_priv.h
+ create mode 100755 drivers/media/platform/cix/if/mvx_firmware_v2.c
+ create mode 100755 drivers/media/platform/cix/if/mvx_firmware_v3.c
+ create mode 100755 drivers/media/platform/cix/if/mvx_if.c
+ create mode 100755 drivers/media/platform/cix/if/mvx_if.h
+ create mode 100755 drivers/media/platform/cix/if/mvx_mmu.c
+ create mode 100755 drivers/media/platform/cix/if/mvx_mmu.h
+ create mode 100755 drivers/media/platform/cix/if/mvx_secure.c
+ create mode 100755 drivers/media/platform/cix/if/mvx_secure.h
+ create mode 100755 drivers/media/platform/cix/if/mvx_session.c
+ create mode 100755 drivers/media/platform/cix/if/mvx_session.h
+ create mode 100755 drivers/media/platform/cix/if/v4l2/mvx_ext_if.h
+ create mode 100755 drivers/media/platform/cix/if/v4l2/mvx_ext_v4l2.c
+ create mode 100755 drivers/media/platform/cix/if/v4l2/mvx_v4l2_buffer.c
+ create mode 100755 drivers/media/platform/cix/if/v4l2/mvx_v4l2_buffer.h
+ create mode 100755 drivers/media/platform/cix/if/v4l2/mvx_v4l2_ctrls.c
+ create mode 100755 drivers/media/platform/cix/if/v4l2/mvx_v4l2_ctrls.h
+ create mode 100755 drivers/media/platform/cix/if/v4l2/mvx_v4l2_fops.c
+ create mode 100755 drivers/media/platform/cix/if/v4l2/mvx_v4l2_fops.h
+ create mode 100755 drivers/media/platform/cix/if/v4l2/mvx_v4l2_session.c
+ create mode 100755 drivers/media/platform/cix/if/v4l2/mvx_v4l2_session.h
+ create mode 100755 drivers/media/platform/cix/if/v4l2/mvx_v4l2_vidioc.c
+ create mode 100755 drivers/media/platform/cix/if/v4l2/mvx_v4l2_vidioc.h
+ create mode 100755 drivers/media/platform/cix/linux/mvx-v4l2-controls.h
+ create mode 100755 drivers/media/platform/cix/mvx_driver.c
+ create mode 100755 drivers/media/platform/cix/mvx_log.c
+ create mode 100755 drivers/media/platform/cix/mvx_log.h
+ create mode 100755 drivers/media/platform/cix/mvx_log_group.c
+ create mode 100755 drivers/media/platform/cix/mvx_log_group.h
+ create mode 100755 drivers/media/platform/cix/mvx_log_ram.h
+ create mode 100755 drivers/media/platform/cix/mvx_pm_runtime.c
+ create mode 100755 drivers/media/platform/cix/mvx_pm_runtime.h
+ create mode 100755 drivers/media/platform/cix/mvx_seq.c
+ create mode 100755 drivers/media/platform/cix/mvx_seq.h
 
 diff --git a/drivers/media/platform/Kconfig b/drivers/media/platform/Kconfig
 index 3f0b7bb68cc94..2dfc2465669cd 100644
@@ -39801,6 +39927,3 @@ index 0000000000000..3713621b65274
 +void mvx_seq_hash_stop(void *v);
 +
 +#endif /* _MVX_SEQ_H_ */
--- 
-2.51.0
-

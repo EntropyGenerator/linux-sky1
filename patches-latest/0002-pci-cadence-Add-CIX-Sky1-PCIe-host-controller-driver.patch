@@ -1,8 +1,7 @@
-From d2117e2400c8af79a43b74ca6e9b02e102ef4c09 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sun, 1 Feb 2026 00:38:00 +1100
-Subject: [PATCH 002/118] pci: cadence: Add CIX Sky1 PCIe host controller
- driver
+Subject: [PATCH] pci: cadence: Add CIX Sky1 PCIe host controller driver
 
 Add full-featured PCIe host controller for CIX Sky1 SoC including
 multi-instance support with shared PHY coordination, AER error handling,
@@ -12,6 +11,21 @@ support, PHY management, and GPIO-based PERST handling.
 Replaces the minimal mainline HPA-based stub (238 lines) with the
 production vendor driver (2,811 lines). The HPA framework files remain
 in-tree but are unused by our Kconfig.
+---
+ drivers/pci/controller/cadence/Kconfig        |   32 +-
+ drivers/pci/controller/cadence/Makefile       |   13 +-
+ .../pci/controller/cadence/pci-sky1-debugfs.c | 1340 ++++++++
+ .../pci/controller/cadence/pci-sky1-debugfs.h |   17 +
+ drivers/pci/controller/cadence/pci-sky1.c     | 2831 ++++++++++++++++-
+ drivers/pci/controller/cadence/pci-sky1.h     |  196 ++
+ .../controller/cadence/pcie-cadence-host.c    |  460 ++-
+ drivers/pci/controller/cadence/pcie-cadence.c |   76 +-
+ drivers/pci/controller/cadence/pcie-cadence.h |  433 ++-
+ drivers/pci/quirks.c                          |   21 +
+ 10 files changed, 5022 insertions(+), 397 deletions(-)
+ create mode 100644 drivers/pci/controller/cadence/pci-sky1-debugfs.c
+ create mode 100644 drivers/pci/controller/cadence/pci-sky1-debugfs.h
+ create mode 100644 drivers/pci/controller/cadence/pci-sky1.h
 
 diff --git a/drivers/pci/controller/cadence/Kconfig b/drivers/pci/controller/cadence/Kconfig
 index 9e651d5459735..ad5ad2d534f94 100644
@@ -5207,7 +5221,7 @@ index db3154c1eccbf..438c0bc882dc6 100644
  	ret = cdns_pcie_host_link_setup(rc);
  	if (ret)
 diff --git a/drivers/pci/controller/cadence/pcie-cadence.c b/drivers/pci/controller/cadence/pcie-cadence.c
-index e6f1a4ac0fb7a..c5f35808de16c 100644
+index a1eada56edba7..6fd3c89f17b82 100644
 --- a/drivers/pci/controller/cadence/pcie-cadence.c
 +++ b/drivers/pci/controller/cadence/pcie-cadence.c
 @@ -23,16 +23,16 @@ u16 cdns_pcie_find_ext_capability(struct cdns_pcie *pcie, u8 cap)
@@ -5920,7 +5934,7 @@ index 443033c607d75..5da4c36b25aa3 100644
  
  #endif /* _PCIE_CADENCE_H */
 diff --git a/drivers/pci/quirks.c b/drivers/pci/quirks.c
-index 280cd50d693bd..146d8dc7ecc42 100644
+index 6df78efd7f6dc..68e83a843d221 100644
 --- a/drivers/pci/quirks.c
 +++ b/drivers/pci/quirks.c
 @@ -2906,6 +2906,27 @@ DECLARE_PCI_FIXUP_CLASS_EARLY(PCI_VENDOR_ID_NVIDIA, 0x229e,
@@ -5951,6 +5965,3 @@ index 280cd50d693bd..146d8dc7ecc42 100644
  /*
   * Some versions of the MCP55 bridge from Nvidia have a legacy IRQ routing
   * config register.  This register controls the routing of legacy
--- 
-2.51.0
-

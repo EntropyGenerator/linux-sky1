@@ -1,7 +1,7 @@
-From 4334dc4488db59c6b34d1857e05848423640e7c9 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Entrpi <entrpi@proton.me>
 Date: Sat, 7 Feb 2026 18:16:38 +1100
-Subject: [PATCH 078/118] usb: cdns3: Harden cdnsp-sky1 probe for ACPI boot
+Subject: [PATCH] usb: cdns3: Harden cdnsp-sky1 probe for ACPI boot
 
 Add a NULL guard for usb_syscon in sky1_set_mode_by_id() since the
 syscon regmap may not be available under ACPI.
@@ -11,6 +11,9 @@ drd_init asserts resets and disables clocks before re-enabling them;
 if clock lookup fails at that point the hardware is left in an
 inaccessible state, causing SErrors during xHCI probe. Validating
 clocks early ensures clean failure without touching hardware.
+---
+ drivers/usb/cdns3/cdnsp-sky1.c | 23 +++++++++++++++++++++++
+ 1 file changed, 23 insertions(+)
 
 diff --git a/drivers/usb/cdns3/cdnsp-sky1.c b/drivers/usb/cdns3/cdnsp-sky1.c
 index 378f955e59094..023c1fa937dc1 100644
@@ -53,6 +56,3 @@ index 378f955e59094..023c1fa937dc1 100644
  	ret = cdnsp_sky1_drd_init(data);
  	if (ret == -ETIMEDOUT)
  		return -EPROBE_DEFER;
--- 
-2.51.0
-
