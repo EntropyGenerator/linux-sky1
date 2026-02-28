@@ -128,3 +128,5 @@
 0128-drm-trilin-dptx-add-CEC-over-DP-AUX-support.patch
 0129-drm-trilin-dptx-recover-link-on-HPD-bounce-with-degr.patch
 0130-Kconfig-fix-missing-dependencies-for-sky1-socinfo-an.patch
+0131-pwm-sky1-fix-NULL-dereference-in-suspend.patch
+0132-fix-allmodconfig-build-warnings-across-CIX-drivers.patch
