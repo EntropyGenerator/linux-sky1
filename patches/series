@@ -133,3 +133,5 @@
 0133-drm-trilin-dptx-retry-AUX-on-cold-plug-timeout.patch
 0134-ASoC-cix-skip-HDMI-audio-links-for-missing-I2S-devic.patch
 0135-drm-trilin-dptx-add-ELD-reporting-and-audio-infofram.patch
+0136-drm-cix-dptx-add-IEC60958-channel-status-for-extende.patch
+0137-drm-cix-dptx-properly-disable-audio-hardware-on-shut.patch
