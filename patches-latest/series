@@ -131,3 +131,5 @@
 0131-Kconfig-fix-missing-dependencies-for-sky1-socinfo-an.patch
 0132-pwm-sky1-fix-NULL-dereference-in-suspend.patch
 0133-fix-allmodconfig-build-warnings-across-CIX-drivers.patch
+0134-drm-trilin-dptx-retry-AUX-on-cold-plug-timeout.patch
+0135-ASoC-cix-skip-HDMI-audio-links-for-missing-I2S-devic.patch
