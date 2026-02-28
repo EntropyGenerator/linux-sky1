@@ -12,10 +12,11 @@ Check that the ELD baseline length is non-zero before copying it;
 otherwise return zeros so hdmi-codec knows the ELD is not yet
 available.
 ---
- drivers/gpu/drm/cix/dptx/trilin_dptx.c       | 11 +++++++++--
- drivers/gpu/drm/cix/dptx/trilin_dptx_audio.c | 20 ++++++++++++++++----
- drivers/gpu/drm/cix/dptx/trilin_drm.c        |  6 ++++++
- 3 files changed, 31 insertions(+), 6 deletions(-)
+ drivers/gpu/drm/cix/dptx/trilin_dptx.c       | 11 ++++++--
+ drivers/gpu/drm/cix/dptx/trilin_dptx_audio.c | 28 ++++++++++++++------
+ drivers/gpu/drm/cix/dptx/trilin_drm.c        |  6 +++++
+ sound/soc/codecs/hdmi-codec.c                | 23 +++++++++-------
+ 4 files changed, 49 insertions(+), 19 deletions(-)
 
 diff --git a/drivers/gpu/drm/cix/dptx/trilin_dptx.c b/drivers/gpu/drm/cix/dptx/trilin_dptx.c
 index 2dbe1abdc24da..f8ff7823d0536 100644
@@ -40,7 +41,7 @@ index 2dbe1abdc24da..f8ff7823d0536 100644
  	cix_hdcp_hpd_event_process(&dp->hdcp, dp->plugin);
  }
 diff --git a/drivers/gpu/drm/cix/dptx/trilin_dptx_audio.c b/drivers/gpu/drm/cix/dptx/trilin_dptx_audio.c
-index a56927404094e..fb53dd436127c 100644
+index a56927404094e..0119509f017fd 100644
 --- a/drivers/gpu/drm/cix/dptx/trilin_dptx_audio.c
 +++ b/drivers/gpu/drm/cix/dptx/trilin_dptx_audio.c
 @@ -2,6 +2,7 @@
@@ -51,21 +52,29 @@ index a56927404094e..fb53dd436127c 100644
  #include "trilin_dptx_reg.h"
  #include "trilin_dptx.h"
  #include "dptx_infoframe.h"
-@@ -122,7 +123,13 @@ static int dptx_audio_get_eld(struct device *dev, void *data,
+@@ -122,11 +123,17 @@ static int dptx_audio_get_eld(struct device *dev, void *data,
  {
  	struct trilin_dp *dp = data;
  
 -	if (dp->plugin)
+-		memcpy(buf, dp->connector.base.eld,
+-		       min(sizeof(dp->connector.base.eld), len));
+-	else
+-		memset(buf, 0, len);
 +	/* Only copy the ELD if the sink is connected AND the ELD has
 +	 * been populated from EDID (baseline_eld_len > 0).  At boot
 +	 * the plugged callback fires before EDID is read, so the
 +	 * connector ELD is still all-zeros — returning that causes
 +	 * noisy "Unknown ELD version 0" warnings from snd_parse_eld.
 +	 */
-+	if (dp->plugin && dp->connector.base.eld[DRM_ELD_BASELINE_ELD_LEN])
- 		memcpy(buf, dp->connector.base.eld,
- 		       min(sizeof(dp->connector.base.eld), len));
- 	else
++	if (!dp->plugin || !dp->connector.base.eld[DRM_ELD_BASELINE_ELD_LEN])
++		return -ENODEV;
++
++	memcpy(buf, dp->connector.base.eld,
++	       min(sizeof(dp->connector.base.eld), len));
+ 
+ 	return 0;
+ }
 @@ -207,9 +214,14 @@ static int dptx_audio_hook_plugged_cb(struct device *dev, void *data,
  	dp_audio->plugged_cb = fn;
  	dp_audio->codec_dev = codec_dev;
@@ -101,3 +110,40 @@ index 423b3f018f9b5..9341485488c5e 100644
  	return ret;
  }
  
+diff --git a/sound/soc/codecs/hdmi-codec.c b/sound/soc/codecs/hdmi-codec.c
+index e1933f733af10..6743111a39c1f 100644
+--- a/sound/soc/codecs/hdmi-codec.c
++++ b/sound/soc/codecs/hdmi-codec.c
+@@ -468,18 +468,23 @@ static int hdmi_codec_startup(struct snd_pcm_substream *substream,
+ 	if (tx && hcp->hcd.ops->get_eld) {
+ 		ret = hcp->hcd.ops->get_eld(dai->dev->parent, hcp->hcd.data,
+ 					    hcp->eld, sizeof(hcp->eld));
+-		if (ret)
++		if (ret == -ENODEV) {
++			/* No sink connected; allow open without ELD constraints */
++			ret = 0;
++		} else if (ret) {
+ 			goto err;
++		} else {
++			snd_parse_eld(dai->dev, &hcp->eld_parsed,
++				      hcp->eld, sizeof(hcp->eld));
+ 
+-		snd_parse_eld(dai->dev, &hcp->eld_parsed,
+-			      hcp->eld, sizeof(hcp->eld));
++			ret = snd_pcm_hw_constraint_eld(substream->runtime,
++							hcp->eld);
++			if (ret)
++				goto err;
+ 
+-		ret = snd_pcm_hw_constraint_eld(substream->runtime, hcp->eld);
+-		if (ret)
+-			goto err;
+-
+-		/* Select chmap supported */
+-		hdmi_codec_eld_chmap(hcp);
++			/* Select chmap supported */
++			hdmi_codec_eld_chmap(hcp);
++		}
+ 	}
+ 
+ 	hcp->busy = true;
