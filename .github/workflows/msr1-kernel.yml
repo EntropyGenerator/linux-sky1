@@ -28,7 +28,7 @@ jobs:
 
       # Runs a single command using the runners shell
       - name: Install dependencies
-        run: sudo apt install -y build-essential bc bison flex libelf-dev libssl-dev debhelper dh-exec rsync cpio kmod
+        run: sudo apt install -y build-essential bc bison flex libelf-dev libssl-dev libdw-dev debhelper dh-exec rsync cpio kmod
 
       # Runs a set of commands using the runners shell
       - name: Download linux 7.0.1 source
