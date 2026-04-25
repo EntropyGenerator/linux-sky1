@@ -1,6 +1,8 @@
-# linux-sky1
+# linux-sky1 for Minisforum MS-R1
 
 Linux kernel patches and configuration for CIX Sky1 SoC (Radxa Orion O6 and compatible boards).
+
+Thanks to the [issue](https://github.com/Sky1-Linux/linux-sky1/issues/12#issuecomment-4314566635), I tried to make a Github Action workflow to automatically build the kernel for MS-R1.
 
 ## Overview
 
