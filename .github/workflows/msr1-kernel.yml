@@ -51,7 +51,7 @@ jobs:
 
       - name: Build ARM64 Debian Packages
         run: |
-          cd linux-7.0
+          cd linux-7.0.1
           echo "Building kernel"
           make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- -j$(nproc) LOCALVERSION="-sky1-msr1" bindeb-pkg
 
