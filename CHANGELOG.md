@@ -2,6 +2,12 @@
 
 All notable changes to the Sky1 kernel patch set.
 
+## [7.0.1] - 2026-04-25
+
+### Added
+- Add support for MS-R1
+- Add workflow to build kernel
+
 ## [6.19.4-1] - 2026-02-27
 
 ### Changed
