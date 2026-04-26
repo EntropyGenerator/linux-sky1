@@ -4,6 +4,25 @@ Linux kernel patches and configuration for CIX Sky1 SoC (Radxa Orion O6 and comp
 
 Thanks to the [issue](https://github.com/Sky1-Linux/linux-sky1/issues/12#issuecomment-4314566635), I tried to make a Github Action workflow to automatically build the kernel for MS-R1.
 
+## Install instruction
+
+The following works on Debian forky.  
+
+1. Download the artifact [here](https://github.com/EntropyGenerator/linux-sky1/actions/runs/24931473453/artifacts/6640167682)
+2. Install the `linux-image` and `linux-headers` debs
+3. Create a custom grub menuentry. Add the following to `/etc/grub.d/40_custom`. Here I use btrfs, please edit to support your filesystem.
+```
+menuentry "MS-R1_7.0.1" {
+	insmod part_gpt
+	insmod btrfs
+	search --no-floppy --fs-uuid --set=root REPLACE-YOUR-UUID-HERE
+
+	linux /@/boot/vmlinuz-7.0.1-sky1-msr1 loglevel=4 console=tty0 console=ttyAMA2,115200 efi=noruntime acpi=force arm-smmu-v3.disable_bypass=0 audit_backlog_limit=8192 clk_ignore_unused keep_bootcon panic=30 root=UUID=REPLACE-YOUR-UUID-HERE rootflags=subvol=@ rootwait rw
+	initrd /@/boot/initrd.img-7.0.1-sky1-msr1
+}
+```
+4. Update grub using `update-grub`. Set default menuentry if necessary, as of my device the grub menu cannot response to keyboard.
+
 ## Overview
 
 This repository contains the Sky1 kernel patch set and configuration for 4 kernel tracks:
