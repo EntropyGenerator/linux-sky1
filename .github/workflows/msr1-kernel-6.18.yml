@@ -43,7 +43,7 @@ jobs:
         run: |
           cd linux-${KERNEL_VERSION}
           echo "Patching kernel"
-          for patch in patches/*.patch; do
+          for patch in ../patches/*.patch; do
             echo "Applying ${patch}"
             patch -p1 -s < ${patch}
           done
