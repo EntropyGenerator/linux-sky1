@@ -3,7 +3,7 @@
 name: Linux 6.18 for MS-R1
 
 env:
-  KERNEL_VERSION: "6.18.26"
+  KERNEL_VERSION: "6.18.9"
 
 # Controls when the workflow will run
 on:
