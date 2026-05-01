@@ -43,9 +43,9 @@ jobs:
         run: |
           cd linux-${KERNEL_VERSION}
           echo "Patching kernel"
-          for patch in "patches/*.patch; do
-            echo "$patch"
-            patch -p1 -s < "$patch"
+          for patch in patches/*.patch; do
+            echo "Applying ${patch}"
+            patch -p1 -s < ${patch}
           done
 
       - name: Apply Config
