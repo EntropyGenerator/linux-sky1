@@ -1,14 +1,14 @@
 # linux-sky1 for Minisforum MS-R1
 
-Linux kernel patches and configuration for CIX Sky1 SoC (Radxa Orion O6 and compatible boards).
+Linux kernel patches and configuration for CIX Sky1 SoC (Minisforum MS-R1).
 
-Thanks to the [issue](https://github.com/Sky1-Linux/linux-sky1/issues/12#issuecomment-4314566635), I tried to make a Github Action workflow to automatically build the kernel for MS-R1.
+Thanks to the [issue](https://github.com/Sky1-Linux/linux-sky1/issues/12#issuecomment-4314566635), I make a Github Action workflow to automatically build the kernel for MS-R1.
 
-## Install instruction
+## Installation instruction
 
-The following works on Debian forky.  
+The following has been verified on Debian 13/14.  
 
-1. Download the artifact [here](https://github.com/EntropyGenerator/linux-sky1/actions/runs/24931473453/artifacts/6640167682)
+1. Download the artifact [here](https://github.com/EntropyGenerator/linux-sky1/actions). 6.18 Kernel recommended.
 2. Install the `linux-image` and `linux-headers` debs
 3. Create a custom grub menuentry. Add the following to `/etc/grub.d/40_custom`. Here I use btrfs, please edit to support your filesystem.
 ```
@@ -21,7 +21,9 @@ menuentry "MS-R1_7.0.1" {
 	initrd /@/boot/initrd.img-7.0.1-sky1-msr1
 }
 ```
-4. Update grub using `update-grub`. Set default menuentry if necessary, as of my device the grub menu cannot response to keyboard.
+4. Update grub using `update-grub`. Set default menuentry if necessary, since the official grub cannot response to keyboard at boot.
+
+---
 
 ## Overview
 
